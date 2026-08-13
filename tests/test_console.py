@@ -1,4 +1,5 @@
 from excephalon.console import Console
+from excephalon.transcript import SELF
 
 
 def _recording():
@@ -6,6 +7,29 @@ def _recording():
     # in-place overwrites. An overwrite is recognisable by its leading carriage return.
     lines = []
     return lines, Console(echo=lines.append, overwrite=lines.append)
+
+
+def test_an_address_it_said_in_words_is_recorded_as_an_address():
+    # "It says 'click through at localhost port 8752' rather than ... in a clickable form." The
+    # repair belongs where its words become the record: the voice had already said the words, and
+    # the screen is the half that has to offer something to click.
+    said = []
+    console = Console(echo=lambda line: None, messages=lambda role, text: said.append((role, text)))
+
+    console.reply("Ready - click through at localhost port 8752 and look.")
+    console.heads_up("The test instance is up at localhost port 5200.")
+
+    assert said == [(SELF, "Ready - click through at localhost:8752 and look."),
+                    ("heads-up", "The test instance is up at localhost:5200.")]
+
+
+def test_the_persona_tells_it_to_write_the_address_rather_than_spell_it_out():
+    # The repair above is the net; this is the rule it nets. Both, because a rule only the persona
+    # carries is a known weakness, and a net with no rule behind it invites the same sentence.
+    from excephalon.brain_sdk import DEFAULT_PERSONA
+
+    assert "WRITE ADDRESSES AND PATHS EXACTLY" in DEFAULT_PERSONA
+    assert "localhost port 8752" in DEFAULT_PERSONA  # named as the thing not to write
 
 
 def test_heard_shows_what_he_said():

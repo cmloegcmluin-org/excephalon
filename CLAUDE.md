@@ -321,7 +321,14 @@ prefix put the longer one first — `excephalon (heads-up)> ` starts with `excep
 other order turns every unprompted line into an ordinary reply. Comments quoting HIM keep his
 words exactly as he said them, "Entity" and all — a quote rewritten to match today's name is a
 record of something he never said. `links.py` decides what a message names that can be
-opened, and opens it. A rename never fails in silence: a refused one comes back as a sentence
+opened, and opens it - and owns the other half of that question, what is SAID instead, so
+the written form stays clickable while the voice gets `as_spoken`. Its mirror `as_written`
+exists because the brain has only one channel: everything it writes is spoken, so an
+instruction to say an address naturally is obeyed in the only place it can be - the text -
+and "click through at localhost port 8752" reached the screen as words nobody could click.
+That repair happens in `console`, where its words become the record, rather than being
+asked for in a persona; the persona asks too, but a rule only the persona carries is a
+known weakness. A rename never fails in silence: a refused one comes back as a sentence
 the rail shows under the name ("another log is already called that"), because a name quietly
 put back reads as a broken app - and a name differing only in CASE is not a collision but this
 same log, which Windows renames happily once the exists() check stops reading it as another

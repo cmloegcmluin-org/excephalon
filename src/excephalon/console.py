@@ -14,6 +14,7 @@ right here.
 
 import sys
 
+from excephalon.links import as_written
 from excephalon.transcript import SELF, SELF_HEADS_UP, SELF_SAID
 
 
@@ -82,6 +83,10 @@ class Console:
         self._messages("status", self._thinking_notice)
 
     def reply(self, text):
+        # An address it spelled out in words is written back as an address, here where its words
+        # become the record: "click through at localhost port 8752" was not something he could
+        # click, and the voice had already said those words anyway.
+        text = as_written(text)
         self._line(f"{SELF_SAID}{text}\n")  # trailing blank line separates turns in the transcript
         self._messages(SELF, text)
 
@@ -89,6 +94,7 @@ class Console:
         """Something they HEARD that the terminal deliberately doesn't show - the acknowledgement, the
         still-working check-ins. It still belongs in the record: reading a session back and seeing no
         check-ins made it look like none had fired, when they had actually heard every one."""
+        text = as_written(text)  # said in words, written as the address - same as a reply
         self._line(text, show=False)
         self._messages(SELF, text)  # they heard it, so a conversation view shows it
 
@@ -101,6 +107,7 @@ class Console:
         self._messages("status", text)
 
     def heads_up(self, text):
+        text = as_written(text)  # an unprompted line names places to look too, and they must open
         self._line(f"{SELF_HEADS_UP}{text}\n")  # marked so an unprompted line isn't mistaken for a reply
         self._messages("heads-up", text)
 

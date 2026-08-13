@@ -1,4 +1,4 @@
-from excephalon.links import as_spoken, link_in, open_link
+from excephalon.links import SPOKEN_ADDRESS, as_spoken, as_written, link_in, open_link
 
 
 def test_a_web_address_and_a_path_on_this_machine_are_both_openable():
@@ -136,6 +136,28 @@ def test_ordinary_words_and_small_numbers_are_not_mistaken_for_identifiers():
     assert as_spoken("The deadline is 2026, decade of decaf.") ==         "The deadline is 2026, decade of decaf."
     assert as_spoken("cafebabe is a word to me.") == "cafebabe is a word to me."
     assert as_spoken("Chapter 1234567 reads oddly.") == "Chapter an id reads oddly."
+
+
+def test_an_address_spelled_out_in_words_is_written_back_as_an_address():
+    # "It says 'click through at localhost port 8752' rather than http://localhost:8752 in a
+    # clickable form." Everything it writes is spoken, so asked to SAY an address naturally it
+    # says it in the only channel it has - and what reached the screen was words nobody can click.
+    assert (as_written("Ready for your eyes - click through at localhost port 8752 and look.")
+            == "Ready for your eyes - click through at localhost:8752 and look.")
+    assert as_written("localhost port 8-7-5-2") == "localhost:8752"  # however it spells the digits
+    assert as_written("127.0.0.1 port 5200") == "127.0.0.1:5200"
+    assert link_in(as_written("try localhost port 8752").split()[-1]) == "localhost:8752"
+
+    # Prose about ports is left alone: only a NAMED local host becomes an address.
+    assert as_written("the serial port 3 is dead") == "the serial port 3 is dead"
+    assert as_written("It is live at localhost:8752.") == "It is live at localhost:8752."
+
+
+def test_a_local_address_wearing_its_scheme_is_still_said_the_short_way():
+    # He asked to hear the host and port rather than a URL read out; the bare form is the one he
+    # liked hearing, and a local URL is that same address with a scheme on the front.
+    assert as_spoken("Open http://localhost:4444 now.") == "Open localhost:4444 now."
+    assert as_spoken("It is at https://example.com/x") == f"It is at {SPOKEN_ADDRESS}"
 
 
 def test_a_bare_localhost_address_is_spoken_as_written():
