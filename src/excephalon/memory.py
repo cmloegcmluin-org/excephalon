@@ -663,6 +663,50 @@ def open_enhancements(path=DEFAULT_PROFILE_PATH, heading=ENHANCEMENTS_HEADING):
     )
 
 
+def open_projects(path=DEFAULT_PROFILE_PATH):
+    """His project cards and their still-open tasks, live from the file - the per-turn rendering.
+
+    Same reason as `open_enhancements` above, and the same failure exactly: asked to "take care of
+    task #7 in the Highdeas Project", the brain answered that it could see no #7 - "only the #1
+    task about the funnel" - because the copy it was reading was composed at startup, hours before
+    he made the cards. The tasks are his working list; they change while it is running, so they
+    cannot be a snapshot."""
+    path = Path(path)
+    sections = profile_sections(_read(path))
+    cards = []
+    for heading in project_headings(_read(path)):
+        tasks = [item for item in checklist_items(sections.get(heading, "")) if not item["done"]]
+        if not tasks:
+            continue
+        lines = "\n".join(
+            (f"  #{task['id']} " if task.get("id") is not None else "  ") + task["text"]
+            for task in tasks)
+        cards.append(f"{project_title(heading)}:\n{lines}")
+    return "\n".join(cards)
+
+
+def profile_without_project_tasks(text):
+    """The profile as the boot persona should carry it: the project cards' TASKS taken out, their
+    names left as one line in their place.
+
+    One copy of a list, or the brain gets to choose which to believe - and the stale one wins as
+    often as not. The tasks ride in the per-turn notes instead (`open_projects`), where nothing
+    has ever gone stale; what stays here is only that these projects exist."""
+    kept, dropped = [], []
+    for block in _heading_blocks(text.splitlines()):
+        head = block[0] if block else ""
+        if head.startswith("## " + PROJECT_PREFIX):
+            dropped.append(project_title(head[3:].strip()))
+            continue
+        kept.append("\n".join(block))
+    body = "\n".join(part for part in kept).rstrip()
+    if dropped:
+        body += ("\n\n## Projects he is working on\n" + ", ".join(dropped)
+                 + "\n\nThe open tasks on each of these are in the per-turn briefing, always "
+                   "current - never answer from memory about what is on one.")
+    return body + "\n"
+
+
 def revise_enhancement(item_id, text, path=DEFAULT_PROFILE_PATH, heading=ENHANCEMENTS_HEADING):
     """Rewrite the words of enhancement #id in place, keeping its number and its tick. False when
     no item carries that id. "Excephalon needs the ability to edit existing enhancement items after

@@ -672,6 +672,55 @@ def test_rewriting_an_id_nobody_has_says_so(tmp_path):
     assert "#7 an item" in path.read_text(encoding="utf-8")
 
 
+def test_his_projects_and_their_open_tasks_read_live_from_the_file(tmp_path):
+    # "It's not aware of the new Projects tab apparently. It somehow still thinks it's in the old
+    # world." Asked to take care of task #7 in one of his projects, the brain answered that it
+    # could see no #7 - it was reading a copy composed at startup, hours before he made the cards.
+    from excephalon.memory import open_projects
+
+    profile = tmp_path / "profile.md"
+    profile.write_text(
+        "# Ada - standing profile" + chr(10) * 2
+        + "## Project: Ledger app" + chr(10)
+        + "- [ ] #1 the import screen loses the last row" + chr(10)
+        + "- [x] #2 dark mode" + chr(10)
+        + "- [ ] #7 sending shows no progress for several seconds" + chr(10) * 2
+        + "## Project: Greenhouse" + chr(10)
+        + "- [ ] #1 the humidity sensor reads high after rain" + chr(10) * 2
+        + "## Project: Nothing open" + chr(10)
+        + "- [x] #1 done and dusted" + chr(10), encoding="utf-8")
+
+    digest = open_projects(path=profile)
+
+    assert digest == ("Ledger app:" + chr(10)
+                      + "  #1 the import screen loses the last row" + chr(10)
+                      + "  #7 sending shows no progress for several seconds" + chr(10)
+                      + "Greenhouse:" + chr(10)
+                      + "  #1 the humidity sensor reads high after rain")
+    assert "dark mode" not in digest        # ticked work is not a task he is asking about
+    assert "Nothing open" not in digest     # and a card with nothing open is not a heading he needs
+
+
+def test_the_boot_persona_carries_the_project_names_but_not_their_tasks(tmp_path):
+    # One copy of a list, or the brain gets to choose which to believe - and the stale one wins as
+    # often as not. The names stay (so it knows they exist); the tasks ride in the per-turn notes.
+    from excephalon.memory import profile_without_project_tasks
+
+    text = ("# Ada - standing profile" + chr(10) * 2
+            + "## Life context" + chr(10) + "- she keeps bees" + chr(10) * 2
+            + "## Project: Ledger app" + chr(10)
+            + "- [ ] #7 sending shows no progress" + chr(10) * 2
+            + "## Project: Greenhouse" + chr(10)
+            + "- [ ] #1 the humidity sensor reads high" + chr(10))
+
+    kept = profile_without_project_tasks(text)
+
+    assert "she keeps bees" in kept                     # everything else is untouched
+    assert "sending shows no progress" not in kept      # the tasks are not carried
+    assert "Ledger app, Greenhouse" in kept             # but their names are
+    assert "per-turn briefing" in kept                  # and where the current tasks are
+
+
 def test_the_open_enhancements_read_out_as_lines_the_brain_can_carry(tmp_path):
     # "It still believes it lacks the ability to see its own Enhancements list!" The boot-time
     # persona copy both goes stale and gets disbelieved; this is the live rendering the loop

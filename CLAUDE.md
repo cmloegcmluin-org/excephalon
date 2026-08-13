@@ -408,7 +408,14 @@ message carrying an `error` at all, and a result flagged `is_error` with nothing
 the second is the one the retry hits, and catching only the first bought a turn that passed in
 total silence. Never match on the wording; the structure is what is true. Warmup is the one caller
 that swallows it, into an app aside naming the one thing he can do, because a warmup that raises
-is an app that never opens and a traceback with no console to land in. `memory.py` is the profile, what Excephalon has learned, and the lexicon. `cards.py` is the
+is an app that never opens and a traceback with no console to land in. `memory.py` is the profile, what Excephalon has learned, and the lexicon. A list he EDITS while
+the app runs cannot live in the boot persona: that copy is composed once, and both his
+Enhancements and his Projects went stale there and were then disbelieved to his face ("I can't
+see the Enhancements list"; "I don't see a #7 task in the Highdeas Project" about a card he had
+just made). Both ride in the per-turn notes now, read from the file each turn
+(`open_enhancements`, `open_projects`), and the persona carries the project NAMES only
+(`profile_without_project_tasks`) - one copy of a list, or the brain gets to choose which to
+believe, and the stale one wins as often as not. `cards.py` is the
 cards' and the fleet's command-line door - `drop-instruction "<unique fragment>"`, `tick <number>`,
 `retire <agent> [--tick <number>]` - the same savers the app's pages use, for when the window isn't
 up; a fragment matching zero or several rows refuses the whole edit rather than guessing, and
