@@ -1332,3 +1332,83 @@ def test_a_long_project_name_truncates_in_the_sidebar():
     # flex-basis 0 so the row sizes it at zero when deciding if it fits, min-width:0 so it can then
     # shrink below its own text.
     assert "flex: 1 1 0" in rule and "min-width: 0" in rule
+
+
+def test_a_task_with_an_agent_on_it_shows_an_indicator_linking_to_its_log(tmp_path):
+    # "When an agent is assigned to a task, show an indicator to the left of the checkbox... clicking
+    # the indicator should link to that agent's log in the Agents tab." The tie is the agent's
+    # recorded enhancement, matched to the item whose words carry it.
+    profile = tmp_path / "profile.md"
+    profile.write_text("## Enhancements\n- [ ] #3 warn about credits\n- [ ] #4 live captions\n",
+                       encoding="utf-8")
+    state = tmp_path / "agents.json"
+    state.write_text('[{"name": "credits-warn", "enhancement": "warn about credits"}]',
+                     encoding="utf-8")
+    client = _client(profile_path=profile, agent_state_path=state)
+
+    page = client.get("/projects").get_data(as_text=True)
+    row = page.split('id="task-excephalon-3"')[1].split("</li>")[0]
+    assert 'href="/agents#agent-credits-warn"' in row       # one click to that agent's log
+    assert 'class="agent-link"' in row
+    assert 'id="task-excephalon-4"' not in page             # only the assigned task gets an anchor
+
+
+def test_every_checklist_row_reserves_the_indicator_gutter(tmp_path):
+    # "Shift all checkboxes over to make room for this indicator." The gutter is reserved on every
+    # row, agent or not, so the boxes stay in one column instead of jumping when an agent appears.
+    profile = tmp_path / "profile.md"
+    profile.write_text("## Enhancements\n- [ ] #3 warn about credits\n- [ ] #4 live captions\n",
+                       encoding="utf-8")
+    state = tmp_path / "agents.json"
+    state.write_text('[{"name": "credits-warn", "enhancement": "warn about credits"}]',
+                     encoding="utf-8")
+    client = _client(profile_path=profile, agent_state_path=state)
+
+    page = client.get("/projects").get_data(as_text=True)
+    # #3 has the link; #4, with no agent, holds an empty slot of the same width in its place.
+    assert page.count('class="agent-link"') == 1
+    assert page.count('class="agent-slot"') == 1
+    css = client.get("/static/app.css").get_data(as_text=True)
+    gutter = _rule_for(css, ".checklist .agent-slot, .checklist .agent-link")
+    assert "width" in gutter and "flex: none" in gutter    # a fixed column the boxes clear
+
+
+def test_an_agents_log_links_back_to_the_task_it_is_working_on(tmp_path):
+    # "Add a link back from each agent's log to the task it worked on in the Projects tab, so
+    # navigation is seamless in both directions." Same tie, read the other way.
+    profile = tmp_path / "profile.md"
+    profile.write_text("## Enhancements\n- [ ] #3 warn about credits\n", encoding="utf-8")
+    logs = tmp_path / "agent-logs"
+    logs.mkdir()
+    (logs / "credits-warn.log").write_text("[10:00:00] ENTITY> warn about credits" + chr(10),
+                                            encoding="utf-8")
+    state = tmp_path / "agents.json"
+    state.write_text('[{"name": "credits-warn", "enhancement": "warn about credits"}]',
+                     encoding="utf-8")
+    client = _client(profile_path=profile, agent_logs_dir=logs, agent_state_path=state,
+                     clock=lambda: "12:00:00")
+
+    page = client.get("/agents").get_data(as_text=True)
+    section = page.split('id="agent-credits-warn"')[1].split("</section>")[0]
+    assert 'href="/projects#task-excephalon-3"' in section   # straight to the exact task
+    assert "warn about credits" in section                    # and it names which task
+
+
+def test_an_agent_on_no_task_shows_no_back_link(tmp_path):
+    # Most agents carry no enhancement; their tabs stay exactly as they were.
+    logs = tmp_path / "agent-logs"
+    logs.mkdir()
+    (logs / "loose.log").write_text("[10:00:00] ENTITY> poke around" + chr(10), encoding="utf-8")
+    client = _client(agent_logs_dir=logs, clock=lambda: "12:00:00")
+
+    page = client.get("/agents").get_data(as_text=True)
+    assert 'class="on-task"' not in page
+
+
+def test_both_tabs_flash_the_row_a_cross_link_lands_on():
+    # Landing at the top edge of a card or a tab is indistinguishable from not having moved, so the
+    # destination flashes - the same "you landed here" highlight (.landed) the conversation uses.
+    projects_js = _client().get("/static/projects.js").get_data(as_text=True)
+    agents_js = _client().get("/static/agents.js").get_data(as_text=True)
+    for js in (projects_js, agents_js):
+        assert "location.hash" in js and "landed" in js

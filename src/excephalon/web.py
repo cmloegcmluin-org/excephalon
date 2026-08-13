@@ -19,6 +19,7 @@ from flask import Flask, redirect, render_template, request
 
 from urllib.parse import quote
 
+from excephalon.agent_tasks import assign, fleet_enhancements
 from excephalon.memory import (
     ENHANCEMENTS_HEADING,
     PROJECT_PREFIX,
@@ -296,7 +297,7 @@ class Agents:
 def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=None,
                opener=open_link, mirror=None,
                profile_path=None, learned_path=None, translations_path=None, terms=(),
-               persona_additions_path=None, agent_logs_dir=None, clock=None,
+               persona_additions_path=None, agent_logs_dir=None, agent_state_path=None, clock=None,
                on_quit=None, on_restart=None, upgrade_ready=None, on_translations_saved=None,
                scanned_terms=(), lexicon_reader=None, on_lexicon_saved=None, on_rename=None):
     """`model` is the conversation to show. `mirror` is what fills it from the feed, when there
@@ -439,14 +440,11 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
 
     # ---- the Projects tab: a card per project -------------------------------------------------
 
-    @app.get("/projects")
-    def projects():
-        """A card for each of his projects. #128: "the Projects section should become its own tab,
-        with a card for each project (RTT app, Highdeas, etc.) and this Enhancements section just
-        becomes the Project card for Excephalon itself." Excephalon leads - its roadmap IS the
-        Enhancements section, so nothing about the brain's filing or ticking moves - and each app
-        follows as its own "## Project: <name>" checklist, read and saved by the same machinery."""
-        text = _profile_raw()
+    def _project_cards(text):
+        """The Projects tab's cards, in the order it draws them: Excephalon (its Enhancements
+        roadmap) leading, then each "## Project: <name>" checklist. Shared by the Projects tab,
+        which renders them, and the Agents tab, which reads the same cards to link each agent back
+        to the task it is on - so the two tabs can never disagree about where a task lives."""
         found = profile_sections(text)
         cards = []
         enhancements = _heading(found, ENHANCEMENTS_HEADING)
@@ -459,6 +457,20 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
                           "movable": False})
         cards += [{**_card(found, project_title(heading), heading, "checklist", ""), "movable": True}
                   for heading in project_headings(text)]
+        return cards
+
+    @app.get("/projects")
+    def projects():
+        """A card for each of his projects. #128: "the Projects section should become its own tab,
+        with a card for each project (RTT app, Highdeas, etc.) and this Enhancements section just
+        becomes the Project card for Excephalon itself." Excephalon leads - its roadmap IS the
+        Enhancements section, so nothing about the brain's filing or ticking moves - and each app
+        follows as its own "## Project: <name>" checklist, read and saved by the same machinery.
+
+        A task an agent is working on gets an indicator beside it (assign, above): a click on it
+        opens that agent's log, and the agent's log links back the other way."""
+        cards = _project_cards(_profile_raw())
+        assign(cards, fleet_enhancements(agent_state_path))
         return render_template("projects.html", here="/projects", sections=cards)
 
     @app.post("/project/new")
@@ -591,8 +603,11 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
 
     @app.get("/agents")
     def show_agents():
+        # The same cards the Projects tab builds, read here only to link each agent back to the
+        # task it is on - `assign` returns {agent name: the task's anchor, title and text}.
+        tasks = assign(_project_cards(_profile_raw()), fleet_enhancements(agent_state_path))
         return render_template("agents.html", here="/agents", names=agents.live_names(),
-                               archived=agents.archived_names())
+                               archived=agents.archived_names(), tasks=tasks)
 
     @app.post("/agents/archived/<name>/restore")
     def restore_agent(name):
