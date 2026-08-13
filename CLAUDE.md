@@ -181,6 +181,14 @@ a known weakness rather than a solution.
   once started an agent in `.venv`, `docs` and `src` of a single worktree.
 - **Believing the model over the file.** Excephalon has claimed to have filed something, opened
   something, or verified something that had not happened. Check the artifact.
+- **A launch with no mouth.** Everything the user clicks runs under an interpreter with no console
+  — `pythonw.exe`, a Mac bundle, a detached relaunch — so a traceback on the way up is written
+  NOWHERE and the app simply does not appear: a click, and nothing, three times now. Hence
+  `launch.pyw`, which every door goes through, and which puts the fault in a dialog and the
+  traceback in `runtime/launch-failure.log`. Whatever you add to the startup path, ask where its
+  failure lands; and never let an installed launcher name a MODULE — a .lnk keeps forever what it
+  was installed with, and after the package was renamed every shortcut on his machine went on
+  asking for `-m entity`, unreachable from any code in this repo.
 
 ## Nothing personal in the source
 
@@ -193,6 +201,10 @@ Test fixtures use invented facts. When you add a comment here, write the failure
 
 ## Shape of the code
 
+`launch.pyw` at the repo root is the door: the Start Menu entry, the taskbar pin, `Excephalon.bat`,
+the Mac bundle and the Restart button's relaunch all run it, and it is a FILE rather than
+`-m excephalon` so that a rename can never invalidate a shortcut nothing here can reach into. It
+imports nothing above `run` — the failure it exists to report is the package failing to import.
 `conversation.py` is the loop (listen → think → speak) and owns turn-taking, barge-in, and the
 delivery of agent news at a lull; it puts the desk's fleet briefing in front of the brain every
 turn and streams the reply into the voice as it is written. `voice.py` is how a streamed reply

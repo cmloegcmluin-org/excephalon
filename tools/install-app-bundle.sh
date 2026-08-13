@@ -41,11 +41,14 @@ iconutil -c icns "$iconset" -o "$app/Contents/Resources/excephalon.icns"
 rm -rf "$(dirname "$iconset")"
 
 # A shell script, not the interpreter itself: the bundle has to keep working when the venv is
-# rebuilt, and it has to run from the repo so `runtime/` is where the app expects it.
+# rebuilt, and it has to run from the repo so `runtime/` is where the app expects it. It runs
+# launch.pyw rather than `-m excephalon` for the reason that file's docstring gives: an installed
+# launcher must not name a module, and a launch that fails has to say so somewhere - here that
+# is a dialog, since a bundle has no console either.
 cat > "$app/Contents/MacOS/Excephalon" <<EOF
 #!/bin/bash
 cd "$repo"
-exec "$python" -m excephalon --gui
+exec "$python" "$repo/launch.pyw"
 EOF
 chmod +x "$app/Contents/MacOS/Excephalon"
 

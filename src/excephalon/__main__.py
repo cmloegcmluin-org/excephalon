@@ -10,6 +10,7 @@ import signal
 import sys
 import threading
 import time
+import traceback
 from datetime import datetime
 from pathlib import Path
 
@@ -78,6 +79,24 @@ SERVICES = RUNTIME_DIR / "services.json"  # his connected services (MCP servers)
 VOCAB_ROOTS = RUNTIME_DIR / "vocab-roots.txt"  # optional: extra dirs (one per line) to mine for project names
 WORKSPACE = Path.home() / "workspace"  # default project tree; its folder names seed the custom vocabulary
 AGENT_QUIET_AFTER = 20 * 60  # seconds of silence from an agent before Excephalon flags it to the user
+FAILURE_LOG = RUNTIME_DIR / "launch-failure.log"  # why a launch didn't take - the same file launch.pyw writes
+
+
+def note_failure(report=None, log=None, now=None):
+    """Write a startup failure down and answer with where it went (None if even that failed).
+
+    The same file launch.pyw writes, so a launch that did not take has ONE place to be read from
+    - and deliberately its own few lines rather than an import of that launcher, which has to go
+    on working when this package is exactly what cannot be imported."""
+    log = FAILURE_LOG if log is None else Path(log)
+    try:
+        log.parent.mkdir(parents=True, exist_ok=True)
+        with open(log, "a", encoding="utf-8") as out:
+            out.write(f"\n===== {now or datetime.now():%Y-%m-%d %H:%M:%S} =====\n"
+                      f"{report or traceback.format_exc()}")
+        return log
+    except OSError:
+        return None
 
 
 def _fresh_worktree_note():
@@ -712,6 +731,15 @@ def main(argv=None):
             _session(attach=lambda d: mic.update(submit=d.submit,
                                                  set_recording=d.set_recording,
                                                  set_auto_listen=d.set_auto_listen), **running)
+        except Exception as exc:
+            # The window is up by the time this runs, so a failure here HAS somewhere to be said -
+            # and it has to be said, as the app's own aside rather than in Excephalon's voice. A
+            # session that dies on the way in otherwise leaves a live-looking window that simply
+            # never speaks, which reads as an app hanging rather than an app broken.
+            where = note_failure()
+            announce(f"(Excephalon's session failed to start - {type(exc).__name__}: {exc})")
+            if where is not None:
+                announce(f"(the whole traceback is in {where})")
         finally:
             stop.set()
 

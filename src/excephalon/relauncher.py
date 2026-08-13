@@ -105,7 +105,11 @@ def wait_then_launch(pid, repo, *, timeout=120.0, poll=0.5, alive=None, start=su
     if bundle is not None:
         start(["open", "-n", bundle], close_fds=True)
         return
-    start([str(app_python(repo)), "-m", "excephalon", "--gui"], cwd=str(repo), close_fds=True,
+    # Through launch.pyw, the same door a click comes in by - detached under pythonw there is no
+    # console here either, so a relaunch that fails has to be one that can say why. "Relaunch to
+    # upgrade didn't work this time, though actually I can't even open Excephalon" was this path
+    # coming back with nothing and no reason.
+    start([str(app_python(repo)), str(Path(repo) / "launch.pyw")], cwd=str(repo), close_fds=True,
           **_detached())
 
 

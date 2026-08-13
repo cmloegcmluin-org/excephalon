@@ -20,7 +20,7 @@ that CLI is the brain, and Excephalon runs it on your own Claude subscription, s
 python -m venv .venv
 .venv/Scripts/python -m pip install -e ".[dev]"      # macOS/Linux: .venv/bin/python
 
-.venv/Scripts/pythonw -m excephalon --gui   # the window (or double-click Excephalon.bat)
+.venv/Scripts/pythonw launch.pyw            # the window (or double-click Excephalon.bat)
 .venv/Scripts/python  -m excephalon         # speak to it in a terminal, hear spoken replies
 .venv/Scripts/python  -m excephalon --text  # type instead of speaking
 ```
@@ -35,6 +35,13 @@ button — run `tools/install-start-menu.ps1` on Windows, or `tools/install-app-
 Mac, which builds `/Applications/Excephalon.app`. Use the Mac one rather than starting the app
 from a terminal: macOS credits a microphone permission to the application that asked for it, and
 only inside the bundle is that application Excephalon rather than your terminal.
+
+Every one of those doors goes through `launch.pyw`, and for one reason: they run under an
+interpreter with no console, so a failure on the way up has nowhere to be printed and the app
+simply never appears. Whatever goes wrong there gets a dialog saying what broke, and the whole
+traceback in `runtime/launch-failure.log`. They also name that file rather than `-m excephalon`,
+because a shortcut installed once keeps what it was given: when the package was renamed, every
+shortcut on the machine went on asking for the old name, and clicking did nothing at all.
 
 The two big local models are fetched once, on the first run that needs them: ~2.4 GB of Parakeet
 for hearing you, and Kokoro for the voice. Neither is small over a hotel connection, and the
