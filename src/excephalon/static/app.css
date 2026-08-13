@@ -464,10 +464,12 @@ body.agents #content { margin-left: 360px; max-width: none; }
 #toc .grip { flex: none; color: var(--dim); font-size: .8rem; cursor: grab; padding: 4px 2px;
              user-select: none; opacity: 0; transition: opacity .1s; }
 #toc .rail-item:hover .grip { opacity: 1; }
-/* min-width:0 is what lets the name shrink below its own text so a long one ellipsizes instead of
-   overflowing the rail or forcing the row to wrap - a flex item will not otherwise go narrower than
-   its content. */
-#toc .rail-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+/* A long name ellipsizes to fit instead of overflowing the rail or wrapping to a second line. The
+   whole canonical truncation idiom is needed together: flex-basis 0 (`flex: 1 1 0`) so the name
+   counts as zero-width when the row decides whether it fits - with `auto` basis the row sees its
+   full text width, and a name right at the rail's edge wraps or overflows instead of truncating -
+   AND min-width:0 so it can then shrink below its own text for the ellipsis to show. */
+#toc .rail-name { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis;
                   white-space: nowrap; font-size: .78rem; color: var(--dim); padding: 5px 0;
                   cursor: pointer; }
 #toc .rail-item:hover .rail-name { color: var(--fg); }

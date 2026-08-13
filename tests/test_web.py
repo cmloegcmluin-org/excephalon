@@ -1328,4 +1328,7 @@ def test_a_long_project_name_truncates_in_the_sidebar():
 
     rule = _rule_for(css, "#toc .rail-name")
     assert "text-overflow: ellipsis" in rule and "white-space: nowrap" in rule
-    assert "min-width: 0" in rule
+    # The whole idiom, or a name at the rail's edge wraps/overflows rather than ellipsizing:
+    # flex-basis 0 so the row sizes it at zero when deciding if it fits, min-width:0 so it can then
+    # shrink below its own text.
+    assert "flex: 1 1 0" in rule and "min-width: 0" in rule
