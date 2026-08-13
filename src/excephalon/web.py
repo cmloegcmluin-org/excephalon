@@ -51,14 +51,10 @@ SPEAKERS = {"you": "You", SELF: "Excephalon", "heads-up": "Excephalon · heads-u
 # glosses its headings however it likes ("Enhancements they want for you (roadmap, not now)").
 # Context reads last ("Context should be moved below Enhancements, Goals, and Projects") and as
 # plain bullets: it is standing background, not a list of things to do, so boxes and an open
-# count would miscount it as work. `subtitle` is the one-line explanation under each card's
-# title, which every card carries now.
-# The Excephalon roadmap - the Enhancements section - is no longer a Config card. It leads the
-# Projects tab as Excephalon's own project card (#128: "this Enhancements section just becomes the
-# Project card for Excephalon itself"), drawn there with this subtitle. Its founding words: "a
-# local, voice-in/voice-out, memory-persistent partner you pair with on your life."
-EXCEPHALON_SUBTITLE = ("The construction roadmap for this companion itself - file an ask and an "
-                       "agent can be put on it; done items keep their record in the fold below.")
+# count would miscount it as work. `subtitle` is the one-line explanation under a Config card's
+# title; the Projects tab's cards carry none - an empty subtitle draws no note - so the Excephalon
+# card there reads exactly like every other project card ("remove any special styling from the
+# Excephalon card - it should look the same as the other project cards").
 
 # The Projects list is gone from Config too, by his call: "remove the Projects list from Config
 # entirely, and on the Projects tab create an individual card for each of those items." So every
@@ -462,9 +458,10 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
         if enhancements is not None:
             # Excephalon is not a "## Project:" section - it is the Enhancements roadmap - so its
             # rail entry neither renames (that would move the heading the brain files into) nor
-            # drags: it always leads. `movable` is what tells the two apart on the page.
-            cards.append({**_card(found, "Excephalon", enhancements, "checklist",
-                                  EXCEPHALON_SUBTITLE), "movable": False})
+            # drags: it always leads. `movable` is what tells the two apart on the page. It carries
+            # no subtitle, so its card reads exactly like every other project card.
+            cards.append({**_card(found, "Excephalon", enhancements, "checklist", ""),
+                          "movable": False})
         cards += [{**_card(found, project_title(heading), heading, "checklist", ""), "movable": True}
                   for heading in project_headings(text)]
         return render_template("projects.html", here="/projects", sections=cards)

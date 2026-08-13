@@ -41,7 +41,7 @@
       <span class="counts">{{ section["active"] | length }} open</span>
       {%- endif %}
     </h2>
-    <p class="note">{{ section.subtitle }}</p>
+    {% if section.subtitle %}<p class="note">{{ section.subtitle }}</p>{% endif %}
     <ul class="checklist">
       {% for item in section["active"] %}{{ row(item, section.kind) }}
       {% else %}{{ row({}, section.kind) }}{# somewhere to type; Enter grows it from there #}
