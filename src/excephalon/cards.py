@@ -30,7 +30,9 @@ from pathlib import Path
 from excephalon.memory import (
     DEFAULT_PERSONA_ADDITIONS_PATH,
     complete_enhancement_by_id,
+    instruction_rows,
     load_persona_additions,
+    rows_matching,
     save_persona_additions,
 )
 from excephalon.tailing import archive_dir
@@ -42,12 +44,12 @@ DEFAULT_LOG_DIR = _RUNTIME / "agent-logs"
 
 def without_rows(text, fragments):
     """The bullet list minus the rows the fragments name - each fragment matching EXACTLY ONE
-    row, or the whole edit is refused: deletion by pattern must never guess."""
-    rows = [line for line in text.splitlines() if line.strip()]
+    row, or the whole edit is refused: deletion by pattern must never guess. The matching is the
+    brain's own (`rows_matching`), so a fragment means the same row at both doors."""
+    rows = instruction_rows(text)
     doomed = []
     for fragment in fragments:
-        wanted = fragment.strip().lower()
-        hits = [row for row in rows if wanted in row.lower()]
+        hits = rows_matching(rows, fragment)
         if len(hits) != 1:
             raise SystemExit(f'"{fragment}" matches {len(hits)} rows - nothing was changed')
         doomed.extend(hits)

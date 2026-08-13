@@ -12,7 +12,6 @@ There is no tab strip. What were tabs are pages with a bar above them: the conve
 profile's four sections down one page, the persona, what has been learned, and the agents.
 """
 
-import re
 from datetime import datetime
 from pathlib import Path
 
@@ -25,6 +24,8 @@ from excephalon.memory import (
     PROJECT_PREFIX,
     checklist_items,
     create_project,
+    instruction_rows,
+    named_instruction,
     profile_sections,
     project_headings,
     project_title,
@@ -145,20 +146,15 @@ def _card(found, title, heading, kind, subtitle):
             "done": [item for item in items if item["done"]]}
 
 
-# The bullet marker and nothing else: stripping "-* " as a character set ate the leading `**`
-# of the name itself, so every instruction lost its bold on the way to the page.
-_BULLET = re.compile(r"^\s*[-*+]\s+")
-_NAMED = re.compile(r"^\*\*(?P<lede>[^*]+)\*\*\s*(?P<rest>.*)$", re.S)
-
-
-def _named(line):
-    """One instruction as a name and the rule under it - {"lede": ..., "text": ...}.
+def _named(row):
+    """One stored instruction as its card row - {"lede": ..., "text": ...}.
 
     "modify each Instruction so that it begins with a bolded name - 3 words tops": the name is
-    stored in the file as markdown, and shown as the bold word it is rather than as asterisks he
-    has to read past. A line with no name is all rule, and shows exactly as it always did."""
-    found = _NAMED.match(line)
-    return {"lede": found["lede"].strip(), "text": found["rest"].strip()} if found else {"text": line}
+    stored in the file as markdown - `memory.named_instruction` owns that shape, the same one its
+    savers keep - and shown as the bold word it is rather than as asterisks he has to read past.
+    A row with no name is all rule, and shows exactly as it always did."""
+    name, rule = named_instruction(row)
+    return {"lede": name, "text": rule} if name else {"text": rule}
 
 
 def _started(log):
@@ -433,8 +429,7 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
                    for term in set(scanned_terms) | set(lexicon_now)],
                 key=lambda swap: (swap["said"].casefold(), swap["heard"].casefold())),
             memories=memories,
-            instructions=[_named(_BULLET.sub("", line).strip())
-                          for line in _persona_additions().splitlines() if line.strip()],
+            instructions=[_named(row) for row in instruction_rows(_persona_additions())],
         )
 
     # The tabs this page replaced still answer, so a window standing open across the update lands

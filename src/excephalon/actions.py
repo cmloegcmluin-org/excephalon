@@ -20,8 +20,8 @@ from pathlib import Path
 from claude_agent_sdk import create_sdk_mcp_server, tool
 
 from excephalon.delivery import DeliveryError
-from excephalon.memory import (append_enhancement, append_learned, append_persona_addition,
-                           forget_learned,
+from excephalon.memory import (append_enhancement, append_learned, drop_persona_instruction,
+                           forget_learned, save_persona_instruction,
                            complete_enhancement_by_id, revise_enhancement)
 from excephalon.models import resolve as resolve_model
 from excephalon.tailing import safe_name
@@ -33,7 +33,8 @@ SERVER = "excephalon"
 # Bash, no Read, no way to wander a repo mid-turn - investigation belongs to the agents it starts.
 TOOL_NAMES = tuple(f"mcp__{SERVER}__{name}"
                    for name in ("start_agent", "tell_agent", "set_next_agent_model",
-                                "file_improvement", "revise_enhancement", "check_off_enhancement", "update_persona", "remember", "forget_memory",
+                                "file_improvement", "revise_enhancement", "check_off_enhancement",
+                                "update_persona", "drop_instruction", "remember", "forget_memory",
                                 "close_agent_tab", "mark_ready", "rename_agent",
                                 "record_verdict", "ask_foreman", "run_errand"))
 
@@ -84,7 +85,8 @@ def names_another_app(item, others, selves=SELF_NAMES):
 
 def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement,
                   revise=revise_enhancement, check_off=complete_enhancement_by_id,
-                  add_persona=append_persona_addition,
+                  save_instruction=save_persona_instruction,
+                  drop_instruction=drop_persona_instruction,
                   remember_fact=append_learned, forget_fact=forget_learned,
                   resolve=_resolve, prepare=prepare_worktree_for, default_task=DEFAULT_TASK,
                   other_apps=(), clock=time.strftime):
@@ -187,11 +189,33 @@ def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement
 
     @tool("update_persona", "Record a lasting change to how YOU behave - a standing instruction "
           "about how you talk or act - when the user tells you to work differently from now on (not "
-          "a one-off for this turn). It joins your persona and takes effect next time you start. "
-          "One call per instruction.", {"instruction": str})
+          "a one-off for this turn). `name` is the short bolded label the Instructions card shows "
+          "it under, three words tops; `instruction` is the rule itself. A name or rule already on "
+          "the card is RESTATED - that row is rewritten in place, never duplicated. It joins your "
+          "persona and takes effect next time you start. One call per instruction.",
+          {"name": str, "instruction": str})
     async def update_persona(args):
-        add_persona(str(args["instruction"]))
+        try:
+            rewrote = save_instruction(str(args.get("name") or ""), str(args.get("instruction") or ""))
+        except ValueError as refused:
+            return _say(f"Not saved: {refused} - call again with both.")
+        if rewrote:
+            return _say("Rewrote that standing instruction where it stood - no duplicate row.")
         return _say("Added to your standing instructions - it's part of your persona from next start.")
+
+    @tool("drop_instruction", "Delete one standing instruction from your persona - when the user "
+          "says a rule should no longer stand, or a row is there by mistake. Give its bolded name, "
+          "or enough of its words to pick out exactly one row; matching none or several, nothing "
+          "is deleted and this says so.", {"words": str})
+    async def drop_instruction_tool(args):
+        matched = drop_instruction(str(args.get("words") or ""))
+        if matched == 1:
+            return _say("Dropped - that instruction is out of your standing instructions.")
+        if matched == 0:
+            return _say("No standing instruction matches those words - read the card back to them "
+                        "if unsure.")
+        return _say(f"Those words match {matched} instructions, so nothing was deleted - give more "
+                    "of the exact row you mean.")
 
     @tool("forget_memory", "Drop one remembered fact from the memory store - the review's "
           "delete, for a memory the user judged not worth keeping (or one just converted into "
@@ -261,7 +285,7 @@ def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement
         return _say("The foreman has it - it will settle it with the agent, or say what's needed.")
 
     tools = [start_agent, tell_agent, set_next_agent_model, file_improvement, revise_item,
-             check_off_item_tool, run_errand, update_persona, rename_agent,
+             check_off_item_tool, run_errand, update_persona, drop_instruction_tool, rename_agent,
              remember, forget_memory, close_agent_tab, mark_ready, record_verdict, ask_foreman]
     return create_sdk_mcp_server(name=SERVER, tools=tools), tools
 

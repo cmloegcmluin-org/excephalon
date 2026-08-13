@@ -132,6 +132,11 @@ def _read(path):
         return ""
 
 
+def _fold(text):
+    """Words alone - case and spacing dropped - so his paraphrase of a line still lands on it."""
+    return " ".join(text.casefold().split())
+
+
 def lexicon_terms(text):
     """The bare terms from a lexicon file, for biasing transcription - the head of each line (one
     word or a whole phrase), with any gloss, bullet, blank line or '#' comment stripped off."""
@@ -228,13 +233,12 @@ def forget_learned(fact, path=DEFAULT_LEARNED_PATH):
     """Drop the remembered line closest to `fact` - the memory inbox's delete. Matched on folded
     words, containment either way, so the brain's paraphrase of a memory still lands on the line
     he meant. False when nothing matches; the caller owes him that plainly, never a silent no."""
-    fold = lambda text: " ".join(text.casefold().split())
-    wanted = fold(fact)
+    wanted = _fold(fact)
     if not wanted:
         return False
     lines = _read(path).splitlines()
     for at, line in enumerate(lines):
-        said = fold(line.lstrip("-* ").strip())
+        said = _fold(line.lstrip("-* ").strip())
         if said and (wanted in said or said in wanted):
             del lines[at]
             Path(path).write_text("\n".join(lines).strip() + ("\n" if any(lines) else ""),
@@ -290,15 +294,94 @@ def save_persona_additions(text, path=DEFAULT_PERSONA_ADDITIONS_PATH):
     path.write_text(text.rstrip() + "\n", encoding="utf-8")
 
 
-def append_persona_addition(instruction, path=DEFAULT_PERSONA_ADDITIONS_PATH):
-    """Add one standing instruction, the way Excephalon files one when it is told to change how it
-    behaves from now on. Cumulative and bulleted - the mirror of `append_learned`, for how to be
-    rather than for facts about the user - so a whole persona can grow one instruction at a time."""
-    path = Path(path)
-    existing = _read(path).rstrip()
-    body = (existing + "\n" if existing else "") + f"- {instruction.strip()}\n"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(body, encoding="utf-8")
+# The Instructions card's row shape: a short bolded name, then the rule under it. The bullet is
+# matched alone (never as a "-* " character set, which ate the leading `**` of the name itself),
+# and the name alone, so a row is (name, rule) wherever either half matters.
+_INSTRUCTION_BULLET = re.compile(r"^\s*[-*+]\s+")
+_INSTRUCTION_NAME = re.compile(r"^\*\*(?P<name>[^*]+)\*\*\s*(?P<rule>.*)$", re.S)
+
+
+def named_instruction(row):
+    """One stored Instructions row as (its bolded name or None, the rule). A row with no name is
+    all rule, exactly as the card shows it."""
+    line = _INSTRUCTION_BULLET.sub("", row).strip()
+    found = _INSTRUCTION_NAME.match(line)
+    if not found:
+        return None, line
+    return found["name"].strip(), found["rule"].strip()
+
+
+def instruction_rows(text):
+    """The card's rows - every non-blank line, as stored."""
+    return [line for line in text.splitlines() if line.strip()]
+
+
+def save_persona_instruction(name, instruction, path=DEFAULT_PERSONA_ADDITIONS_PATH):
+    """File one standing instruction under its short bolded name - the way Excephalon records one
+    when it is told to change how it behaves from now on. Cumulative and bulleted - the mirror of
+    `append_learned`, for how to be rather than for facts about the user - and every row lands in
+    the Instructions card's own shape, `- **Name** rule`, because the format is the saver's to
+    keep: the one row filed bare stood out on the card until he asked for it to be fixed by hand.
+
+    The name is the row's identity: saving under a name already on the card rewrites THAT row
+    where it stands (keeping the card's own casing of the name), because asked to fix a row it
+    once filed a second copy beside the first instead - "you added a new item instead of updating
+    the one you already added". And the same RULE already on the card is that same restatement
+    wearing a different ask - the incident began with a bare row "fixed" by filing a named copy
+    of its exact words beside it - so a row carrying this rule gains the name where it stands.
+    Returns True when an existing row was rewritten.
+
+    The shape is this saver's to keep, however the call is worded: a name wearing its own
+    asterisks is not doubled, a name folded into the rule's text is read out of it, a rule spread
+    over lines lands as the one row the card draws - and a call that yields no name or no rule is
+    refused whole (ValueError), because a bare or empty row is exactly the malformed card this
+    exists to make impossible."""
+    name = " ".join(str(name).replace("*", " ").split())
+    instruction = " ".join(str(instruction).split())
+    worn, rule = named_instruction(instruction)
+    if worn:
+        name, instruction = name or worn, rule
+    if not name:
+        raise ValueError("a standing instruction needs its short bolded name")
+    if not instruction:
+        raise ValueError("a standing instruction needs the rule itself, not just a name")
+    rows = instruction_rows(_read(path))
+    at = next((at for at, row in enumerate(rows)
+               if _fold(named_instruction(row)[0] or "") == _fold(name)), None)
+    if at is None:
+        at = next((at for at, row in enumerate(rows)
+                   if _fold(named_instruction(row)[1]) == _fold(instruction)), None)
+    if at is None:
+        rows.append(f"- **{name}** {instruction}")
+    else:
+        stood, _ = named_instruction(rows[at])
+        rows[at] = f"- **{stood or name}** {instruction}"
+    save_persona_additions("\n".join(rows), path)
+    return at is not None
+
+
+def rows_matching(rows, fragment):
+    """The rows whose folded words contain the fragment's - how a caller's paraphrase, or just a
+    row's bolded name, finds the row it means. No words match no row: an empty fragment is inside
+    everything, and "delete nothing in particular" must never delete something in particular."""
+    wanted = _fold(fragment)
+    if not wanted:
+        return []
+    return [row for row in rows if wanted in _fold(row)]
+
+
+def drop_persona_instruction(fragment, path=DEFAULT_PERSONA_ADDITIONS_PATH):
+    """Delete the ONE standing instruction the fragment names - the other half of the card being
+    Excephalon's to edit, not only to grow: told a rule should no longer stand, it answered "I
+    don't have a way to remove standing instructions" and handed the deletion to him. Returns how
+    many rows matched, and the card changes only on exactly one - deletion by pattern must never
+    guess, the same refusal the command-line door makes."""
+    rows = instruction_rows(_read(path))
+    hits = rows_matching(rows, fragment)
+    if len(hits) == 1:
+        rows.remove(hits[0])
+        save_persona_additions("\n".join(rows), path)
+    return len(hits)
 
 
 def profile_sections(text):
@@ -583,8 +666,7 @@ def save_checklist(path, heading, items, *, drawn, number=False, boxes=True):
 def _same_ask(one, another):
     """The same words, give or take casing, spacing, and a filing stamp: the same ask."""
     strip = lambda text: re.sub(r"\s*\(filed [^)]*\)\s*$", "", text)
-    fold = lambda text: " ".join(strip(text).casefold().split())
-    return fold(one) == fold(another)
+    return _fold(strip(one)) == _fold(strip(another))
 
 
 # A filed item carries "(filed 2026-07-28 02:23)" - the moment it was filed. The page shows that
