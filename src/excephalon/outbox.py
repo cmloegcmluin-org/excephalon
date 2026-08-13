@@ -45,6 +45,7 @@ class Outbox:
         self._items = deque()
         self._lock = threading.Lock()
         self._spool = spool
+        self._dropped = set()  # agents whose news was dropped since last collected - see drop()
         self.arrived = threading.Event()  # set while something is waiting to be spoken
         for held in self._spooled():  # last life's undelivered news, back in the queue
             # NOT composed, whoever wrote it: `composed` means "the brain that will be asked about
@@ -71,9 +72,14 @@ class Outbox:
             self.arrived.clear()
         return items
 
-    def waiting_about(self):
-        """Every agent the queue is holding news about - who a startup sweep has to judge."""
+    def owed_about(self):
+        """Every agent still owed news - queued here, OR drained into the conversation's hand and
+        not yet spoken. The spool is the record of that whole debt, so it answers when there is
+        one; asked from the queue alone, an agent whose walkthrough sat in hand for an hour read
+        as all caught up, and the brain told the user it had presented work he had never seen."""
         with self._lock:
+            if self._spool is not None:
+                return {held.get("about") for held in self._spooled()}
             return {getattr(item, "about", None) for item in self._items}
 
     def retag(self, about, to):
@@ -90,14 +96,29 @@ class Outbox:
             self._write(kept)
 
     def drop(self, about):
-        """Forget every queued item about one agent - it is finished with, and news about work
-        already closed lands as a surprise rather than an update."""
+        """Forget every item about one agent - it is finished with, or the user has moved past it,
+        and news about work already closed lands as a surprise rather than an update.
+
+        The queue and the spool are only two of the three places news waits: the conversation
+        drains items and holds them in hand for a lull. Those are out of reach from here, so the
+        drop is also NOTED, and the holder collects the notes (`take_dropped`) and prunes its own
+        hand - without that, a drop cleaned the queue while the stale copy in hand was still
+        offered ("surely there's no update for smart grouping. You just sent off the latest
+        message to it.")."""
         with self._lock:
             self._items = deque(item for item in self._items
                                 if getattr(item, "about", None) != about)
             if not self._items:
                 self.arrived.clear()
+            self._dropped.add(about)
             self._write([held for held in self._spooled() if held.get("about") != about])
+
+    def take_dropped(self):
+        """Collect (and clear) the agents dropped since last asked - the holder of drained news
+        prunes its hand with these on its next pass."""
+        with self._lock:
+            taken, self._dropped = self._dropped, set()
+            return taken
 
     def spoken(self, news):
         """The conversation reports that this news actually reached the user - only then does it

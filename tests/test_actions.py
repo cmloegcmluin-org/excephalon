@@ -9,6 +9,7 @@ class FakeDesk:
     def __init__(self, known=("gdoc-export",)):
         self.started = []
         self.told = []
+        self.news_dropped = []
         self.chosen = []
         self.retired = []
         self.renamed = []
@@ -22,6 +23,9 @@ class FakeDesk:
     def send(self, name, message):
         self.told.append((name, message))
         return name in self._known
+
+    def drop_news(self, name):
+        self.news_dropped.append(name)
 
     def choose(self, model=None, effort=None):
         self.chosen.append((model, effort))
@@ -243,6 +247,29 @@ def test_updating_the_persona_relays_a_refusal_rather_than_crashing():
     said = _call(tools["update_persona"], name="", instruction="a rule with no name")
 
     assert "name" in said.lower()
+
+
+def test_telling_an_agent_drops_its_held_news_because_he_has_moved_past_it():
+    # Held news predates the message he just sent through: an agent's "Done." was still offered
+    # as an update after his feedback had already put it back to work - "surely there's no update
+    # for smart grouping. You just sent off the latest message to it." Delivered words make the
+    # held sentence history; the agent's next report is the news.
+    desk = FakeDesk()
+    tools = _tools(desk)
+
+    _call(tools["tell_agent"], name="gdoc-export", message="strip the extra suggestions")
+
+    assert desk.news_dropped == ["gdoc-export"]
+
+
+def test_telling_a_missing_agent_drops_nothing():
+    # No message was delivered, so nothing about the held news changed either.
+    desk = FakeDesk()
+    tools = _tools(desk)
+
+    _call(tools["tell_agent"], name="nobody-here", message="hello?")
+
+    assert desk.news_dropped == []
 
 
 def test_dropping_an_instruction_deletes_the_row_those_words_name():

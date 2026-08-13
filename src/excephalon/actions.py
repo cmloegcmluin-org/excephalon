@@ -138,6 +138,13 @@ def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement
         name = str(args["name"]).strip()
         if not desk.send(name, str(args["message"])):
             return _say(f"No agent called {name} is running - check the fleet briefing.")
+        # Held news from this agent predates the words just delivered - the user has moved past
+        # it, and offered later it reads as a fresh update on work he already redirected ("surely
+        # there's no update for smart grouping. You just sent off the latest message to it.").
+        # The agent's next report is the news now.
+        drop_held = getattr(desk, "drop_news", None)
+        if drop_held is not None:
+            drop_held(name)
         return _say(f"Delivered to {name}.")
 
     @tool("set_next_agent_model", "Set which model and effort the NEXT agent starts on, from the "

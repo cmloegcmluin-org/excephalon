@@ -109,6 +109,45 @@ def test_dropping_the_last_item_clears_the_waiting_signal(tmp_path):
     assert not outbox and not outbox.arrived.is_set()
 
 
+def test_a_drop_reaches_news_already_drained_into_someone_elses_hand():
+    # The queue is only half of where news waits: the conversation drains items and holds them in
+    # hand for a lull, and a drop that cleans the queue alone leaves the stale copy there. Held
+    # smart-grouping news survived exactly that way - the user had already sent that agent new
+    # instructions, and the "update" was still offered to him ("surely there's no update for
+    # smart grouping. You just sent off the latest message to it."). The holder collects who was
+    # dropped and prunes its own hand.
+    outbox = Outbox()
+    outbox.push("grouping: done", about="grouping")
+    outbox.drain()  # in the conversation's hand now, not in the queue
+
+    outbox.drop("grouping")
+
+    assert outbox.take_dropped() == {"grouping"}
+    assert outbox.take_dropped() == set()  # collected once; the next pass starts clean
+
+
+def test_owed_about_sees_news_in_hand_not_only_news_in_the_queue(tmp_path):
+    # "Presented, awaiting their verdict" was briefed about an agent whose walkthrough had never
+    # reached him - drained, held in hand for over an hour, and the desk's view ("who is owed
+    # news?") read only the queue. The spool is the record of everything still owed, in queue OR
+    # in hand, so the question is answered from there.
+    spool = tmp_path / "outbox.json"
+    outbox = Outbox(spool=spool)
+    outbox.push("linking: ready for your eyes", about="linking")
+    outbox.push("fixer: merged", about="fixer")
+    outbox.drain()  # both in hand
+    outbox.spoken("fixer: merged")  # one actually reached him
+
+    assert outbox.owed_about() == {"linking"}
+
+
+def test_a_spoolless_outbox_answers_owed_about_from_its_queue():
+    outbox = Outbox()
+    outbox.push("fixer: merged", about="fixer")
+
+    assert outbox.owed_about() == {"fixer"}
+
+
 def test_news_that_survived_a_restart_is_app_authored_to_the_new_brain(tmp_path):
     # `composed` means "the brain that will be asked about this wrote it" - and the brain that
     # wrote it died with the last process. Carried over as composed, a spooled line skipped the

@@ -15,6 +15,7 @@ out app-authored (not composed by the fast brain), so the unwritten-lines ledger
 to the brain and one Excephalon remembers everything said in its name.
 """
 
+import re
 import threading
 
 from claude_agent_sdk import ClaudeAgentOptions, create_sdk_mcp_server, tool
@@ -22,6 +23,13 @@ from claude_agent_sdk import ClaudeAgentOptions, create_sdk_mcp_server, tool
 from excephalon.models import FAMILIES
 from excephalon.narrator import _HANDLED_LEAD
 from excephalon.sdk_session import SdkSession
+
+# The swallow-word at the END of a longer reply: the contract is "settle it, then reply with the
+# single word: handled", and one settling came back as three sentences of the foreman's own
+# analysis with "handled" on the last line. Everything before a closing swallow-word is working
+# notes, never user-addressed - queued anyway, that analysis sat as the agent's "update" in the
+# roll call, a jargon bomb waiting for him to pick its number.
+_HANDLED_CLOSE = re.compile(r"(?i)\bhandled[.!]?\s*$")
 
 # Smarter than the talker by definition, whatever the working agents happen to run on - the whole
 # point of the layer is senior judgment, so it does not follow the next-agent model choice.
@@ -88,10 +96,13 @@ class Foreman:
             # failed, which beats an agent silently stuck behind a foreman who never answered.
             self._outbox.push(f"The foreman couldn't take {agent}'s problem: {exc}", about=agent)
             return
+        said = said.strip()
+        if said and _HANDLED_CLOSE.search(said):
+            return  # settled, however much working-notes preamble came with the swallow-word
         # The same strip the narrator uses: "handled" is the swallow-word, and it has reached him
         # at the head of a longer sentence - "Handled." and then a paragraph of its own,
         # which is how the swallow-word reached him three seconds after a launch.
-        said = _HANDLED_LEAD.sub("", said.strip()) if said.strip() else ""
+        said = _HANDLED_LEAD.sub("", said) if said else ""
         if not said.strip():
             return  # settled with the agent directly; there is no news to interrupt anyone with
         self._outbox.push(said.strip(), about=agent)  # app-authored: the ledger informs the brain
