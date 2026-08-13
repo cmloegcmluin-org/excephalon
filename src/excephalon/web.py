@@ -56,12 +56,11 @@ SPEAKERS = {"you": "You", SELF: "Excephalon", "heads-up": "Excephalon · heads-u
 EXCEPHALON_SUBTITLE = ("The construction roadmap for this companion itself - file an ask and an "
                        "agent can be put on it; done items keep their record in the fold below.")
 
+# The Projects list is gone from Config too, by his call: "remove the Projects list from Config
+# entirely, and on the Projects tab create an individual card for each of those items." So every
+# long-term item is its own project card on the Projects tab now, and Config is left with the one
+# thing that was never a list of work - the life context it should hold in the background.
 SECTIONS = (
-    # The Goals card is retired by his call: every goal was reworded as an accomplishable
-    # Project ("rework all Goals as Projects i.e. those with measurable outcomes") and moved
-    # into Projects, the way Memories became Instructions.
-    ("Projects", "Projects", "checklist",
-     "Things to accomplish."),
     ("Context", "Life context", "bullets",
      "Background it should always hold about your life - facts, not tasks."),
 )
