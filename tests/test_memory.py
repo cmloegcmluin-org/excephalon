@@ -772,3 +772,61 @@ def test_an_enhancement_filed_by_the_app_carries_its_number_at_once(tmp_path):
     items = checklist_items(profile_sections(path.read_text(encoding="utf-8"))["Enhancements"])
     filed = [item for item in items if item["text"].startswith("a checkbox")]
     assert [item["id"] for item in filed] == [10]  # the next number, not a gap and not a clash
+
+
+def test_project_headings_are_the_profile_sections_tagged_as_projects_in_file_order():
+    # A project is an ordinary "## Project: <name>" checklist section, so every reader and writer of
+    # the profile's lists already handles it. The "Project: " tag is the ONLY thing that tells the
+    # Projects tab a section is one of his projects rather than his life context or how-to-work-with.
+    from excephalon.memory import project_headings
+
+    text = (
+        "## How to work with him\n- plainly\n\n"
+        "## Project: RTT app\n- [ ] tuning\n\n"
+        "## Life context\n- lives in SF\n\n"
+        "## Project: Highdeas\n- [ ] group merge\n"
+    )
+    assert project_headings(text) == ["Project: RTT app", "Project: Highdeas"]
+
+
+def test_project_title_is_the_heading_without_its_tag():
+    from excephalon.memory import project_title
+
+    assert project_title("Project: Fun Time") == "Fun Time"
+    assert project_title("Enhancements") == "Enhancements"  # untagged headings pass through
+
+
+def test_create_project_starts_an_empty_tagged_section_and_returns_its_heading(tmp_path):
+    from excephalon.memory import create_project, project_headings
+
+    path = tmp_path / "profile.md"
+    path.write_text("## Life context\n- lives in SF\n", encoding="utf-8")
+
+    heading = create_project("RTT app", path=path)
+
+    assert heading == "Project: RTT app"
+    text = path.read_text(encoding="utf-8")
+    assert project_headings(text) == ["Project: RTT app"]
+    assert "- lives in SF" in text  # the rest of the profile is left exactly as it was
+
+
+def test_create_project_leaves_an_existing_project_and_its_list_untouched(tmp_path):
+    # Adding a project that already exists must never wipe the checklist it already holds.
+    from excephalon.memory import create_project
+
+    path = tmp_path / "profile.md"
+    path.write_text("## Project: Highdeas\n- [ ] group merge\n", encoding="utf-8")
+
+    heading = create_project("Highdeas", path=path)
+
+    assert heading == "Project: Highdeas"
+    assert "- [ ] group merge" in path.read_text(encoding="utf-8")
+
+
+def test_create_project_refuses_a_blank_name(tmp_path):
+    import pytest
+
+    from excephalon.memory import create_project
+
+    with pytest.raises(ValueError):
+        create_project("   ", path=tmp_path / "profile.md")

@@ -320,6 +320,45 @@ def profile_sections(text):
     return sections
 
 
+# A project is an ordinary checklist section whose heading opens with this tag - "## Project: RTT
+# app". Nothing about it is special to the checklist machinery: it is numbered, filed into, ticked
+# and saved exactly as the Enhancements list is. The tag is only how the Projects tab tells one of
+# his projects apart from his life context or how-to-work-with-him, and it never reaches his eyes -
+# the card shows the name after the tag. His project NAMES stay out of the source this way: the tag
+# is the app's, the names are his, read from the profile at runtime.
+PROJECT_PREFIX = "Project: "
+
+
+def project_headings(text):
+    """The profile's project sections, in file order - each "## Project: <name>" heading by its
+    full heading text, ready to hand straight to the checklist readers and writers."""
+    return [heading for heading in profile_sections(text) if heading.startswith(PROJECT_PREFIX)]
+
+
+def project_title(heading):
+    """The name a project's card shows - its heading with the "Project: " tag taken off. An
+    untagged heading passes through unchanged, so the Excephalon card (drawn from the Enhancements
+    section) can share this path."""
+    return heading[len(PROJECT_PREFIX):] if heading.startswith(PROJECT_PREFIX) else heading
+
+
+def create_project(name, path=DEFAULT_PROFILE_PATH):
+    """Start a new, empty project - "## Project: <name>" - and return its heading, so a card for
+    it appears with a row to type into. A name that already names a project is left exactly as it
+    is, its checklist intact, and its heading comes back unchanged: adding one twice must never
+    wipe the list it already holds. A blank name is refused - a heading is one line with words on
+    it."""
+    name = " ".join(str(name).split())  # a heading is a single line; fold any stray whitespace
+    if not name:
+        raise ValueError("a project needs a name")
+    heading = PROJECT_PREFIX + name
+    path = Path(path)
+    if heading in profile_sections(_read(path)):
+        return heading
+    save_section(path, heading, "")
+    return heading
+
+
 # Only the stem of the heading: a profile writes its own, and they run on ("Enhancements you want
 # (roadmap, not now)"). Every reader matches on the stem - see `find_heading`.
 ENHANCEMENTS_HEADING = "Enhancements"
