@@ -174,29 +174,25 @@ def test_the_copy_buttons_sit_above_the_full_width_break_rows():
     assert zindex >= 1
 
 
-def test_the_config_page_shows_its_sections_and_saves_one_back(tmp_path):
+def test_the_config_page_shows_its_life_context_and_saves_it_back(tmp_path):
     profile = tmp_path / "profile.md"
-    profile.write_text("## Projects (long-term)\n- swim\n\n"
-                       "## Life context\n- new to the city\n", encoding="utf-8")
+    profile.write_text("## Life context (for awareness)\n- new to the city\n", encoding="utf-8")
     client = _client(profile_path=profile)
 
     page = client.get("/config").get_data(as_text=True)
-    assert "swim" in page and "new to the city" in page
-    # Matched by prefix, since a profile glosses its own headings however it likes.
-    assert 'data-heading="Projects (long-term)"' in page
+    assert "new to the city" in page
+    # Matched by stem, since a profile glosses its own headings however it likes.
+    assert 'data-heading="Life context (for awareness)"' in page
 
-    # The save resolves the stem the same way the read does: written back exactly, "Projects"
-    # forked a rival "## Projects" section at the bottom of the live profile while the card
-    # kept reading the glossed one it had always read.
-    client.post("/profile", json={"heading": "Projects", "drawn": ["swim"],
-                                  "items": [{"done": False, "text": "swim, three times a week"}]})
+    # Life context is background, not work, so it saves back as plain bullets - no boxes in the
+    # file - and the save resolves the stem the way the read does, never forking a rival section.
+    client.post("/profile", json={"heading": "Life context", "drawn": ["new to the city"],
+                                  "items": [{"done": False, "text": "new to the city, since June"}]})
 
     saved = profile.read_text(encoding="utf-8")
-    # A bullet written before the boxes existed comes back as an unticked one, so the list
-    # upgrades itself the first time they touch it rather than needing a migration run.
-    assert "- [ ] swim, three times a week" in saved
-    assert "- new to the city" in saved  # the section beside it is untouched
-    assert saved.count("## Projects") == 1  # into the glossed section, never a rival one
+    assert "- new to the city, since June" in saved
+    assert "- [ ]" not in saved                    # a bullet list, never a checklist
+    assert saved.count("## Life context") == 1     # into the glossed section, never a rival one
 
 
 def test_the_excephalon_list_is_a_checklist_that_ticks_rather_than_deletes(tmp_path):
@@ -269,12 +265,12 @@ def test_completed_items_sit_in_a_collapsible_done_section_at_the_bottom(tmp_pat
     import re
 
     profile = tmp_path / "profile.md"
-    profile.write_text("## Projects (long-term)\n"
+    profile.write_text("## Project: RTT app\n"
                        "- [ ] #1 still to do\n- [x] #2 finished one\n- [x] #3 also done\n",
                        encoding="utf-8")
     client = _client(profile_path=profile)
 
-    page = client.get("/config").get_data(as_text=True)
+    page = client.get("/projects").get_data(as_text=True)
     fold = re.search(r"<details[^>]*class=\"done-fold\".*?</details>", page, re.S)
     assert fold is not None
     body = fold.group(0)
@@ -399,26 +395,28 @@ def test_the_memory_card_hides_the_files_heading_and_saves_rows_back(tmp_path):
     assert "Learned from Douglas" not in memory
 
 
-def test_every_section_of_the_profile_draws_boxes_not_raw_markdown(tmp_path):
-    # "consistent styling of all the tabs (all checkboxes, same font)". Enhancements was the only
-    # one with boxes; the other three showed them the markdown and left them to decode it.
+def test_no_card_shows_raw_markdown_boxes_are_boxes_and_context_is_dots(tmp_path):
+    # "consistent styling of all the tabs (all checkboxes, same font)". A checklist card draws real
+    # boxes, not `- [ ]` for the reader to decode; life context draws dots, not raw bullets - the
+    # same styling wherever a list is shown.
     profile = tmp_path / "profile.md"
-    profile.write_text("## Projects (long-term)\n- better voice\n- entity\n\n"
+    profile.write_text("## Project: RTT app\n- tuning\n- mapping\n\n"
                        "## Life context\n- new to the city\n", encoding="utf-8")
     client = _client(profile_path=profile)
 
-    page = client.get("/config").get_data(as_text=True)
+    projects = client.get("/projects").get_data(as_text=True)
+    assert projects.count('<input type="checkbox"') == 2  # the two items as boxes
+    assert "- [ ] tuning" not in projects                 # never the raw markdown
 
-    # A checklist section (Projects) keeps boxes; Life context and Memory are bullets now -
-    # background, not work.
-    assert page.count('<input type="checkbox"') == 2
+    config = client.get("/config").get_data(as_text=True)
+    assert '<span class="dot"' in config and "new to the city" in config  # a dot, not a box
+    assert '<input type="checkbox"' not in config          # life context is background, not work
 
-    # And a tick in any of them still writes markdown back, which is what the brain reads.
-    client.post("/profile", json={"heading": "Projects", "drawn": ["better voice", "entity"],
-                                  "items": [{"done": False, "text": "better voice"},
-                                            {"done": True, "text": "entity"}]})
-
-    assert "- [x] entity" in profile.read_text(encoding="utf-8")
+    # And a tick on a checklist card still writes markdown back, which is what the brain reads.
+    client.post("/profile", json={"heading": "Project: RTT app", "drawn": ["tuning", "mapping"],
+                                  "items": [{"id": 1, "done": False, "text": "tuning"},
+                                            {"id": 2, "done": True, "text": "mapping"}]})
+    assert "- [x] #2 mapping" in profile.read_text(encoding="utf-8")
 
 
 def test_an_item_is_words_he_can_type_into_and_there_is_no_edit_as_text(tmp_path):
@@ -426,13 +424,13 @@ def test_an_item_is_words_he_can_type_into_and_there_is_no_edit_as_text(tmp_path
     # raw markdown was the only way to add one, and it lost what they typed - so the items
     # themselves are what they type into, and a new one is made by pressing Enter in the list.
     profile = tmp_path / "profile.md"
-    profile.write_text("## Projects (long-term)\n- better voice\n- entity\n", encoding="utf-8")
+    profile.write_text("## Project: RTT app\n- tuning\n- mapping\n", encoding="utf-8")
 
-    page = _client(profile_path=profile).get("/config").get_data(as_text=True)
+    page = _client(profile_path=profile).get("/projects").get_data(as_text=True)
 
-    # The words of an item are the item - one editable span per row (the two Projects items here,
-    # plus the Memory and Instructions cards' empty rows), no raw-markdown box.
-    assert page.count('class="item" contenteditable="plaintext-only"') == 4
+    # The words of an item are the item - one editable span per row (the two project items here),
+    # no raw-markdown box.
+    assert page.count('class="item" contenteditable="plaintext-only"') == 2
     assert "Edit as text" not in page
 
 
@@ -1226,3 +1224,16 @@ def test_the_projects_content_clears_the_fixed_rail():
 
     content = _rule_for(css, "body.config #content, body.projects #content")
     assert "margin-left: 180px" in content
+
+
+def test_config_drops_the_long_term_projects_list_entirely(tmp_path):
+    # His call: the "Projects (long-term)" list leaves Config for good - each of its items becomes
+    # its own card on the Projects tab instead of one shared list card. Config keeps the rest.
+    profile = tmp_path / "profile.md"
+    profile.write_text("## Projects (long-term)\n- [ ] Gym & PT\n- [ ] Guitar\n\n"
+                       "## Life context\n- lives in SF\n", encoding="utf-8")
+    client = _client(profile_path=profile)
+
+    config = client.get("/config").get_data(as_text=True)
+    assert "Gym & PT" not in config and "Guitar" not in config  # the list is gone from Config
+    assert "lives in SF" in config                              # but life context stays
