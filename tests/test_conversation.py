@@ -573,6 +573,23 @@ def test_news_after_a_long_lull_is_offered_not_dumped():
     assert tts.spoken == ["I've got an update on asana-submit-fix when you're ready."]
 
 
+def test_a_change_to_his_standing_context_is_put_in_front_of_the_brain():
+    # "Is stupid shit like this going to keep happening?" Everything of his in the persona is a
+    # snapshot from startup, and each time one went stale the brain answered from it and told him
+    # what he was looking at did not exist. Whatever has moved rides in the turn's own notes.
+    moved = ["## Life context\n- he keeps bees now", "", ""]
+    brain = FakeBrain()
+    convo = Conversation(FakeSTT(["what do I keep", "and now", "goodbye entity"]), brain, FakeTTS(),
+                         standing=lambda: moved.pop(0))
+
+    convo.turn()
+    convo.turn()
+
+    assert "he keeps bees now" in brain.heard[0]
+    assert "replaces what you were told at the start" in brain.heard[0]
+    assert "he keeps bees now" not in brain.heard[1]  # said once, not every turn after
+
+
 def test_a_bare_go_ahead_is_answered_with_the_held_update_itself():
     # "Excephalon keeps sending me updates that aren't updates." Twice a bare "Yes" was answered
     # by a fresh brain turn that never said what the update was - "Go check it out then", then

@@ -179,6 +179,13 @@ a known weakness rather than a solution.
   never read. That froze a whole session.
 - **Fan-out where one thing was named.** A worktree is recognized by its `.git`; globbing a directory
   once started an agent in `.venv`, `docs` and `src` of a single worktree.
+- **A snapshot of something he edits.** Everything of his in the boot persona - his life context,
+  his lists, what it has learned, his vocabulary - was read once, at startup, and he changes these
+  while the app runs. Every time one drifted the brain answered from it and told him what he was
+  looking at did not exist ("I can't see the Enhancements list", "I don't see a #7 task in the
+  Highdeas Project"), and each was fixed for that one list alone. `StandingWatch` ends the category:
+  compare the whole context every turn, hand over what moved. Before you cache anything of his,
+  ask what happens when he edits it mid-session - the answer must not be "it waits for a restart".
 - **Believing the model over the file.** Excephalon has claimed to have filed something, opened
   something, or verified something that had not happened. Check the artifact.
 - **A launch with no mouth.** Everything the user clicks runs under an interpreter with no console
@@ -408,7 +415,13 @@ message carrying an `error` at all, and a result flagged `is_error` with nothing
 the second is the one the retry hits, and catching only the first bought a turn that passed in
 total silence. Never match on the wording; the structure is what is true. Warmup is the one caller
 that swallows it, into an app aside naming the one thing he can do, because a warmup that raises
-is an app that never opens and a traceback with no console to land in. `memory.py` is the profile, what Excephalon has learned, and the lexicon. A list he EDITS while
+is an app that never opens and a traceback with no console to land in. `memory.py` is the profile, what Excephalon has learned, and the lexicon - and `StandingWatch`,
+which is why none of it can go stale again: every turn it re-reads his standing context, compares
+it whole against what the brain has been told, and puts whatever MOVED in front of the brain,
+then recomposes the persona so the next session starts from the current world. Nothing in it names
+a part - the snapshot is taken from the file's own headings - so a section he invents next month
+is watched the day he makes it. Write that way here: a fix that names one list is a fix that
+arrives one incident late. A list he EDITS while
 the app runs cannot live in the boot persona: that copy is composed once, and both his
 Enhancements and his Projects went stale there and were then disbelieved to his face ("I can't
 see the Enhancements list"; "I don't see a #7 task in the Highdeas Project" about a card he had

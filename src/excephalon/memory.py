@@ -663,6 +663,75 @@ def open_enhancements(path=DEFAULT_PROFILE_PATH, heading=ENHANCEMENTS_HEADING):
     )
 
 
+# Parts of his standing context that already ride in the per-turn notes under their own headings
+# - carried twice, they would just be the same fresh text said twice over.
+CARRIED_LIVE = (PROJECT_PREFIX, "Enhancements")
+
+
+def standing_snapshot(profile, learned="", lexicon=""):
+    """His standing context as NAMED parts - {name: body} - so a change can be told apart, named,
+    and handed to the brain by itself.
+
+    Derived from the file's own headings rather than from a list written here: a section he
+    invents next month is watched the day he makes it, with nobody having to remember to add it.
+    That is the whole point of this - the failures it exists to stop were each a different part of
+    this context going stale in the boot persona and being answered from anyway ("I can't see the
+    Enhancements list", "I don't see a #7 task in the Highdeas Project"), and a fix per part is a
+    fix that keeps arriving one incident late."""
+    parts = {name: body.strip() for name, body in profile_sections(profile).items()
+             if not any(name.startswith(live) for live in CARRIED_LIVE)}
+    parts["What you have learned about him"] = learned.strip()
+    parts["His vocabulary"] = lexicon.strip()
+    return {name: body for name, body in parts.items() if body}
+
+
+def changed_standing(before, after):
+    """The parts of `after` the brain has not been told - new, edited, or emptied since `before`.
+
+    An emptied part is reported as a part, not dropped: a section he clears is a change he made,
+    and silence about it leaves the old words standing as the only thing the brain has heard."""
+    changes = {name: body for name, body in after.items() if before.get(name) != body}
+    changes.update({name: "" for name in before if name not in after})
+    return changes
+
+
+class StandingWatch:
+    """What of his standing context has moved since the brain was last told - "" when nothing has.
+
+    The whole category of failure this exists to end: the persona is composed once, at startup,
+    and everything of his in it - his life context, what it has learned about him, his vocabulary,
+    his projects - is a snapshot from that moment. He edits these while it is running. Every time
+    one went stale the brain answered from it anyway and told him, flatly, that what he was looking
+    at did not exist: "I can't see the Enhancements list", "I don't see a #7 task in the Highdeas
+    Project". Each of those was fixed by carrying that ONE list live, which is a fix that arrives
+    one incident late, every time.
+
+    So nothing here names a part. The snapshot comes from the file's own headings, is compared
+    whole every turn, and whatever differs goes in front of the brain - a section he invents next
+    month is watched the day he makes it. `on_change` also gets the freshly composed persona, so
+    the sessions that come after this one (a compaction reseed, a session shed by a deadline)
+    start from the current world rather than resurrecting the one the app booted into."""
+
+    def __init__(self, compose_now, on_change=None, snapshot=None):
+        self._compose_now = compose_now
+        self._on_change = on_change
+        self._snapshot = snapshot or (
+            lambda: standing_snapshot(load_profile(), load_learned(), load_lexicon()))
+        self._told = self._snapshot()  # what the boot persona already carries
+
+    def moved(self):
+        fresh = self._snapshot()
+        changes = changed_standing(self._told, fresh)
+        if not changes:
+            return ""
+        self._told = fresh
+        if self._on_change is not None:
+            self._on_change(self._compose_now())
+        return "\n\n".join(
+            f"## {name}\n{body or '(he has cleared this - it is empty now)'}"
+            for name, body in changes.items())
+
+
 def open_projects(path=DEFAULT_PROFILE_PATH):
     """His project cards and their still-open tasks, live from the file - the per-turn rendering.
 

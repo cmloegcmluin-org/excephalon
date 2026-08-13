@@ -40,6 +40,7 @@ from excephalon.memory import (
     open_enhancements,
     open_projects,
     profile_without_project_tasks,
+    StandingWatch,
     translation_pairs,
     user_name,
 )
@@ -531,6 +532,9 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
                 # every turn: the boot persona's copy of the list went stale and got DISBELIEVED
                 # ("I can't see the Enhancements list"), while nothing carried in these per-turn
                 # notes has ever faded or been denied.
+                # Anything of his that has changed since the brain was told, whatever part of
+                # his context it lives in - the guard against the whole stale-snapshot category.
+                standing=StandingWatch(_persona, on_change=brain.refresh_persona).moved,
                 briefing=lambda: (
                     f"{desk.digest()}\nFresh agents start on {desk.running_on()}."
                     "\n\nHis Enhancements list - the OPEN items, live from the file this turn. "
