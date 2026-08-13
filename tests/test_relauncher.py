@@ -44,7 +44,9 @@ def test_the_new_app_comes_up_once_the_old_one_is_gone(tmp_path):
                                 bundled=lambda: None)  # the machine running the suite may have one
 
     assert answers == []  # it waited for every "still here" before giving up on it
-    assert started == [[str(relauncher.app_python(tmp_path)), "-m", "excephalon", "--gui"]]
+    # Through launch.pyw, not `-m excephalon`: detached under pythonw there is no console, so the
+    # one door that can report its own failure is the one a relaunch has to come back through.
+    assert started == [[str(relauncher.app_python(tmp_path)), str(tmp_path / "launch.pyw")]]
 
 
 def test_an_app_that_never_dies_still_gets_a_successor(tmp_path):
@@ -101,4 +103,4 @@ def test_a_mac_without_the_bundle_still_comes_back(tmp_path):
                                 start=lambda argv, **kw: started.append(argv),
                                 bundled=lambda: None)
 
-    assert started == [[str(relauncher.app_python(tmp_path)), "-m", "excephalon", "--gui"]]
+    assert started == [[str(relauncher.app_python(tmp_path)), str(tmp_path / "launch.pyw")]]
