@@ -644,9 +644,11 @@ def test_answering_the_offer_hands_the_update_to_the_brain_to_deliver_once():
                           "reply to yeah, let me know"]
 
 
-def test_a_go_ahead_with_several_held_still_reads_out_the_choice():
-    # More than one waiting keeps the numbered roll call: several folded into one breath is the
-    # wall of words the numbering exists to prevent.
+def test_a_go_ahead_with_several_held_says_the_first_and_names_the_rest():
+    # "I already said yes to the Highdeas-submission-feedback one. Why would you ask me this? You
+    # sound insane." His yes was answered with the numbered list and "Which first?" - a question,
+    # in reply to the answer to one, about updates it had just named to him. A go-ahead is a
+    # go-ahead: the first one is said, and the rest are named so the choice stays open.
     clock = FakeClock()
     outbox = Outbox()
     tts = FakeTTS()
@@ -659,7 +661,10 @@ def test_a_go_ahead_with_several_held_still_reads_out_the_choice():
     convo.turn()  # one offer, naming both
     turn = convo.turn()  # the go-ahead
 
-    assert turn.said.startswith("Two updates waiting.")
+    assert turn.said.startswith("fixer is ready")  # the update, not a question
+    assert "Still waiting: docs-sidebar." in turn.said
+    assert "Which first?" not in turn.said
+    assert not [item for item in outbox.drain()]  # and the one he heard is not owed again
 
 
 def test_a_brain_failure_on_the_offered_turn_does_not_lose_the_news():
