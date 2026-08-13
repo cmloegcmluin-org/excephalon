@@ -112,6 +112,8 @@ body.page .topbar, body.config .topbar {
 .on-task { font-size: .8rem; color: var(--dim); margin: -2px 0 8px; }
 .on-task a { color: var(--dim); text-decoration: none; }
 .on-task a:hover { color: var(--accent); text-decoration: underline; }
+/* The task number reads as a tag, the same monospace as the #id on the Projects checklist. */
+.on-task-num { font-family: ui-monospace, "Cascadia Code", monospace; font-size: .92em; }
 /* The words ARE the item - this is what they type into, and what Enter makes another of. One of
    them runs to a paragraph, so it wraps against its own edge under the box rather than under the
    tick. It keeps a line's height while it is empty, or the row they have just made would be a box
