@@ -370,7 +370,15 @@ persona habit; `steps.py` decides
 what a streamed message becomes there — the agent's words as messages, and its commands, diffs and
 output as the machinery under them, capped at both ends with what was dropped counted in place.
 `waiting.py` is what happens when several agents finish at once: they are read out numbered and
-held, and it says which one a reply just named. When an agent's newer news replaces its older,
+held, and it says which one a reply just named. A bare go-ahead answering the update offer is
+the APP's to answer, never the brain's: with one update held it is spoken word for word
+(`_hand_over`), because folded into a fresh turn the content twice went missing - a "Yes"
+answered with "Go check it out then" - while the news was marked delivered either way, so what
+the agent reported reached him not at all ("that's not an update"). Anything more than a bare
+go-ahead is still a turn of his, and the update rides into that reply as before. Every piece of
+news is written to the durable record as it arrives (`console.evidence`), since news that is never
+spoken otherwise leaves no trace at all once its spool entry is gone - which is what made the
+last diagnosis blind. When an agent's newer news replaces its older,
 the old one is dropped from the SPOOL as well as from the queue (`Outbox.superseded`) - collapsing
 the queue in memory alone left yesterday's sentence in the file, and the next process read it out
 as news: he was told work was "ready for your eyes" thirteen seconds after giving his notes on
