@@ -60,11 +60,12 @@
       <button type="button" class="shut" data-agent="{{ name }}"
               title="Close {{ name }}" aria-label="Close {{ name }}">✕</button>
     </h2>
-    {#- The link back to the task on the Projects tab, so the two tabs navigate both ways. Only for
-        an agent started on an Enhancements item; most carry none and show no line. -#}
+    {#- The link back to the task on the Projects tab, so the two tabs navigate both ways. The whole
+        identifier - its project, its number, its words - is one link. Only for an agent started on
+        an Enhancements item; most carry none and show no line. -#}
     {%- if tasks.get(name) %}
     <p class="on-task">Working on <a href="/projects#{{ tasks[name].anchor }}"
-          title="Open this task on the Projects tab — {{ tasks[name].title }}">{{ tasks[name].text }}</a></p>
+          title="Open this task on the Projects tab">{{ tasks[name].title }} <span class="on-task-num">#{{ tasks[name].id }}</span> {{ tasks[name].text }}</a></p>
     {%- endif %}
     <div class="agent thread" data-agent="{{ name }}"></div>
   </section>

@@ -46,7 +46,9 @@ def test_assign_marks_the_task_and_maps_the_agent_back():
     assert item["agent"] == "credits-warn"
     assert item["anchor"] == "task-excephalon-3"
     assert cards[0]["active"][1].get("agent") is None  # the untouched task stays plain
-    assert by_agent == {"credits-warn": {"anchor": "task-excephalon-3",
+    # The reverse map carries all the Agents tab draws its link from: the card (project) name, the
+    # task's number and its words, and the anchor to jump to.
+    assert by_agent == {"credits-warn": {"anchor": "task-excephalon-3", "id": 3,
                                          "title": "Excephalon", "text": "warn about credits"}}
 
 

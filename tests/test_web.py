@@ -1390,8 +1390,10 @@ def test_an_agents_log_links_back_to_the_task_it_is_working_on(tmp_path):
 
     page = client.get("/agents").get_data(as_text=True)
     section = page.split('id="agent-credits-warn"')[1].split("</section>")[0]
-    assert 'href="/projects#task-excephalon-3"' in section   # straight to the exact task
-    assert "warn about credits" in section                    # and it names which task
+    # Project name, task number and task name, all inside the one link back to that exact task.
+    link = section.split('<a href="/projects#task-excephalon-3"')[1].split("</a>")[0]
+    clickable = link.split(">", 1)[1]                         # the visible words of the link
+    assert "Excephalon" in clickable and "#3" in clickable and "warn about credits" in clickable
 
 
 def test_an_agent_on_no_task_shows_no_back_link(tmp_path):

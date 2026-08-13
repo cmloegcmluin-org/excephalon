@@ -82,5 +82,6 @@ def assign(cards, fleet):
             waiting.pop(name)  # one agent, one task - it never marks a second
             anchor = anchor_for(card["title"], item["id"])
             item["agent"], item["anchor"] = name, anchor
-            by_agent[name] = {"anchor": anchor, "title": card["title"], "text": item["text"]}
+            by_agent[name] = {"anchor": anchor, "id": item["id"],
+                              "title": card["title"], "text": item["text"]}
     return by_agent
