@@ -38,6 +38,8 @@ from excephalon.memory import (
     load_translations,
     number_enhancements,
     open_enhancements,
+    open_projects,
+    profile_without_project_tasks,
     translation_pairs,
     user_name,
 )
@@ -107,6 +109,20 @@ def _fresh_worktree_note():
         "old one unless you are explicitly told to. Name a fresh worktree path to start_agent (a "
         "short kebab-case name for the work, under the project's .claude/worktrees/) and the tool "
         "cuts it from current origin/main itself."
+    )
+
+
+def _live_projects():
+    """His project cards, live from the file this turn - the same treatment the Enhancements list
+    gets, for the same reason. The boot persona's copy went stale the moment he made a card, and
+    "take care of task #7 in the Highdeas Project" was answered with "I don't see a #7"."""
+    open_now = open_projects()
+    if not open_now:
+        return ""
+    return (
+        "\n\nHis projects and their open tasks, live from the file this turn - the same cards his "
+        "window's Projects tab shows, numbered per project. When he names a task by number, THIS "
+        "is where to look it up; never say you cannot see it:\n" + open_now
     )
 
 
@@ -244,8 +260,8 @@ def _persona():
     because the window shows this exact text, and a second copy would drift from the one the brain
     reads."""
     return (
-        compose_persona(DEFAULT_PERSONA, load_profile(), load_learned(), load_lexicon(),
-                        additions=load_persona_additions())
+        compose_persona(DEFAULT_PERSONA, profile_without_project_tasks(load_profile()),
+                        load_learned(), load_lexicon(), additions=load_persona_additions())
         + _agent_inbox_note(AGENT_INBOX)
         + services_note(load_services(SERVICES)[0])
         + _fresh_worktree_note()
@@ -524,6 +540,7 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
                     "check_off_enhancement the moment its ask is finished, and agents you start "
                     "on an item tick it off themselves when their work lands:\n"
                     + (open_enhancements() or "(nothing open)")
+                    + _live_projects()
                     + _live_instructions()
                 ),
             ).run(should_continue=lambda: not stop.is_set(), on_turn=show)
