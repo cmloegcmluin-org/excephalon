@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% from "_cards.html" import card %}
+{% block title %} · Projects{% endblock %}
+{% block shape %}page projects{% endblock %}
+
+{% block content %}
+{#- #128: "the Projects section should become its own tab, with a card for each project (RTT app,
+    Highdeas, etc.) and this Enhancements section just becomes the Project card for Excephalon
+    itself." Excephalon leads - its roadmap IS the Enhancements list, so the brain files and ticks
+    it exactly where it always did - and each of his own apps follows as its own card. Every card
+    is the same in-place checklist the roadmap always was; the contents rail is the one Config and
+    Agents carry. -#}
+<aside id="toc" aria-label="Projects">
+  {%- for section in sections %}
+  <button type="button" data-goes="card-{{ section.title | lower | replace(' ', '-') }}">{{ section.title }}</button>
+  {%- endfor %}
+  {#- A project starts with a name and an empty list to fill. This posts the name, the server adds
+      a "## Project: <name>" section, and the page comes back with its card - so his project NAMES
+      live in his profile, never in the source. -#}
+  <form class="new-project" method="post" action="/project/new">
+    <input type="text" name="name" placeholder="New project…" aria-label="New project name"
+           maxlength="60" required>
+    <button type="submit" class="btn" title="Add a project">+</button>
+  </form>
+</aside>
+
+<main id="content" class="reading">
+  {% for section in sections %}{{ card(section) }}
+  {% else %}
+  <p class="empty">No projects yet. Name one above to start its list.</p>
+  {% endfor %}
+</main>
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='writing.js') }}"></script>
+{% endblock %}

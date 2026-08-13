@@ -1,0 +1,59 @@
+{#- The checklist card, written once and shared by the two pages that draw it: Config (Life
+    context, and the plain-bullet Memory/Instructions rows) and Projects (a card per project). A
+    card's shape lives here so the two pages can never drift apart, and so writing.js - which wires
+    any `.section[data-heading]` - meets the same markup wherever it runs. -#}
+
+{#- One row of a list. Enter makes the next one by cloning the row it was pressed in, so there is
+    no second definition of a row's shape in the script to drift from this one. Which is why a list
+    is never empty - an empty section still draws one row, and that row is both where they type and
+    what the next one is made from.
+
+    Two kinds of row: a checklist's (a box to tick) and a bullet list's (a dot that is only a dot).
+    Life context and Memory are background, not work - "Context shouldn't be checkboxes; they should
+    be bullets" - so nothing about them counts as open or done.
+
+    No <label> around it. A label makes a click anywhere inside it tick the box, and these are rows
+    they type into: the caret would never land where they aimed it. -#}
+{% macro row(item={}, kind="checklist") -%}
+{%- if kind == "checklist" -%}
+{#- The "(filed …)" stamp is not in the editable words: it rides on data-filed and shows as a link
+    to that moment in the conversation (the window reads #at= and scrolls there). The row puts it
+    back on save, so the file keeps the exact stamp it always did. -#}
+<li class="{{ 'done' if item.done }}"{% if item.id %} data-id="{{ item.id }}"{% endif %}{% if item.filed %} data-filed="{{ item.filed }}"{% endif %}><input type="checkbox" aria-label="Done" {{ 'checked' if item.done }}>{% if item.id %}<span class="tag">#{{ item.id }}</span>{% endif %}<span class="item" contenteditable="plaintext-only">{{ item.text }}</span>{% if item.filed %}<a class="filed" href="/#at={{ item.filed | urlencode }}" title="Links back to where this enhancement was identified in the conversation">{{ item.filed }}</a>{% endif %}</li>
+{%- else -%}
+{#- A bullet may open with a NAME - three words at most, bold - so a wall of standing instructions
+    can be read down rather than through. It is stored in the file as markdown (`**name** the rule`);
+    the page shows it as the bold words it means and puts the asterisks back on save, the same
+    contract the "(filed …)" stamp above has. -#}
+<li{% if item.lede %} class="named"{% endif %}><span class="dot" aria-hidden="true">•</span>{% if item.lede %}<strong class="lede" contenteditable="plaintext-only">{{ item.lede }}</strong>{% endif %}<span class="item" contenteditable="plaintext-only">{{ item.text }}</span></li>
+{%- endif %}
+{%- endmacro %}
+
+{#- A whole card: a titled checklist with its open count and its collapsible Done fold. The id is
+    derived from the title so the page's contents rail can scroll to it. An item that gets done is
+    ticked, never removed - a done item is the only record that a complaint was heard and acted on -
+    and it folds into the Done section at the foot, so what he still has to act on is what he sees. -#}
+{% macro card(section) -%}
+<section class="section" id="card-{{ section.title | lower | replace(' ', '-') }}"
+         data-heading="{{ section.heading }}" data-kind="{{ section.kind }}">
+    <h2>{{ section.title }}
+      {%- if section.kind == "checklist" %}
+      <span class="counts">{{ section["active"] | length }} open</span>
+      {%- endif %}
+    </h2>
+    <p class="note">{{ section.subtitle }}</p>
+    <ul class="checklist">
+      {% for item in section["active"] %}{{ row(item, section.kind) }}
+      {% else %}{{ row({}, section.kind) }}{# somewhere to type; Enter grows it from there #}
+      {% endfor %}
+    </ul>
+    {% if section.kind == "checklist" %}
+    <details class="done-fold">
+      <summary>Done · {{ section["done"] | length }}</summary>
+      <ul class="checklist done-list">
+        {% for item in section["done"] %}{{ row(item, section.kind) }}{% endfor %}
+      </ul>
+    </details>
+    {% endif %}
+  </section>
+{%- endmacro %}

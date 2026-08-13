@@ -20,8 +20,12 @@ from flask import Flask, redirect, render_template, request
 
 from excephalon.memory import (
     ENHANCEMENTS_HEADING,
+    PROJECT_PREFIX,
     checklist_items,
+    create_project,
     profile_sections,
+    project_headings,
+    project_title,
     save_checklist,
     save_learned,
     save_persona_additions,
@@ -45,13 +49,14 @@ SPEAKERS = {"you": "You", SELF: "Excephalon", "heads-up": "Excephalon · heads-u
 # plain bullets: it is standing background, not a list of things to do, so boxes and an open
 # count would miscount it as work. `subtitle` is the one-line explanation under each card's
 # title, which every card carries now.
+# The Excephalon roadmap - the Enhancements section - is no longer a Config card. It leads the
+# Projects tab as Excephalon's own project card (#128: "this Enhancements section just becomes the
+# Project card for Excephalon itself"), drawn there with this subtitle. Its founding words: "a
+# local, voice-in/voice-out, memory-persistent partner you pair with on your life."
+EXCEPHALON_SUBTITLE = ("The construction roadmap for this companion itself - file an ask and an "
+                       "agent can be put on it; done items keep their record in the fold below.")
+
 SECTIONS = (
-    # The three checklists' subtitles are drawn from the project's founding words - "a local,
-    # voice-in/voice-out, memory-persistent partner you pair with on your life... it keeps a
-    # durable memory so it doesn't lose the thread across days or months."
-    ("Enhancements", "Enhancements", "checklist",
-     "The construction roadmap for this partner itself - file an ask and an agent can be put "
-     "on it; done items keep their record in the fold below."),
     # The Goals card is retired by his call: every goal was reworded as an accomplishable
     # Project ("rework all Goals as Projects i.e. those with measurable outcomes") and moved
     # into Projects, the way Memories became Instructions.
@@ -129,6 +134,16 @@ def _heading(found, stem):
     profile glosses its headings however it likes ("Enhancements they want for you (roadmap, not
     now)")."""
     return next((head for head in found if head.lower().startswith(stem.lower())), None)
+
+
+def _card(found, title, heading, kind, subtitle):
+    """One card as its page draws it: the section's items split into what is still open and what is
+    done, so the done ones fold away. Shared by Config and the Projects tab, which draw the same
+    card - a project's is just an ordinary checklist section tagged "Project: <name>"."""
+    items = [_with_filed(item) for item in checklist_items(found.get(heading, ""))]
+    return {"title": title, "heading": heading, "kind": kind, "subtitle": subtitle,
+            "active": [item for item in items if not item["done"]],
+            "done": [item for item in items if item["done"]]}
 
 
 # The bullet marker and nothing else: stripping "-* " as a character set ate the leading `**`
@@ -303,10 +318,13 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
     persona_additions_path = Path(persona_additions_path) if persona_additions_path else None
     agents = Agents(agent_logs_dir, clock)
 
-    def _profile_text():
+    def _profile_raw():
         if profile_path is None or not profile_path.exists():
-            return {}
-        return profile_sections(profile_path.read_text(encoding="utf-8"))
+            return ""
+        return profile_path.read_text(encoding="utf-8")
+
+    def _profile_text():
+        return profile_sections(_profile_raw())
 
     @app.get("/")
     def window():
@@ -383,14 +401,7 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
         Each checklist is split into what is still open and what is done: the done ones fold into
         a collapsible section at its foot, so what he still has to act on is what he sees."""
         found = _profile_text()
-
-        def section(title, heading, kind, subtitle):
-            items = [_with_filed(item) for item in checklist_items(found[heading])]
-            return {"title": title, "heading": heading, "kind": kind, "subtitle": subtitle,
-                    "active": [item for item in items if not item["done"]],
-                    "done": [item for item in items if item["done"]]}
-
-        sections = [section(title, heading, kind, subtitle)
+        sections = [_card(found, title, heading, kind, subtitle)
                     for title, heading, kind, subtitle in
                     ((title, _heading(found, stem), kind, subtitle)
                      for title, stem, kind, subtitle in SECTIONS)
@@ -432,6 +443,34 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
     for old in ("/profile", "/persona", "/memory", "/translations"):
         app.add_url_rule(old, f"was_{old.strip('/')}", lambda: redirect("/config"))
 
+    # ---- the Projects tab: a card per project -------------------------------------------------
+
+    @app.get("/projects")
+    def projects():
+        """A card for each of his projects. #128: "the Projects section should become its own tab,
+        with a card for each project (RTT app, Highdeas, etc.) and this Enhancements section just
+        becomes the Project card for Excephalon itself." Excephalon leads - its roadmap IS the
+        Enhancements section, so nothing about the brain's filing or ticking moves - and each app
+        follows as its own "## Project: <name>" checklist, read and saved by the same machinery."""
+        text = _profile_raw()
+        found = profile_sections(text)
+        cards = []
+        enhancements = _heading(found, ENHANCEMENTS_HEADING)
+        if enhancements is not None:
+            cards.append(_card(found, "Excephalon", enhancements, "checklist", EXCEPHALON_SUBTITLE))
+        cards += [_card(found, project_title(heading), heading, "checklist", "")
+                  for heading in project_headings(text)]
+        return render_template("projects.html", here="/projects", sections=cards)
+
+    @app.post("/project/new")
+    def new_project():
+        """Start a new project from the name he typed and come back to its fresh card. The name is
+        his, so it goes only into his profile - a "## Project: <name>" section - never the source.
+        A blank name adds nothing; either way the tab is where he lands."""
+        if profile_path is not None and request.form.get("name", "").strip():
+            create_project(request.form["name"], path=profile_path)
+        return redirect("/projects")
+
     @app.post("/profile")
     def write_profile():
         """Save one section's list back, as the markdown the file keeps and the brain reads -
@@ -442,9 +481,12 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
         character they type."""
         if profile_path is not None:
             sent = request.get_json()
-            # Only the enhancements list carries ids - the one he refers to by number - so only it
-            # numbers a new row on the way in. The other panes stay the plain lists they were.
-            numbered = sent["heading"].lower().startswith(ENHANCEMENTS_HEADING.lower())
+            # The lists he refers to items of by number carry ids, so those number a new row on the
+            # way in: the Excephalon roadmap (the Enhancements section) and every project card (a
+            # "Project: <name>" section is the same checklist). The other panes stay plain lists.
+            head = sent["heading"].lower()
+            numbered = (head.startswith(ENHANCEMENTS_HEADING.lower())
+                        or head.startswith(PROJECT_PREFIX.lower()))
             # A bullets section (Life context) writes plain bullets back: it is background, not
             # work, and boxes in the file would draw boxes on the page again.
             plain = any(sent["heading"].lower().startswith(stem.lower())

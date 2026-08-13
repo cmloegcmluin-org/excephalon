@@ -122,9 +122,11 @@ if (swaps) {
   });
 }
 
-/* ---- the config page's contents column ------------------------------------------------------ */
+/* ---- the contents column shared by the Config and Projects pages ---------------------------- */
 
-for (const goes of document.querySelectorAll("#toc button")) {
+/* Only the buttons that name a card to scroll to - the Projects rail also holds the "+ New project"
+   submit button, which is the form's, not one of these. */
+for (const goes of document.querySelectorAll("#toc button[data-goes]")) {
   goes.addEventListener("click", () => {
     document.getElementById(goes.dataset.goes)?.scrollIntoView({ block: "start" });
     for (const other of goes.parentElement.children) other.removeAttribute("aria-current");
