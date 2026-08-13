@@ -202,21 +202,25 @@ def _cause(exc, depth=3):
 
 
 def _newest_per_agent(waiting):
-    """Undelivered news about an agent, superseded by newer news about the same agent.
+    """`waiting` as (what to keep, what newer news about the same agent has superseded).
 
     Every turn-end while the user was away queued its own narration, and the roll call then read
     the same name four times - a list with no choice in it. The newest sentence about an agent
     already says where things stand; the ones they never heard are history. News with no agent
-    on it (about=None) is never collapsed - those are not updates on one thing."""
-    keep = []
+    on it (about=None) is never collapsed - those are not updates on one thing.
+
+    What is superseded comes back to the caller because dropping it here is only half the job:
+    its durable copy has to go too, or the next restart reads yesterday's sentence out as news."""
+    keep, gone = [], []
     for place, item in enumerate(waiting):
         about = getattr(item, "about", None)
         if about is not None and any(
             getattr(newer, "about", None) == about for newer in waiting[place + 1:]
         ):
+            gone.append(item)
             continue
         keep.append(item)
-    return keep
+    return keep, gone
 
 
 def _accepts_streaming(brain):
@@ -427,7 +431,9 @@ class Conversation:
         # returning early with it still set spun the loop forever and swallowed every submission they
         # made. Held news waits here instead, in hand, and goes out at the next opportunity.
         self._waiting.extend(self._outbox.drain())
-        self._waiting = _newest_per_agent(self._waiting)
+        self._waiting, superseded = _newest_per_agent(self._waiting)
+        for stale in superseded:
+            self._superseded(stale)  # its durable copy goes with it, or a restart revives it
         if not self._waiting:
             self._announced = ()  # nothing outstanding, so the next single item is simply spoken
             self._update_offered = False
@@ -469,6 +475,15 @@ class Conversation:
         spoken = getattr(self._outbox, "spoken", None)
         if spoken is not None:
             spoken(news)
+
+    def _superseded(self, news):
+        """Tell the outbox this news will never be spoken - newer news about the same agent has
+        replaced it. Collapsing the queue in memory alone left the old sentence spooled, and a
+        restart delivered it as fresh: "it comes out of nowhere and provides no new information
+        that I didn't already have"."""
+        forget = getattr(self._outbox, "superseded", None)
+        if forget is not None:
+            forget(news)
 
     def _roll(self):
         """What is waiting right now, as the comparison the roll call is remembered by: the news

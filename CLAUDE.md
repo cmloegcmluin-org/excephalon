@@ -370,7 +370,11 @@ persona habit; `steps.py` decides
 what a streamed message becomes there — the agent's words as messages, and its commands, diffs and
 output as the machinery under them, capped at both ends with what was dropped counted in place.
 `waiting.py` is what happens when several agents finish at once: they are read out numbered and
-held, and it says which one a reply just named. `narrator.py` is how any agent event becomes
+held, and it says which one a reply just named. When an agent's newer news replaces its older,
+the old one is dropped from the SPOOL as well as from the queue (`Outbox.superseded`) - collapsing
+the queue in memory alone left yesterday's sentence in the file, and the next process read it out
+as news: he was told work was "ready for your eyes" thirteen seconds after giving his notes on
+that very work, "out of nowhere", with nothing in it he did not already know. `narrator.py` is how any agent event becomes
 speech: the desk, the inbox watcher and the quiet monitor emit typed events into it, the brain
 words each one as its own sentence - carrying the same conduct a reply carries (a narration is a
 line he HEARS, and the standing conduct reached only replies, which is how "the desk" got to him),
