@@ -126,6 +126,26 @@ _LONG_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]
                       re.IGNORECASE)
 
 
+# An address SPELLED OUT in words - "click through at localhost port 8752" - which is what the
+# brain writes when it tries to do the voice's job for it. Everything it writes is spoken, so it
+# has no way to write one thing and say another; asked to say an address naturally, it says it in
+# the only channel it has, and what reaches the screen is words nobody can click. The digits may
+# come apart too ("port 8-7-5-2"), because that is how the instruction spelled its example.
+_SPELLED_LOCAL = re.compile(r"\b(localhost|127\.0\.0\.1)[ ,]+port[ ]+(\d(?:[ -]?\d){1,4})\b",
+                            re.IGNORECASE)
+
+
+def as_written(text):
+    """`text` with a spoken-out local address put back as an address - what the screen keeps.
+
+    The mirror of `as_spoken`, and the reason both exist in one file: the split between what is
+    said and what is written is this module's whole job, so a message that spells an address out
+    in words is repaired HERE rather than begged for in a persona. The voice is unaffected - it
+    was already saying the words - and the page can offer a link again."""
+    return _SPELLED_LOCAL.sub(lambda found: f"{found.group(1)}:{re.sub(r'[ -]', '', found.group(2))}",
+                              text)
+
+
 def as_spoken(text):
     """`text` as it should be SAID - the written form stays on screen untouched.
 
@@ -154,10 +174,14 @@ def _said_aloud(word):
 def _stand_in(target):
     """An address is "the link"; a path is its last part, which is the part a person would say -
     "it's in profile.md", never the eight folders above it."""
-    if target.startswith(("http://", "https://")):
-        return SPOKEN_ADDRESS
     if _IS_BARE_LOCAL.fullmatch(target):
         return target  # "localhost:5200" IS the natural spoken form; only the page needs more
+    if target.startswith(("http://", "https://")):
+        # A local address wearing its scheme is the same address: he asked to hear the host and
+        # port rather than a URL read out ("http://localhost:4444" said as "localhost port 4444"),
+        # and the bare form is the one he already liked hearing. Anything else is "the link".
+        bare = _IS_BARE_LOCAL.match(target.split("//", 1)[1])
+        return bare.group(0) if bare else SPOKEN_ADDRESS
     return PureWindowsPath(target).name or SPOKEN_ADDRESS
 
 
