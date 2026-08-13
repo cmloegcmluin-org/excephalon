@@ -830,3 +830,77 @@ def test_create_project_refuses_a_blank_name(tmp_path):
 
     with pytest.raises(ValueError):
         create_project("   ", path=tmp_path / "profile.md")
+
+
+def test_rename_project_moves_the_heading_and_keeps_its_list(tmp_path):
+    from excephalon.memory import project_headings, rename_project
+
+    path = tmp_path / "profile.md"
+    path.write_text("## Project: RTT app\n- [ ] #1 tuning\n\n## Life context\n- SF\n",
+                    encoding="utf-8")
+
+    result = rename_project("RTT app", "Rich tone tool", path=path)
+
+    assert result == "Project: Rich tone tool"
+    text = path.read_text(encoding="utf-8")
+    assert project_headings(text) == ["Project: Rich tone tool"]  # the heading moved
+    assert "- [ ] #1 tuning" in text  # its list came with it
+    assert "- SF" in text             # everything else untouched
+
+
+def test_rename_project_refuses_a_name_another_project_already_has(tmp_path):
+    # Two projects can't share a heading - the rename is refused and nothing moves, so the caller
+    # can say so where it was typed rather than silently putting the old name back.
+    from excephalon.memory import rename_project
+
+    path = tmp_path / "profile.md"
+    path.write_text("## Project: A\n- [ ] x\n\n## Project: B\n- [ ] y\n", encoding="utf-8")
+
+    assert rename_project("A", "B", path=path) is None
+    text = path.read_text(encoding="utf-8")
+    assert "## Project: A" in text and "## Project: B" in text
+    assert text.count("## Project:") == 2  # neither merged into the other
+
+
+def test_rename_project_refuses_a_blank_name(tmp_path):
+    import pytest
+
+    from excephalon.memory import rename_project
+
+    path = tmp_path / "profile.md"
+    path.write_text("## Project: A\n- [ ] x\n", encoding="utf-8")
+    with pytest.raises(ValueError):
+        rename_project("A", "   ", path=path)
+
+
+def test_reorder_projects_rewrites_the_cards_in_the_given_order(tmp_path):
+    from excephalon.memory import project_headings, reorder_projects
+
+    path = tmp_path / "profile.md"
+    path.write_text("## Life context\n- SF\n\n"
+                    "## Project: A\n- [ ] a1\n\n"
+                    "## Project: B\n- [ ] b1\n\n"
+                    "## Project: C\n- [ ] c1\n", encoding="utf-8")
+
+    reorder_projects(["C", "A", "B"], path=path)
+
+    text = path.read_text(encoding="utf-8")
+    assert project_headings(text) == ["Project: C", "Project: A", "Project: B"]
+    assert "## Project: C\n- [ ] c1" in text  # each body rides with its own heading
+    assert "## Project: A\n- [ ] a1" in text
+    assert text.index("## Life context") < text.index("## Project:")  # non-projects stay put
+    assert "- SF" in text
+
+
+def test_reorder_projects_keeps_any_card_the_order_forgot(tmp_path):
+    # A partial order must never drop a card; the unnamed ones follow, in their old order.
+    from excephalon.memory import project_headings, reorder_projects
+
+    path = tmp_path / "profile.md"
+    path.write_text("## Project: A\n- [ ] a\n\n## Project: B\n- [ ] b\n\n## Project: C\n- [ ] c\n",
+                    encoding="utf-8")
+
+    reorder_projects(["C"], path=path)
+
+    assert project_headings(path.read_text(encoding="utf-8")) == ["Project: C", "Project: A",
+                                                                  "Project: B"]
