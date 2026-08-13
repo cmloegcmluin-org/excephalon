@@ -1303,3 +1303,29 @@ def test_projects_js_wires_rename_reorder_and_edit_on_new():
     js = _client().get("/static/projects.js").get_data(as_text=True)
     assert "/project/rename" in js and "/project/reorder" in js
     assert "dragstart" in js and "editing" in js  # drag to reorder; focus the freshly-made card
+
+
+def test_the_excephalon_card_carries_no_subtitle_like_the_project_cards(tmp_path):
+    # "Remove any special styling from the Excephalon card - it should look the same as the other
+    # project cards." Its subtitle note was the only difference; without it, every card is the same.
+    import re
+
+    profile = tmp_path / "profile.md"
+    profile.write_text("## Enhancements he wants (roadmap)\n- [ ] #1 voice\n\n"
+                       "## Project: RTT app\n- [ ] #1 tuning\n", encoding="utf-8")
+    page = _client(profile_path=profile).get("/projects").get_data(as_text=True)
+
+    excephalon = re.search(r'id="card-excephalon".*?</section>', page, re.S).group(0)
+    project = re.search(r'id="card-rtt-app".*?</section>', page, re.S).group(0)
+    assert 'class="note"' not in excephalon  # no subtitle, exactly like a project card
+    assert 'class="note"' not in project
+
+
+def test_a_long_project_name_truncates_in_the_sidebar():
+    # Long names must fit the rail, not wrap or overflow it. The name is a flex item, so it needs
+    # min-width:0 or it never shrinks below its own text to let the ellipsis show.
+    css = _client().get("/static/app.css").get_data(as_text=True)
+
+    rule = _rule_for(css, "#toc .rail-name")
+    assert "text-overflow: ellipsis" in rule and "white-space: nowrap" in rule
+    assert "min-width: 0" in rule
