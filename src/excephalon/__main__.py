@@ -717,6 +717,10 @@ def main(argv=None):
         # rather than what could be.
         terms=_vocab_terms(),
         agent_logs_dir=AGENT_LOGS,
+        # The fleet's survival record, so a task an agent is on shows an indicator linking to its
+        # log, and the log links back to the task - the desk keeps this current as agents come and
+        # go (agents.json), and the two tabs read it to reach each other.
+        agent_state_path=AGENT_STATE,
         on_quit=ask_quit, on_restart=ask_restart,
         # The page's rename: the desk does it, and the name it settled on comes back so the
         # heading shows what was actually taken rather than what was typed.

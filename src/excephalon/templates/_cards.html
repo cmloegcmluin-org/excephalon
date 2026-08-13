@@ -3,6 +3,14 @@
     card's shape lives here so the two pages can never drift apart, and so writing.js - which wires
     any `.section[data-heading]` - meets the same markup wherever it runs. -#}
 
+{#- The little robot that marks a task an agent is on - thin-stroke, the same weight as the rail's
+    archive arrows, its eyes and antenna-tip filled so it reads as a face at 15px. Drawn once here
+    so the row macro and anywhere else that wants it share one glyph. -#}
+{% macro agent_icon() -%}
+<svg class="agent-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"
+     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4.7V2.7"></path><circle cx="8" cy="2.1" r="0.75" fill="currentColor" stroke="none"></circle><rect x="3.4" y="4.7" width="9.2" height="7.5" rx="1.9"></rect><circle cx="6.3" cy="8.3" r="0.85" fill="currentColor" stroke="none"></circle><circle cx="9.7" cy="8.3" r="0.85" fill="currentColor" stroke="none"></circle><path d="M6.4 10.6h3.2"></path></svg>
+{%- endmacro %}
+
 {#- One row of a list. Enter makes the next one by cloning the row it was pressed in, so there is
     no second definition of a row's shape in the script to drift from this one. Which is why a list
     is never empty - an empty section still draws one row, and that row is both where they type and
@@ -18,8 +26,13 @@
 {%- if kind == "checklist" -%}
 {#- The "(filed …)" stamp is not in the editable words: it rides on data-filed and shows as a link
     to that moment in the conversation (the window reads #at= and scrolls there). The row puts it
-    back on save, so the file keeps the exact stamp it always did. -#}
-<li class="{{ 'done' if item.done }}"{% if item.id %} data-id="{{ item.id }}"{% endif %}{% if item.filed %} data-filed="{{ item.filed }}"{% endif %}><input type="checkbox" aria-label="Done" {{ 'checked' if item.done }}>{% if item.id %}<span class="tag">#{{ item.id }}</span>{% endif %}<span class="item" contenteditable="plaintext-only">{{ item.text }}</span>{% if item.filed %}<a class="filed" href="/#at={{ item.filed | urlencode }}" title="Links back to where this enhancement was identified in the conversation">{{ item.filed }}</a>{% endif %}</li>
+    back on save, so the file keeps the exact stamp it always did.
+
+    The agent gutter leads every checklist row, filled or empty, so the boxes stay in one column
+    whether or not a task has an agent on it ("shift all checkboxes over to make room"). When an
+    agent IS on the task, the slot is a link to its log (and the row carries the id that agent's
+    log links back to); otherwise it is a same-width spacer. -#}
+<li class="{{ 'done' if item.done }}"{% if item.anchor %} id="{{ item.anchor }}"{% endif %}{% if item.id %} data-id="{{ item.id }}"{% endif %}{% if item.filed %} data-filed="{{ item.filed }}"{% endif %}>{% if item.agent %}<a class="agent-link" href="/agents#agent-{{ item.agent }}" title="{{ item.agent }} is on this — open its log">{{ agent_icon() }}</a>{% else %}<span class="agent-slot" aria-hidden="true"></span>{% endif %}<input type="checkbox" aria-label="Done" {{ 'checked' if item.done }}>{% if item.id %}<span class="tag">#{{ item.id }}</span>{% endif %}<span class="item" contenteditable="plaintext-only">{{ item.text }}</span>{% if item.filed %}<a class="filed" href="/#at={{ item.filed | urlencode }}" title="Links back to where this enhancement was identified in the conversation">{{ item.filed }}</a>{% endif %}</li>
 {%- else -%}
 {#- A bullet may open with a NAME - three words at most, bold - so a wall of standing instructions
     can be read down rather than through. It is stored in the file as markdown (`**name** the rule`);

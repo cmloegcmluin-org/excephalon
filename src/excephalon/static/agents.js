@@ -52,9 +52,16 @@ for (const shelf of document.querySelectorAll("#toc [data-restore]")) {
 }
 
 if (location.hash) {
-  // The restore lands here: the freshly unarchived tab exists now - bring it into view.
-  document.getElementById(decodeURIComponent(location.hash.slice(1)))
-    ?.scrollIntoView({ block: "start" });
+  // Two ways in: a restore reopening a tab, and a task on the Projects tab linking to the agent
+  // that is on it. Either way the freshly-scrolled tab is flashed, the same "you landed here"
+  // highlight (.landed) the conversation uses, so the destination is obvious rather than lost at
+  // the top edge.
+  const tab = document.getElementById(decodeURIComponent(location.hash.slice(1)));
+  if (tab) {
+    tab.scrollIntoView({ block: "start" });
+    tab.classList.add("landed");
+    tab.addEventListener("animationend", () => tab.classList.remove("landed"), { once: true });
+  }
 }
 
 /* The rail's archive button does what the tab's ✕ does, from the list rather than the tab. */

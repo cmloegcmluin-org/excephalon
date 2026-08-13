@@ -67,6 +67,18 @@ if (editing) {
   history.replaceState(null, "", "/projects");  // so a reload does not reopen the editor
 }
 
+/* An agent's log links here with #task-<card>-<id>: bring that task into view and flash it, so it
+   is obvious which one was meant rather than landing somewhere in a long card. The same "you
+   landed here" highlight the conversation uses (.landed), and only for a moment. */
+if (location.hash) {
+  const task = document.getElementById(decodeURIComponent(location.hash.slice(1)));
+  if (task) {
+    task.scrollIntoView({ block: "center" });
+    task.classList.add("landed");
+    task.addEventListener("animationend", () => task.classList.remove("landed"), { once: true });
+  }
+}
+
 /* Drag a row to reorder. The order the rows settle into is the order the cards are drawn in, saved
    on drop. Only within the project list - Excephalon is not part of it, and always leads. */
 const rail = document.getElementById("project-rail");

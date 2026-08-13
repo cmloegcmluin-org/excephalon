@@ -99,6 +99,19 @@ body.page .topbar, body.config .topbar {
 .checklist li { display: flex; gap: 9px; align-items: baseline; padding: 2px 0; }
 .checklist input { accent-color: var(--accent); width: 15px; height: 15px; margin: 0;
                    flex: none; cursor: pointer; }
+/* The agent gutter to the left of every box - a fixed column so the boxes line up whether or not
+   a task has an agent on it. Empty it is just the spacer; filled it is the robot, a link to that
+   agent's log that lights to the accent on hover, the way the filing stamp beside the words does. */
+.checklist .agent-slot, .checklist .agent-link { flex: none; width: 15px; height: 15px; }
+.checklist .agent-link { display: inline-flex; align-items: center; justify-content: center;
+                         color: var(--dim); align-self: center; }
+.checklist .agent-link:hover { color: var(--accent); }
+.checklist .agent-icon { width: 15px; height: 15px; display: block; }
+/* The other half of that link, on the Agents tab: a quiet line under an agent's heading pointing
+   back to the task it is on, so the two tabs reach each other both ways. */
+.on-task { font-size: .8rem; color: var(--dim); margin: -2px 0 8px; }
+.on-task a { color: var(--dim); text-decoration: none; }
+.on-task a:hover { color: var(--accent); text-decoration: underline; }
 /* The words ARE the item - this is what they type into, and what Enter makes another of. One of
    them runs to a paragraph, so it wraps against its own edge under the box rather than under the
    tick. It keeps a line's height while it is empty, or the row they have just made would be a box
