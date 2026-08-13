@@ -454,14 +454,27 @@ body.agents #content { margin-left: 360px; max-width: none; }
               border-left: 2px solid transparent; padding: 5px 12px; cursor: pointer; }
 #toc button:hover { color: var(--fg); background: rgba(127, 255, 0, .06); }
 #toc button[aria-current="true"] { color: var(--fg); border-left-color: var(--accent); }
-/* Naming a new project sits at the foot of the rail: a slot to type into and a + to add it. It
-   opens an empty card he then fills, so his project names reach only his profile, never the source. */
-#toc .new-project { display: flex; gap: 4px; margin: 8px 12px 2px; }
-#toc .new-project input { flex: 1 1 auto; min-width: 0; font: inherit; font-size: .78rem;
-                          color: var(--fg); background: var(--bg); border: 1px solid var(--line);
-                          border-radius: 6px; padding: 4px 6px; }
-#toc .new-project input::placeholder { color: var(--dim); }
-#toc .new-project .btn { flex: none; padding: 2px 8px; line-height: 1.2; }
+/* The Projects rail: Excephalon fixed at the top (an ordinary rail button), then his projects as a
+   list of rows that drag to reorder and rename in place, then the + that starts a new one. */
+#toc #project-rail { list-style: none; margin: 0; padding: 0; }
+#toc .rail-item { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 0 6px 0 4px;
+                  border-left: 2px solid transparent; }
+/* The row lifts a touch as it is dragged, and the gap it will drop into reads clearly. */
+#toc .rail-item.dragging { opacity: .45; }
+#toc .grip { flex: none; color: var(--dim); font-size: .8rem; cursor: grab; padding: 4px 2px;
+             user-select: none; opacity: 0; transition: opacity .1s; }
+#toc .rail-item:hover .grip { opacity: 1; }
+#toc .rail-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+                  font-size: .78rem; color: var(--dim); padding: 5px 0; cursor: pointer; }
+#toc .rail-item:hover .rail-name { color: var(--fg); }
+/* While a name is being typed into, it reads as an editable field, not a label. */
+#toc .rail-name[contenteditable] { background: rgba(127, 255, 0, .07); color: var(--fg);
+                                   cursor: text; border-radius: 4px; padding: 5px 4px; }
+/* The + to add a project, at the foot of the rail. */
+#toc .new-project { margin: 6px 12px 2px; }
+#toc .new-project .btn { display: block; width: 100%; padding: 5px 8px; font-size: .78rem; }
+/* A refused rename, shown under the row it was typed in rather than vanishing with the old name. */
+#toc .rail-item .refused { flex-basis: 100%; color: #ff9a9a; font-size: .72rem; padding: 0 0 4px 6px; }
 /* A card arriving under a sticky bar must stop short of it, or its heading lands hidden. */
 .section { scroll-margin-top: 58px; }
 .budget { min-height: 0; max-width: 32ch; }

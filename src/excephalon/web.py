@@ -18,6 +18,8 @@ from pathlib import Path
 
 from flask import Flask, redirect, render_template, request
 
+from urllib.parse import quote
+
 from excephalon.memory import (
     ENHANCEMENTS_HEADING,
     PROJECT_PREFIX,
@@ -26,6 +28,8 @@ from excephalon.memory import (
     profile_sections,
     project_headings,
     project_title,
+    rename_project,
+    reorder_projects,
     save_checklist,
     save_learned,
     save_persona_additions,
@@ -456,19 +460,51 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
         cards = []
         enhancements = _heading(found, ENHANCEMENTS_HEADING)
         if enhancements is not None:
-            cards.append(_card(found, "Excephalon", enhancements, "checklist", EXCEPHALON_SUBTITLE))
-        cards += [_card(found, project_title(heading), heading, "checklist", "")
+            # Excephalon is not a "## Project:" section - it is the Enhancements roadmap - so its
+            # rail entry neither renames (that would move the heading the brain files into) nor
+            # drags: it always leads. `movable` is what tells the two apart on the page.
+            cards.append({**_card(found, "Excephalon", enhancements, "checklist",
+                                  EXCEPHALON_SUBTITLE), "movable": False})
+        cards += [{**_card(found, project_title(heading), heading, "checklist", ""), "movable": True}
                   for heading in project_headings(text)]
         return render_template("projects.html", here="/projects", sections=cards)
 
     @app.post("/project/new")
     def new_project():
-        """Start a new project from the name he typed and come back to its fresh card. The name is
-        his, so it goes only into his profile - a "## Project: <name>" section - never the source.
-        A blank name adds nothing; either way the tab is where he lands."""
-        if profile_path is not None and request.form.get("name", "").strip():
-            create_project(request.form["name"], path=profile_path)
-        return redirect("/projects")
+        """The + button starts a new card already in edit mode - there is no name field to fill.
+        A placeholder project is created and the tab comes back with `?editing=<name>`, which the
+        page uses to focus that card's name for typing over. He names it by renaming it (below), so
+        his project names still reach only his profile, never the source."""
+        if profile_path is None:
+            return redirect("/projects")
+        taken = set(project_headings(_profile_raw()))
+        name, nth = "New project", 2
+        while PROJECT_PREFIX + name in taken:  # a second + is a second card, not the same one again
+            name, nth = f"New project {nth}", nth + 1
+        create_project(name, path=profile_path)
+        return redirect("/projects?editing=" + quote(name))
+
+    @app.post("/project/rename")
+    def rename_project_route():
+        """Rename a project card from the sidebar, the way an agent is renamed. A name another card
+        already has is refused with a reason to show where he typed it - a quiet restore of the old
+        name reads as a broken app."""
+        if profile_path is not None:
+            try:
+                moved = rename_project(request.form["from"], request.form["to"], path=profile_path)
+            except ValueError:
+                return {"why": "a project needs a name"}, 400
+            if moved is None:
+                return {"why": "another project is already called that"}, 409
+        return ("", 204)
+
+    @app.post("/project/reorder")
+    def reorder_projects_route():
+        """Save the order the sidebar was dragged into - the sequence the cards stand in the file is
+        the sequence the tab draws them."""
+        if profile_path is not None:
+            reorder_projects(request.get_json()["order"], path=profile_path)
+        return ("", 204)
 
     @app.post("/profile")
     def write_profile():

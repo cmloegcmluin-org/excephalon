@@ -1193,28 +1193,6 @@ def test_config_no_longer_carries_the_enhancements_card_now_that_projects_holds_
     assert "better voice" in projects and ">Excephalon" in projects
 
 
-def test_new_project_adds_a_tagged_section_and_lands_back_on_the_tab(tmp_path):
-    # The + button names a project; the server adds it and the page comes back with its empty card
-    # to fill. His project NAMES go only into his profile, never the source.
-    profile = tmp_path / "profile.md"
-    profile.write_text("## Life context\n- lives in SF\n", encoding="utf-8")
-    client = _client(profile_path=profile)
-
-    answer = client.post("/project/new", data={"name": "Highdeas"})
-    assert answer.status_code == 302 and answer.headers["Location"].endswith("/projects")
-    assert "## Project: Highdeas" in profile.read_text(encoding="utf-8")
-
-    page = client.get("/projects").get_data(as_text=True)
-    assert ">Highdeas" in page and 'data-heading="Project: Highdeas"' in page
-
-
-def test_new_project_ignores_a_blank_name(tmp_path):
-    profile = tmp_path / "profile.md"
-    profile.write_text("## Life context\n- lives in SF\n", encoding="utf-8")
-    client = _client(profile_path=profile)
-
-    client.post("/project/new", data={"name": "   "})
-    assert "## Project:" not in profile.read_text(encoding="utf-8")
 
 
 def test_the_projects_content_clears_the_fixed_rail():
@@ -1237,3 +1215,91 @@ def test_config_drops_the_long_term_projects_list_entirely(tmp_path):
     config = client.get("/config").get_data(as_text=True)
     assert "Gym & PT" not in config and "Guitar" not in config  # the list is gone from Config
     assert "lives in SF" in config                              # but life context stays
+
+
+def test_new_project_starts_a_placeholder_card_in_edit_mode(tmp_path):
+    # The + button makes a new card in edit mode (no separate name field): a placeholder project is
+    # created and the tab comes back with that card named for typing over.
+    profile = tmp_path / "profile.md"
+    profile.write_text("## Life context\n- SF\n", encoding="utf-8")
+    client = _client(profile_path=profile)
+
+    answer = client.post("/project/new")
+    assert answer.status_code == 302
+    assert "/projects?editing=" in answer.headers["Location"]
+    assert "## Project: New project" in profile.read_text(encoding="utf-8")
+
+
+def test_new_project_does_not_clobber_an_existing_placeholder(tmp_path):
+    profile = tmp_path / "profile.md"
+    profile.write_text("## Project: New project\n- [ ] keep me\n", encoding="utf-8")
+    client = _client(profile_path=profile)
+
+    client.post("/project/new")
+    text = profile.read_text(encoding="utf-8")
+    assert "## Project: New project 2" in text  # a fresh card, the first left intact
+    assert "- [ ] keep me" in text
+
+
+def test_renaming_a_project_moves_its_card(tmp_path):
+    profile = tmp_path / "profile.md"
+    profile.write_text("## Project: RTT app\n- [ ] #1 tuning\n", encoding="utf-8")
+    client = _client(profile_path=profile)
+
+    answer = client.post("/project/rename", data={"from": "RTT app", "to": "Rich tone tool"})
+    assert answer.status_code == 204
+    text = profile.read_text(encoding="utf-8")
+    assert "## Project: Rich tone tool" in text and "## Project: RTT app" not in text
+    assert "- [ ] #1 tuning" in text
+
+
+def test_renaming_a_project_to_a_taken_name_is_refused_with_a_reason(tmp_path):
+    profile = tmp_path / "profile.md"
+    profile.write_text("## Project: A\n- [ ] x\n\n## Project: B\n- [ ] y\n", encoding="utf-8")
+    client = _client(profile_path=profile)
+
+    answer = client.post("/project/rename", data={"from": "A", "to": "B"})
+    assert answer.status_code == 409
+    assert "why" in answer.get_json()
+    assert profile.read_text(encoding="utf-8").count("## Project:") == 2  # nothing merged
+
+
+def test_reordering_projects_rewrites_their_order(tmp_path):
+    from excephalon.memory import project_headings
+
+    profile = tmp_path / "profile.md"
+    profile.write_text("## Project: A\n- [ ] a\n\n## Project: B\n- [ ] b\n\n## Project: C\n- [ ] c\n",
+                       encoding="utf-8")
+    client = _client(profile_path=profile)
+
+    answer = client.post("/project/reorder", json={"order": ["C", "A", "B"]})
+    assert answer.status_code == 204
+    assert project_headings(profile.read_text(encoding="utf-8")) == ["Project: C", "Project: A",
+                                                                     "Project: B"]
+
+
+def test_the_projects_rail_is_renameable_draggable_and_has_no_name_field(tmp_path):
+    # Rail names rename in place like an agent's; project rows drag to reorder; and the + no longer
+    # has a text field beside it - it starts a card in edit mode instead.
+    profile = tmp_path / "profile.md"
+    profile.write_text("## Enhancements he wants (roadmap)\n- [ ] #1 voice\n\n"
+                       "## Project: RTT app\n- [ ] #1 tuning\n", encoding="utf-8")
+    client = _client(profile_path=profile)
+
+    page = client.get("/projects").get_data(as_text=True)
+    # A project row: draggable and renameable, carrying its name for both.
+    assert 'draggable="true"' in page
+    assert 'data-rename="RTT app"' in page and 'data-name="RTT app"' in page
+    # Excephalon is not a project section, so it neither drags nor renames.
+    assert 'data-rename="Excephalon"' not in page
+    # The + is a button that posts to /project/new; the old name input is gone.
+    assert 'action="/project/new"' in page and 'id="add-project"' in page
+    assert 'name="name"' not in page and 'placeholder="New project' not in page
+    # projects.js drives the rail (rename, reorder, edit-on-new).
+    assert 'src="/static/projects.js"' in page
+
+
+def test_projects_js_wires_rename_reorder_and_edit_on_new():
+    js = _client().get("/static/projects.js").get_data(as_text=True)
+    assert "/project/rename" in js and "/project/reorder" in js
+    assert "dragstart" in js and "editing" in js  # drag to reorder; focus the freshly-made card

@@ -11,16 +11,28 @@
     is the same in-place checklist the roadmap always was; the contents rail is the one Config and
     Agents carry. -#}
 <aside id="toc" aria-label="Projects">
-  {%- for section in sections %}
-  <button type="button" data-goes="card-{{ section.title | lower | replace(' ', '-') }}">{{ section.title }}</button>
+  {#- Excephalon leads and stays put: it is the Enhancements roadmap, not a "## Project:" section,
+      so it neither renames nor drags. Only a click, to bring its card into view. -#}
+  {%- for section in sections if not section.movable %}
+  <button type="button" class="rail-fixed" data-goes="card-{{ section.title | lower | replace(' ', '-') }}">{{ section.title }}</button>
   {%- endfor %}
-  {#- A project starts with a name and an empty list to fill. This posts the name, the server adds
-      a "## Project: <name>" section, and the page comes back with its card - so his project NAMES
-      live in his profile, never in the source. -#}
+  {#- His projects: each name renames in place (double-click, like an agent's), and each row drags
+      to reorder the cards - the sequence here is the sequence the tab draws them in. -#}
+  <ol id="project-rail">
+    {%- for section in sections if section.movable %}
+    <li class="rail-item" draggable="true" data-name="{{ section.title }}">
+      <span class="grip" aria-hidden="true" title="Drag to reorder">⠿</span>
+      <span class="rail-name" data-goes="card-{{ section.title | lower | replace(' ', '-') }}"
+            data-rename="{{ section.title }}"
+            title="{{ section.title }} — double-click to rename, drag to reorder">{{ section.title }}</span>
+    </li>
+    {%- endfor %}
+  </ol>
+  {#- The + starts a new card already in edit mode - no name field to fill. The server makes a
+      placeholder project and lands back here with its name focused for typing over, so his project
+      NAMES live in his profile, never in the source. -#}
   <form class="new-project" method="post" action="/project/new">
-    <input type="text" name="name" placeholder="New project…" aria-label="New project name"
-           maxlength="60" required>
-    <button type="submit" class="btn" title="Add a project">+</button>
+    <button type="submit" class="btn" id="add-project" title="Add a project">+ New project</button>
   </form>
 </aside>
 
@@ -33,5 +45,8 @@
 {% endblock %}
 
 {% block scripts %}
+  {#- writing.js edits the checklist inside each card; projects.js drives the rail - rename, drag to
+      reorder, and focusing a freshly-added card so it opens in edit mode. -#}
   <script src="{{ url_for('static', filename='writing.js') }}"></script>
+  <script src="{{ url_for('static', filename='projects.js') }}"></script>
 {% endblock %}
