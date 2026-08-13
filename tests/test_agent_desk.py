@@ -1031,6 +1031,37 @@ def test_presented_work_shows_in_the_digest_awaiting_a_verdict():
     desk.close()
 
 
+def test_the_digest_says_when_presented_work_has_not_actually_reached_them_yet():
+    # mark_ready fires when the announcement is COMPOSED; the announcement itself can then wait
+    # in the queue for an hour. Briefed "presented, awaiting their verdict" across that gap, the
+    # brain told him "I presented it earlier... no new update since then" about a walkthrough he
+    # had never heard ("That's false. You never presented it to me."). While the outbox still
+    # owes news about the agent, the briefing says the work has NOT been seen.
+    desk, outbox, made = _desk()
+    desk.start("fixer", "/wt/fixer", "a task")
+    assert _wait_for(lambda: bool(outbox))  # its report is queued - and stays queued, unheard
+
+    desk.present("fixer", "Open localhost:5300 and click Export.")
+
+    briefing = desk.digest()
+    assert "presented, awaiting their verdict" not in briefing
+    assert "has NOT reached them yet" in briefing
+    desk.close()
+
+
+def test_drop_news_forgets_held_news_about_one_agent_and_only_that_agent():
+    # The user's new words to an agent supersede whatever it was waiting to say - but a foreman
+    # prod must never eat news owed to the user, so the drop is its own gesture, not part of send.
+    desk, outbox, _ = _desk()
+    outbox.push("fixer: done", about="fixer")
+    outbox.push("other: needs a decision", about="other")
+
+    desk.drop_news("fixer")
+
+    assert [str(news) for news in outbox.drain()] == ["other: needs a decision"]
+    desk.close()
+
+
 def test_work_cannot_be_presented_while_the_agent_is_still_working():
     # The steps come from the agent's report; marking mid-turn would present a thing that does
     # not exist yet.
@@ -1116,8 +1147,12 @@ def test_the_delivery_stage_survives_into_the_state_file_and_back(tmp_path):
     assert entry["delivery"] == "ready"
     assert entry["steps"] == "Open localhost:5300."
 
-    reborn, _, _ = _desk(state=state)
+    reborn, reborn_outbox, _ = _desk(state=state)
     reborn.revive()
+    # The revival reminder it just queued is still unspoken, so the briefing says the work has
+    # not reached them; the moment that goes out, the plain presented line returns.
+    assert "has NOT reached them yet" in reborn.digest()
+    reborn_outbox.drain()
     assert "presented, awaiting their verdict" in reborn.digest()
     assert reborn.delivery_stage("fixer") == "ready"
     reborn.close()

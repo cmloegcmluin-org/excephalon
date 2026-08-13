@@ -247,7 +247,10 @@ that bought nothing he could see. Do not put a model back here without solving t
 the echo both; mishearings of his own terms are the transcriber's vocabulary pass's job. `errands.py` is the quiet errand hand: small chores - move a file, tidy a folder, check one of his own services - run in one helper session, no agent tab, its outcome narrated like any other news. runtime/services.json (standard mcpServers shape, personal, gitignored) is that session's reach - Asana as a hosted MCP server OAuthed once through /mcp in an interactive `claude`; Gmail and Calendar through `google_bridge.py`, a stdio MCP SERVER over Google's CLASSIC APIs that owns its OAuth (client and tokens under runtime/google/, machine-copyable, connected once via `Connect Google.command` on the registered port 8765). It began as a forwarder to Google's hosted MCP servers and every layer was made to work except the last: with a verified-perfect sign-in - web client, their guides' exact five scopes, all four APIs enabled - every hosted tools/call still answered "The caller does not have permission", while the classic endpoints answered the same token flawlessly. Do not point anything back at the hosted servers (or the CLI's type:http transport, which also throws on their valid replies) without watching a real tools/call succeed. Errand sessions run --strict-mcp-config, because account-level claude.ai connectors attach to any session and a headless one that tries to OAuth them wedges (anthropics/claude-code#36060). The brain hears what is connected (services_note) so 'check my calendar' becomes run_errand instead of 'I can't see your calendar', and both a connected list and an unreadable file are announced at startup, because a config applied unseen - or silently not applied - reads as a broken app. `foreman.py` is the senior layer between the talker and the workers: engaged only through the
 brain's ask_foreman tool, one persistent Opus-high session that reads a stuck agent's task,
 situation and log tail, settles technical snags itself through its one tell_agent tool (answering
-"handled", which is swallowed), and escalates to the user only what is genuinely theirs — its
+"handled", which is swallowed — and a reply that merely ENDS on the swallow-word is swallowed
+whole, because everything before it is the foreman's working notes: one such analysis was queued
+as the agent's "update" and sat in the roll call as a jargon bomb), and escalates to the user only
+what is genuinely theirs — its
 escalations go out app-authored so the unwritten-lines ledger keeps the fast brain aware of them.
 `dictation.py` is the window's mic: a *state*, not a walkie-talkie — continuous
 transcription into an editable draft, `hey excephalon` / `stop listening` to arm and disarm, `scratch
@@ -361,7 +364,12 @@ mid-task told to pick back up, one recorded mid-landing told to settle the merge
 in the foreground (a backgrounded watch once ended the turn, nothing re-engages an idle agent, and
 the merged report never existed) — its digest also names tabs whose log files linger with no agent
 behind them, because the window draws a tab per log file and a brain briefed from the desk alone
-once could not see the tab the user was pointing at; and `retire()` wraps a finished agent up whole: its log moved to
+once could not see the tab the user was pointing at, and it claims "presented, awaiting their
+verdict" only once nothing about that agent is still waiting to be spoken (`Outbox.owed_about`,
+the spool's view of the whole debt): `mark_ready` fires when the walkthrough is COMPOSED, that
+walkthrough then sat in hand for over an hour, and the brain briefed across the gap told him "I
+presented it earlier... no new update since then" about steps he had never heard ("That's false.
+You never presented it to me."); and `retire()` wraps a finished agent up whole: its log moved to
 the fleet's one archive (`runtime/agent-logs-archive/`, a SIBLING of the live folder so an archived
 log is outside what the roster globs and can never come back as a tab — `tailing.archive_dir` names
 it in one place, shared with the window's own close button), the Enhancements item it was completing
@@ -393,14 +401,26 @@ insane."); the list decides ORDER, not whether. Word for word, because folded in
 turn the content twice went missing - a "Yes" answered with "Go check it out then" - while
 the news was marked delivered either way, so what the agent reported reached him not at
 all ("that's not an update"). Anything more than a bare
-go-ahead is still a turn of his, and the update rides into that reply as before. Every piece of
+go-ahead is still a turn of his, and the update rides into that reply as before. An agent HOLDS
+its number for as long as it stays on the list: fresh news takes that agent's earliest place,
+never its own arrival place (`_newest_per_agent`), because a refresh that moved an agent to the
+end had the same three names read back re-numbered seconds apart ("Why did you give me two
+occurrences of three updates waiting, but order them differently? Now I don't know what to tell
+you."). Every piece of
 news is written to the durable record as it arrives (`console.evidence`), since news that is never
 spoken otherwise leaves no trace at all once its spool entry is gone - which is what made the
 last diagnosis blind. When an agent's newer news replaces its older,
 the old one is dropped from the SPOOL as well as from the queue (`Outbox.superseded`) - collapsing
 the queue in memory alone left yesterday's sentence in the file, and the next process read it out
 as news: he was told work was "ready for your eyes" thirteen seconds after giving his notes on
-that very work, "out of nowhere", with nothing in it he did not already know. `narrator.py` is how any agent event becomes
+that very work, "out of nowhere", with nothing in it he did not already know. Held news dies the
+same way when HE moves past it: telling an agent something (`tell_agent`, through
+`desk.drop_news`) drops whatever that agent was still waiting to say, because an update composed
+before his latest instructions was offered back to him as fresh ("surely there's no update for
+smart grouping. You just sent off the latest message to it."). And a drop has to reach all THREE
+places news waits - the queue, the spool, and the conversation's drained-in-hand list - so the
+outbox notes every drop and the conversation collects the notes (`take_dropped`) and prunes its
+own hand: a drop that cleaned the queue alone left the stale copy in hand, still being offered. `narrator.py` is how any agent event becomes
 speech: the desk, the inbox watcher and the quiet monitor emit typed events into it, the brain
 words each one as its own sentence - carrying the same conduct a reply carries (a narration is a
 line he HEARS, and the standing conduct reached only replies, which is how "the desk" got to him),

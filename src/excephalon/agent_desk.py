@@ -363,7 +363,7 @@ class AgentDesk:
         fleet record says, and an update about closed work arrives as a surprise. The record can
         be empty while the spool still holds four reports, which is how a wrap-up he had twice
         called finished came back a third time, jargon and all, three seconds after a launch."""
-        held = getattr(self._outbox, "waiting_about", None)
+        held = getattr(self._outbox, "owed_about", None)
         drop = getattr(self._outbox, "drop", None)
         if held is None or drop is None or self._log_dir is None:
             return
@@ -398,6 +398,15 @@ class AgentDesk:
                 return False
         self._dispatch(name, message)
         return True
+
+    def drop_news(self, name):
+        """Forget the held news about one agent - for when the user has moved past it (their new
+        words to the agent supersede whatever it was waiting to say). NOT part of `send`, because
+        the foreman also sends: a technical prod settles a snag, not the user's business, and must
+        never eat news still owed to them."""
+        drop = getattr(self._outbox, "drop", None)
+        if drop is not None:
+            drop(name)
 
     def roster(self):
         """(name, state, task) for each agent, newest state - what the roster file is written from."""
@@ -463,13 +472,23 @@ class AgentDesk:
 
         "How's it going?" used to send the brain off to read the roster file with its own tools -
         half a minute of dead air for state this process already held in memory. The digest is
-        that state as text, so a status question is answerable in the breath it was asked."""
+        that state as text, so a status question is answerable in the breath it was asked.
+
+        "Presented" is claimed only once the user could actually have seen it: mark_ready fires
+        when the announcement is COMPOSED, and the announcement can then wait in the queue for an
+        hour - briefed "awaiting their verdict" across that gap, the brain told him "I presented
+        it earlier... no new update since then" about a walkthrough he had never heard ("That's
+        false. You never presented it to me."). So while the outbox still owes news about a
+        presented agent, the briefing says the work has NOT reached them."""
+        held = getattr(self._outbox, "owed_about", None)
+        owed = held() if held is not None else set()
         with self._lock:
             lines = [
                 f"{name}: {entry.state}"
                 + (f", last heard {entry.last_heard}" if entry.last_heard else "")
                 + f" - task: {_one_line(entry.task)}"
-                + (f" - {entry.delivery.describe()}" if entry.delivery.describe() else "")
+                + (f" - {self._delivery_truth(name, entry, owed)}"
+                   if self._delivery_truth(name, entry, owed) else "")
                 + (f" - last said: {_one_line(entry.last_word)}" if entry.last_word else "")
                 for name, entry in self._desked.items()
             ]
@@ -479,6 +498,16 @@ class AgentDesk:
             fleet += ("\nTabs still open from agents no longer at the desk - close_agent_tab "
                       "closes one: " + ", ".join(orphans))
         return fleet
+
+    @staticmethod
+    def _delivery_truth(name, entry, owed):
+        """The delivery stage as the user has actually experienced it: presented-and-awaiting only
+        holds once nothing about the agent is still waiting to be spoken."""
+        described = entry.delivery.describe()
+        if described and entry.delivery.stage == "ready" and name in owed:
+            return ("finished and ready to show, but the announcement has NOT reached them yet - "
+                    "it is still waiting to be spoken, so they have not seen this work")
+        return described
 
     def _orphan_tabs(self):
         """Log files still in the live folder with no agent behind them: tabs the user can see

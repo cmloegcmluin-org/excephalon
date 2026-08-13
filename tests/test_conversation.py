@@ -529,6 +529,72 @@ def test_once_the_list_is_worked_through_the_next_single_notice_is_simply_spoken
     assert "drive-export: green and pushed" in tts.spoken  # straight out, with nothing to choose
 
 
+def test_fresh_news_from_a_listed_agent_keeps_its_place_so_the_numbers_he_heard_stay_true():
+    # "Why did you give me two occurrences of three updates waiting, but order them differently?
+    # Now I don't know what to tell you." Superseding used to leave the newest item at its ARRIVAL
+    # position, so a refresh moved that agent to the end and the re-read came out re-numbered.
+    # The refresh keeps the agent's place: the re-read says the same names at the same numbers,
+    # and picking one yields that agent's NEWEST sentence.
+    outbox = Outbox()
+    outbox.push("fixer: the drive link is fixed", about="fixer")
+    outbox.push("docs-sidebar: needs your call on the width", about="docs-sidebar")
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["what time is it", "one", "goodbye entity"]), FakeBrain(), tts,
+                         outbox=outbox)
+
+    convo.turn()  # a roll call of two, then a question that names none of them
+    outbox.push("fixer: green now, and pushed", about="fixer")
+    convo.turn()  # fresh news: the list is re-read, every agent still at its old number
+    convo.turn()  # so "one" still means fixer - and yields its newest sentence
+
+    spoken = "\n".join(tts.spoken)
+    assert len([line for line in tts.spoken
+                if line == "Two updates waiting. One, fixer. Two, docs-sidebar. Which first?"]) == 2
+    assert "fixer: green now, and pushed" in spoken
+    assert "fixer: the drive link is fixed" not in spoken
+
+
+def test_a_refreshed_agent_keeps_its_number_even_as_the_list_grows():
+    # The same failure with a new arrival in the mix: the re-read is right (the list truly
+    # changed), but the refreshed agent must hold its old place in it, so the numbers he already
+    # heard stay true.
+    outbox = Outbox()
+    outbox.push("fixer: the drive link is fixed", about="fixer")
+    outbox.push("docs-sidebar: needs your call on the width", about="docs-sidebar")
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["what time is it", "goodbye entity"]), FakeBrain(), tts,
+                         outbox=outbox)
+
+    convo.turn()  # a roll call of two
+    outbox.push("fixer: green now, and pushed", about="fixer")
+    outbox.push("drive-export: green and pushed", about="drive-export")
+    convo.turn()
+
+    assert ("Three updates waiting. One, fixer. Two, docs-sidebar. Three, drive-export. Which first?"
+            in tts.spoken)
+
+
+def test_news_already_in_hand_is_pruned_when_its_agent_is_dropped():
+    # A drop cleans the queue and the spool, but drained news waits in the conversation's hand -
+    # and that copy was still offered after the user had sent the agent new instructions: "surely
+    # there's no update for smart grouping. You just sent off the latest message to it." The hand
+    # prunes itself with what the outbox collected.
+    outbox = Outbox()
+    outbox.push("grouping: done", about="grouping")
+    outbox.push("fixer: ready for your eyes", about="fixer")
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["what time is it", "goodbye entity"]), FakeBrain(), tts,
+                         outbox=outbox)
+
+    convo.turn()  # a roll call of two; both now held in hand
+    outbox.drop("grouping")  # the user just engaged that agent; its held news is stale
+    convo.turn()
+
+    spoken = "\n".join(tts.spoken)
+    assert "Still waiting: fixer." in spoken  # the list shrank to the one still owed
+    assert "grouping: done" not in spoken
+
+
 def test_an_agent_finishing_while_they_are_choosing_joins_the_list_and_is_said():
     # Otherwise it sits silent behind a list that was read out before it existed, and the only
     # sign of it is a tab they had no reason to open.

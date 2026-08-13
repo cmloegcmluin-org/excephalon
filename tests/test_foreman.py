@@ -84,6 +84,22 @@ def test_handled_means_the_user_never_hears_of_it():
     assert not _wait_for(lambda: bool(outbox), timeout=0.3)
 
 
+def test_a_reply_that_ends_on_the_swallow_word_is_working_notes_and_never_news():
+    # The contract is "settle it, then reply with the single word: handled" - and one settling
+    # came back as three sentences of the foreman's own analysis with "handled" at the end. The
+    # paragraphs before the swallow-word are its working notes, never user-addressed: queued
+    # anyway, they sat as the agent's "update" in the roll call and were a jargon bomb waiting
+    # for him to pick that number.
+    foreman, outbox, session, _ = _foreman(
+        "The named agent isn't at the desk - there's no process to prod. Nothing here needs "
+        "the user.\n\nhandled")
+
+    foreman.consider("fixer", "The monitor says it has gone quiet.")
+
+    assert _settled(session)
+    assert not _wait_for(lambda: bool(outbox), timeout=0.3)
+
+
 def test_what_genuinely_needs_the_user_reaches_the_outbox_in_entitys_voice():
     foreman, outbox, session, _ = _foreman(
         "The fixer agent needs your Asana credentials to finish - nothing moves until then.")

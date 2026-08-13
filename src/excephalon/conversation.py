@@ -216,17 +216,29 @@ def _newest_per_agent(waiting):
     already says where things stand; the ones they never heard are history. News with no agent
     on it (about=None) is never collapsed - those are not updates on one thing.
 
+    The newest sentence takes the agent's EARLIEST place in the list, not its own arrival place.
+    Kept where it arrived, a refresh moved that agent to the end and the numbered list came out
+    reordered seconds after it was read - "Why did you give me two occurrences of three updates
+    waiting, but order them differently? Now I don't know what to tell you." An agent holds its
+    number for as long as it stays on the list.
+
     What is superseded comes back to the caller because dropping it here is only half the job:
     its durable copy has to go too, or the next restart reads yesterday's sentence out as news."""
-    keep, gone = [], []
-    for place, item in enumerate(waiting):
+    newest = {}
+    for item in waiting:
         about = getattr(item, "about", None)
-        if about is not None and any(
-            getattr(newer, "about", None) == about for newer in waiting[place + 1:]
-        ):
-            gone.append(item)
-            continue
-        keep.append(item)
+        if about is not None:
+            newest[about] = item
+    keep, placed = [], set()
+    for item in waiting:
+        about = getattr(item, "about", None)
+        if about is None:
+            keep.append(item)
+        elif about not in placed:
+            placed.add(about)
+            keep.append(newest[about])
+    gone = [item for item in waiting
+            if (about := getattr(item, "about", None)) is not None and item is not newest[about]]
     return keep, gone
 
 
@@ -437,6 +449,17 @@ class Conversation:
         """
         if self._outbox is None:
             return
+        # A drop (the agent was retired, or the user just engaged it with new words) cleans the
+        # queue and the spool, but not the news already drained into this hand - that copy was
+        # still offered after he had sent the agent fresh instructions ("surely there's no update
+        # for smart grouping. You just sent off the latest message to it."). Pruned BEFORE the
+        # drain, so news arriving after a drop is never mistaken for what the drop meant.
+        collect = getattr(self._outbox, "take_dropped", None)
+        dropped = collect() if collect is not None else ()
+        for stale in [held for held in self._waiting
+                      if getattr(held, "about", None) in dropped]:
+            self._waiting.remove(stale)
+            self._console.evidence(f"(dropped as stale for {stale.about}: {stale})")
         # ALWAYS drain, even when it can't be said yet. The queue's "something is waiting" flag is
         # what makes the window's mic yield an empty turn, and it is only cleared by draining - so
         # returning early with it still set spun the loop forever and swallowed every submission they
@@ -472,7 +495,9 @@ class Conversation:
             # the NEWS, not the count. Measured by count, an agent's fresh report replacing its own
             # older one left the tally at two and was never spoken: the presented work he was
             # waiting on sat silent for the rest of that session, and he closed the app still owed
-            # it ("I never heard back again").
+            # it ("I never heard back again"). The re-read comes out with every agent still at the
+            # number he first heard for it (see `_newest_per_agent`), so answering an older read-out
+            # by number still names the agent he means.
             if self._announced != self._roll():
                 self._announce()
             return
