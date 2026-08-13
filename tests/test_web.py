@@ -111,7 +111,7 @@ def test_the_bar_reaches_every_page_and_carries_the_restart_button(tmp_path):
     profile.write_text("## Goals\n- swim\n\n## Projects\n- entity\n", encoding="utf-8")
     client = _client(profile_path=profile)
 
-    pages = ("/", "/config", "/agents")
+    pages = ("/", "/config", "/projects", "/agents")
     for path in pages:
         page = client.get(path).get_data(as_text=True)
         for other in pages:
@@ -174,16 +174,16 @@ def test_the_copy_buttons_sit_above_the_full_width_break_rows():
     assert zindex >= 1
 
 
-def test_the_profile_page_shows_its_sections_and_saves_one_back(tmp_path):
+def test_the_config_page_shows_its_sections_and_saves_one_back(tmp_path):
     profile = tmp_path / "profile.md"
-    profile.write_text("## Enhancements they want for you (roadmap, not now)\n- better voice\n\n"
-                       "## Projects (long-term)\n- swim\n", encoding="utf-8")
+    profile.write_text("## Projects (long-term)\n- swim\n\n"
+                       "## Life context\n- new to the city\n", encoding="utf-8")
     client = _client(profile_path=profile)
 
     page = client.get("/config").get_data(as_text=True)
-    assert "better voice" in page and "swim" in page
+    assert "swim" in page and "new to the city" in page
     # Matched by prefix, since a profile glosses its own headings however it likes.
-    assert 'data-heading="Enhancements they want for you (roadmap, not now)"' in page
+    assert 'data-heading="Projects (long-term)"' in page
 
     # The save resolves the stem the same way the read does: written back exactly, "Projects"
     # forked a rival "## Projects" section at the bottom of the live profile while the card
@@ -195,17 +195,19 @@ def test_the_profile_page_shows_its_sections_and_saves_one_back(tmp_path):
     # A bullet written before the boxes existed comes back as an unticked one, so the list
     # upgrades itself the first time they touch it rather than needing a migration run.
     assert "- [ ] swim, three times a week" in saved
-    assert "- better voice" in saved  # the section beside it is untouched
+    assert "- new to the city" in saved  # the section beside it is untouched
     assert saved.count("## Projects") == 1  # into the glossed section, never a rival one
 
 
-def test_the_enhancements_list_is_a_checklist_that_ticks_rather_than_deletes(tmp_path):
+def test_the_excephalon_list_is_a_checklist_that_ticks_rather_than_deletes(tmp_path):
+    # The Excephalon card on the Projects tab is the Enhancements roadmap - the same checklist it
+    # always was, just shown as Excephalon's own project (#128).
     profile = tmp_path / "profile.md"
     profile.write_text("## Enhancements they want for you (roadmap, not now)\n"
                        "- [x] hear only their voice\n- live captions\nplain line\n", encoding="utf-8")
     client = _client(profile_path=profile)
 
-    page = client.get("/config").get_data(as_text=True)
+    page = client.get("/projects").get_data(as_text=True)
     # A box to click, not `- [x]` spelled out for the reader to decode - and any line with words
     # on it is an item, since they are typed in plain.
     assert page.count("<input type=\"checkbox\"") == 3
@@ -226,7 +228,7 @@ def test_the_enhancements_list_is_a_checklist_that_ticks_rather_than_deletes(tmp
     assert "- [ ] #3 plain line" in saved      # and a plain line joined the list it was meant to
 
 
-def test_the_enhancements_page_shows_each_items_id(tmp_path):
+def test_the_excephalon_card_shows_each_items_id(tmp_path):
     # "Add IDs to all of the enhancements so I can refer to them by ID." The number is drawn beside
     # the item and carried on the row, so a save sends it back and the same item keeps the same id.
     profile = tmp_path / "profile.md"
@@ -234,7 +236,7 @@ def test_the_enhancements_page_shows_each_items_id(tmp_path):
                        "- [ ] #4 better voice\n- [x] #2 older idea\n", encoding="utf-8")
     client = _client(profile_path=profile)
 
-    page = client.get("/config").get_data(as_text=True)
+    page = client.get("/projects").get_data(as_text=True)
     assert 'data-id="4"' in page and "#4" in page
     assert 'data-id="2"' in page and "#2" in page
 
@@ -267,9 +269,9 @@ def test_completed_items_sit_in_a_collapsible_done_section_at_the_bottom(tmp_pat
     import re
 
     profile = tmp_path / "profile.md"
-    profile.write_text("## Enhancements they want (roadmap, not now)\n"
-                       "- [ ] #1 still to do\n- [x] #2 finished one\n- [x] #3 also done\n\n"
-                       "## Goals\n- [ ] run\n", encoding="utf-8")
+    profile.write_text("## Projects (long-term)\n"
+                       "- [ ] #1 still to do\n- [x] #2 finished one\n- [x] #3 also done\n",
+                       encoding="utf-8")
     client = _client(profile_path=profile)
 
     page = client.get("/config").get_data(as_text=True)
@@ -401,19 +403,20 @@ def test_every_section_of_the_profile_draws_boxes_not_raw_markdown(tmp_path):
     # "consistent styling of all the tabs (all checkboxes, same font)". Enhancements was the only
     # one with boxes; the other three showed them the markdown and left them to decode it.
     profile = tmp_path / "profile.md"
-    profile.write_text("## Enhancements\n- better voice\n\n## Life context\n- new to the city\n\n"
-                       "## Projects\n- entity\n", encoding="utf-8")
+    profile.write_text("## Projects (long-term)\n- better voice\n- entity\n\n"
+                       "## Life context\n- new to the city\n", encoding="utf-8")
     client = _client(profile_path=profile)
 
     page = client.get("/config").get_data(as_text=True)
 
-    # Enhancements and Projects keep boxes (the Goals card retired into Projects, his call);
-    # Life context and Memory are bullets now - background, not work.
+    # A checklist section (Projects) keeps boxes; Life context and Memory are bullets now -
+    # background, not work.
     assert page.count('<input type="checkbox"') == 2
 
     # And a tick in any of them still writes markdown back, which is what the brain reads.
-    client.post("/profile", json={"heading": "Projects", "drawn": ["entity"],
-                                  "items": [{"done": True, "text": "entity"}]})
+    client.post("/profile", json={"heading": "Projects", "drawn": ["better voice", "entity"],
+                                  "items": [{"done": False, "text": "better voice"},
+                                            {"done": True, "text": "entity"}]})
 
     assert "- [x] entity" in profile.read_text(encoding="utf-8")
 
@@ -423,12 +426,12 @@ def test_an_item_is_words_he_can_type_into_and_there_is_no_edit_as_text(tmp_path
     # raw markdown was the only way to add one, and it lost what they typed - so the items
     # themselves are what they type into, and a new one is made by pressing Enter in the list.
     profile = tmp_path / "profile.md"
-    profile.write_text("## Enhancements\n- better voice\n\n## Projects\n- entity\n", encoding="utf-8")
+    profile.write_text("## Projects (long-term)\n- better voice\n- entity\n", encoding="utf-8")
 
     page = _client(profile_path=profile).get("/config").get_data(as_text=True)
 
-    # The words of an item are the item - one editable span per row (Enhancements and Projects
-    # here, plus the Memory and Instructions cards' empty rows), no raw-markdown box.
+    # The words of an item are the item - one editable span per row (the two Projects items here,
+    # plus the Memory and Instructions cards' empty rows), no raw-markdown box.
     assert page.count('class="item" contenteditable="plaintext-only"') == 4
     assert "Edit as text" not in page
 
@@ -650,7 +653,7 @@ def test_a_filed_enhancement_shows_its_stamp_as_a_link_not_as_text_he_edits(tmp_
     profile.write_text("## Enhancements\n- [ ] #3 warn about credits (filed 2026-07-28 02:23)\n",
                        encoding="utf-8")
 
-    page = _client(profile_path=profile).get("/config").get_data(as_text=True)
+    page = _client(profile_path=profile).get("/projects").get_data(as_text=True)
 
     # The editable words no longer carry the stamp...
     assert ">warn about credits</span>" in page
@@ -1124,3 +1127,102 @@ def test_an_agent_cards_title_is_bigger_and_stands_off_its_exchange():
 
     heading = _rule_for(css, "body.agents .section h2")
     assert "font-size: 1rem" in heading and "margin-bottom: 14px" in heading
+
+
+def test_saving_a_project_card_numbers_its_rows_the_way_the_excephalon_list_does(tmp_path):
+    # A project card is the same checklist the Excephalon list is, so it carries stable ids he can
+    # refer one of its items to by number - a new row it gains is handed the next number on save.
+    profile = tmp_path / "profile.md"
+    profile.write_text("## Project: RTT app\n- [ ] #1 tuning table\n", encoding="utf-8")
+    client = _client(profile_path=profile)
+
+    client.post("/profile", json={
+        "heading": "Project: RTT app",
+        "drawn": ["tuning table"],
+        "items": [{"id": 1, "done": False, "text": "tuning table"},
+                  {"id": None, "done": False, "text": "keyboard mapping"}]})
+
+    saved = profile.read_text(encoding="utf-8")
+    assert "- [ ] #1 tuning table" in saved
+    assert "- [ ] #2 keyboard mapping" in saved  # the next number, like the Excephalon list
+
+
+def test_the_projects_page_shows_a_card_per_project_named_without_its_tag(tmp_path):
+    # #128: "the Projects section should become its own tab, with a card for each project (RTT app,
+    # Highdeas, etc.)". Each "## Project: <name>" section is a card, titled by the name alone - the
+    # "Project: " tag is the app's bookkeeping and never reaches his eyes.
+    profile = tmp_path / "profile.md"
+    profile.write_text("## Project: RTT app\n- [ ] #1 tuning table\n\n"
+                       "## Project: Highdeas\n- [ ] #1 group merge\n", encoding="utf-8")
+    client = _client(profile_path=profile)
+
+    page = client.get("/projects").get_data(as_text=True)
+    assert ">RTT app" in page and ">Highdeas" in page
+    assert ">Project:" not in page  # the tag never shows as visible text, only the name does
+    assert "tuning table" in page and "group merge" in page
+    # Each card is the same in-place checklist the Excephalon list is, saved back by its heading.
+    assert 'data-heading="Project: RTT app"' in page
+
+
+def test_the_projects_page_carries_excephalon_as_the_enhancements_list(tmp_path):
+    # "...and this Enhancements section just becomes the Project card for Excephalon itself." The
+    # roadmap for the companion is Excephalon's own project card - drawn from the Enhancements
+    # section, so the brain still files and ticks it exactly where it always did.
+    profile = tmp_path / "profile.md"
+    profile.write_text("## Enhancements he wants for you (roadmap, not now)\n"
+                       "- [ ] #2 better voice\n", encoding="utf-8")
+    client = _client(profile_path=profile)
+
+    page = client.get("/projects").get_data(as_text=True)
+    assert ">Excephalon" in page
+    assert "better voice" in page and "#2" in page
+    assert 'data-heading="Enhancements he wants for you (roadmap, not now)"' in page
+
+
+def test_config_no_longer_carries_the_enhancements_card_now_that_projects_holds_it(tmp_path):
+    # #128 moves the Enhancements roadmap out of Config and onto the Projects tab as the Excephalon
+    # card. Config keeps his life-context and the rest; the roadmap is a project now.
+    profile = tmp_path / "profile.md"
+    profile.write_text("## Enhancements he wants for you (roadmap, not now)\n- [ ] #2 better voice\n\n"
+                       "## Life context\n- lives in SF\n", encoding="utf-8")
+    client = _client(profile_path=profile)
+
+    config = client.get("/config").get_data(as_text=True)
+    assert "better voice" not in config  # the roadmap is not here any more
+    assert "lives in SF" in config       # but the rest of Config is untouched
+
+    projects = client.get("/projects").get_data(as_text=True)
+    assert "better voice" in projects and ">Excephalon" in projects
+
+
+def test_new_project_adds_a_tagged_section_and_lands_back_on_the_tab(tmp_path):
+    # The + button names a project; the server adds it and the page comes back with its empty card
+    # to fill. His project NAMES go only into his profile, never the source.
+    profile = tmp_path / "profile.md"
+    profile.write_text("## Life context\n- lives in SF\n", encoding="utf-8")
+    client = _client(profile_path=profile)
+
+    answer = client.post("/project/new", data={"name": "Highdeas"})
+    assert answer.status_code == 302 and answer.headers["Location"].endswith("/projects")
+    assert "## Project: Highdeas" in profile.read_text(encoding="utf-8")
+
+    page = client.get("/projects").get_data(as_text=True)
+    assert ">Highdeas" in page and 'data-heading="Project: Highdeas"' in page
+
+
+def test_new_project_ignores_a_blank_name(tmp_path):
+    profile = tmp_path / "profile.md"
+    profile.write_text("## Life context\n- lives in SF\n", encoding="utf-8")
+    client = _client(profile_path=profile)
+
+    client.post("/project/new", data={"name": "   "})
+    assert "## Project:" not in profile.read_text(encoding="utf-8")
+
+
+def test_the_projects_content_clears_the_fixed_rail():
+    # The rail is position:fixed, so the cards need a left margin or they slide under it - the same
+    # offset Config uses. Without it the first project card sits beneath the contents column.
+    css = _client().get("/static/app.css").get_data(as_text=True)
+
+    content = _rule_for(css, "body.config #content, body.projects #content")
+    assert "margin-left: 180px" in content

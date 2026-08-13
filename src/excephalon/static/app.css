@@ -431,11 +431,12 @@ h2 .counts { font-size: .72rem; color: var(--dim); font-weight: normal; margin-l
 .checklist .dot { flex: none; width: 15px; text-align: center; color: var(--dim);
                   user-select: none; }
 
-/* ---- the config page's contents column ----------------------------------------------------- */
+/* ---- the contents column shared by the Config and Projects pages --------------------------- */
 
 /* The cards run long, so a rail beside them makes each one one click away - the same shape as
-   the conversation's contents. Fixed, because the page itself is what scrolls. */
-body.config #content { margin-left: 180px; }
+   the conversation's contents. Fixed, because the page itself is what scrolls; so the cards keep a
+   left margin the width of the rail, or they slide under it. Config and Projects share it. */
+body.config #content, body.projects #content { margin-left: 180px; }
 /* The Agents rail carries two columns - a date and a name - so it is wider there, and
    the page makes room for it. "I understand that this makes the sidebar wider. it's not
    like the sidebar has a consistent width across the Conversation, Config, and Agents
@@ -453,6 +454,14 @@ body.agents #content { margin-left: 360px; max-width: none; }
               border-left: 2px solid transparent; padding: 5px 12px; cursor: pointer; }
 #toc button:hover { color: var(--fg); background: rgba(127, 255, 0, .06); }
 #toc button[aria-current="true"] { color: var(--fg); border-left-color: var(--accent); }
+/* Naming a new project sits at the foot of the rail: a slot to type into and a + to add it. It
+   opens an empty card he then fills, so his project names reach only his profile, never the source. */
+#toc .new-project { display: flex; gap: 4px; margin: 8px 12px 2px; }
+#toc .new-project input { flex: 1 1 auto; min-width: 0; font: inherit; font-size: .78rem;
+                          color: var(--fg); background: var(--bg); border: 1px solid var(--line);
+                          border-radius: 6px; padding: 4px 6px; }
+#toc .new-project input::placeholder { color: var(--dim); }
+#toc .new-project .btn { flex: none; padding: 2px 8px; line-height: 1.2; }
 /* A card arriving under a sticky bar must stop short of it, or its heading lands hidden. */
 .section { scroll-margin-top: 58px; }
 .budget { min-height: 0; max-width: 32ch; }

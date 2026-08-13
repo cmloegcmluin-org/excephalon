@@ -10,7 +10,7 @@
 </head>
 <body class="{% block shape %}page{% endblock %}">
   <nav class="topbar">
-    {%- for path, name in [("/", "Conversation"), ("/config", "Config"), ("/agents", "Agents")] %}
+    {%- for path, name in [("/", "Conversation"), ("/config", "Config"), ("/projects", "Projects"), ("/agents", "Agents")] %}
     <a class="btn topbtn{{ ' here' if here == path }}" href="{{ path }}">{{ name }}</a>
     {%- endfor %}
     <span class="saved" id="saved" aria-live="polite"></span>
