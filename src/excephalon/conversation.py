@@ -430,7 +430,14 @@ class Conversation:
         # what makes the window's mic yield an empty turn, and it is only cleared by draining - so
         # returning early with it still set spun the loop forever and swallowed every submission they
         # made. Held news waits here instead, in hand, and goes out at the next opportunity.
-        self._waiting.extend(self._outbox.drain())
+        fresh = self._outbox.drain()
+        self._waiting.extend(fresh)
+        for arrived in fresh:
+            # Never shown or spoken - but a piece of news that goes wrong later is undiagnosable
+            # without it: "why is this happening?" could not be answered from the record, because
+            # news that is never spoken leaves no trace once its spool entry is gone.
+            self._console.evidence(f"(holding for {getattr(arrived, 'about', None) or 'no agent'}: "
+                                   f"{arrived})")
         self._waiting, superseded = _newest_per_agent(self._waiting)
         for stale in superseded:
             self._superseded(stale)  # its durable copy goes with it, or a restart revives it
@@ -475,6 +482,25 @@ class Conversation:
         spoken = getattr(self._outbox, "spoken", None)
         if spoken is not None:
             spoken(news)
+
+    def _hand_over(self, heard):
+        """A bare go-ahead answering the offer: say the held update itself, word for word.
+
+        Folded into a fresh brain turn instead, the content twice went missing - a "yes" answered
+        with "Go check it out then", and the next one with "Checking if the Projects tab changes
+        are actually live" - while the app marked the news delivered either way, so what the agent
+        had actually reported never reached him at all ("that's not an update"). His "yes" asked
+        for that content and nothing else; the content is the answer, and the app owes it rather
+        than asking the brain to remember to include it. Anything more than a bare go-ahead is
+        still a turn of his to answer, and rides into the reply as it always did."""
+        news = self._waiting.pop()
+        self._announced = ()
+        self._console.heads_up(news)
+        # Composed news is the brain's own sentence - spoken as known, so the unwritten-lines
+        # ledger never reads its own words back to it as someone else's.
+        self._say(news, record=False, known=getattr(news, "composed", False))
+        self._delivered(news)
+        return Turn(heard=heard, said=news)
 
     def _superseded(self, news):
         """Tell the outbox this news will never be spoken - newer news about the same agent has
@@ -623,15 +649,18 @@ class Conversation:
             self._paused = True
             self._speak_reply(self.suspend_reply)
             return Turn(heard=heard, said=self.suspend_reply)
+        if self._update_offered and self._waiting and canonical in _GO_AHEADS:
+            self._update_offered = False
+            if len(self._waiting) == 1:
+                return self._hand_over(heard)   # the one held update IS the answer
+            return self._release_updates(heard)  # several are held; read out the choice
         if self._update_offered and len(self._waiting) == 1:
-            # The offer's answer IS the delivery, whatever their words were: the held update rides
-            # into this turn's prompt and the brain says it once. Speaking the stored line as well
-            # - after the brain had already covered it from memory - is how he heard it all twice.
+            # They answered with words of their own, so the held update rides into this turn's
+            # prompt and the brain says it once, folded around what they asked. Speaking the stored
+            # line as well - after the brain had already covered it - is how he heard it all twice.
             self._update_offered = False
             self._announced = ()
             return self._answer(heard, offered=self._waiting.pop())
-        if self._update_offered and self._waiting and canonical in _GO_AHEADS:
-            return self._release_updates(heard)  # several are held; read out the choice
         if self._waiting:  # they may be naming one of the agents the roll call just read out
             picked = self._take_pick(heard)
             if picked is not None:

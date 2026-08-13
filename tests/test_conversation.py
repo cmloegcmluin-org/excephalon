@@ -573,6 +573,31 @@ def test_news_after_a_long_lull_is_offered_not_dumped():
     assert tts.spoken == ["I've got an update on asana-submit-fix when you're ready."]
 
 
+def test_a_bare_go_ahead_is_answered_with_the_held_update_itself():
+    # "Excephalon keeps sending me updates that aren't updates." Twice a bare "Yes" was answered
+    # by a fresh brain turn that never said what the update was - "Go check it out then", then
+    # "Checking if the Projects tab changes are actually live" - while the app marked the news
+    # delivered either way, so what the agent had reported reached him not at all. A bare
+    # go-ahead asks for that content and nothing else, so the app says the content.
+    clock = FakeClock()
+    outbox = Outbox()
+    tts = FakeTTS()
+    brain = FakeBrain()
+    convo = Conversation(FakeSTT(["", "yes", ""]), brain, tts, outbox=outbox,
+                         dormant_after=180, clock=clock)
+    clock.now = 600
+    news = "Long names ellipsize now, and the Excephalon card looks like the others."
+    outbox.push(news, about="projects-tab-refactor", composed=True)
+
+    convo.turn()          # the offer goes out
+    turn = convo.turn()   # his bare "yes"
+    convo.turn()          # and nothing is left over to say again
+
+    assert turn.said == news
+    assert tts.spoken == ["I've got an update on projects-tab-refactor when you're ready.", news]
+    assert brain.heard == []  # no turn for the brain to improvise around it and drop it
+
+
 def test_answering_the_offer_hands_the_update_to_the_brain_to_deliver_once():
     # "Yeah, let me know." was answered twice: it missed the exact go-ahead list, so the brain
     # improvised the news from memory as an ordinary turn - and the stored line then played at the
@@ -631,7 +656,7 @@ def test_a_brain_failure_on_the_offered_turn_does_not_lose_the_news():
         def respond(self, utterance):
             raise RuntimeError("session wedged")
 
-    convo = Conversation(FakeSTT(["", "okay", "goodbye entity"]), BrokenBrain(), tts,
+    convo = Conversation(FakeSTT(["", "yeah, let me know", "goodbye entity"]), BrokenBrain(), tts,
                          outbox=outbox, dormant_after=180, clock=clock)
     clock.now = 600
     outbox.push("The fix is ready to look at.", about="asana-submit-fix", composed=True)
