@@ -342,6 +342,77 @@ def project_title(heading):
     return heading[len(PROJECT_PREFIX):] if heading.startswith(PROJECT_PREFIX) else heading
 
 
+def _heading_blocks(lines):
+    """The file split into blocks: the preamble first, then one block per "## heading" (its heading
+    line and everything under it, up to the next heading). Rejoining the blocks in any order is a
+    faithful rewrite of the file - which is what lets the cards be reordered without disturbing a
+    line of anything else."""
+    blocks, current = [], []
+    for line in lines:
+        if line.startswith("## "):
+            blocks.append(current)
+            current = [line]
+        else:
+            current.append(line)
+    blocks.append(current)
+    return blocks
+
+
+def _block_heading(block):
+    return block[0][3:].strip() if block and block[0].startswith("## ") else None
+
+
+def reorder_projects(order, path=DEFAULT_PROFILE_PATH):
+    """Rewrite the project cards in a new order - the sequence the tab draws them in is the order
+    their "## Project:" sections stand in the file. Everything that is not a project keeps its place;
+    the projects are re-laid where the first of them was. A name the order forgot is never dropped:
+    it follows, in its old order, so a partial order can only move cards, never lose one."""
+    path = Path(path)
+    blocks = _heading_blocks(_read(path).splitlines())
+    projects = {_block_heading(b): b for b in blocks
+                if (_block_heading(b) or "").startswith(PROJECT_PREFIX)}
+    wanted = [PROJECT_PREFIX + str(name) for name in order]
+    new_order = ([head for head in wanted if head in projects]
+                 + [head for head in projects if head not in wanted])
+    out, placed = [], False
+    for block in blocks:
+        if (_block_heading(block) or "").startswith(PROJECT_PREFIX):
+            if not placed:
+                for head in new_order:
+                    out.extend(projects[head])
+                placed = True
+        else:
+            out.extend(block)
+    path.write_text("\n".join(out).rstrip("\n") + "\n", encoding="utf-8")
+
+
+def rename_project(old, new, path=DEFAULT_PROFILE_PATH):
+    """Rename a project's card - move its "## Project: <old>" heading to "## Project: <new>", its
+    list riding along. Returns the new heading, or None when it cannot be made: no project by that
+    old name, or the new name is already another project's (two cards must never share a heading, so
+    the caller can say so where he typed it rather than silently restoring the old name). A blank
+    new name is refused outright - a heading is one line with words on it."""
+    new = " ".join(str(new).split())
+    if not new:
+        raise ValueError("a project needs a name")
+    path = Path(path)
+    sections = profile_sections(_read(path))
+    old_heading, new_heading = PROJECT_PREFIX + old, PROJECT_PREFIX + new
+    if old_heading not in sections:
+        return None
+    if new_heading == old_heading:
+        return new_heading  # a no-op rename still succeeds
+    if new_heading in sections:
+        return None
+    lines = _read(path).splitlines()
+    for index, line in enumerate(lines):
+        if line.startswith("## ") and line[3:].strip() == old_heading:
+            lines[index] = f"## {new_heading}"
+            break
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return new_heading
+
+
 def create_project(name, path=DEFAULT_PROFILE_PATH):
     """Start a new, empty project - "## Project: <name>" - and return its heading, so a card for
     it appears with a row to type into. A name that already names a project is left exactly as it
