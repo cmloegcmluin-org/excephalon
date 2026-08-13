@@ -494,24 +494,26 @@ class Conversation:
         if spoken is not None:
             spoken(news)
 
-    def _hand_over(self, heard):
-        """A bare go-ahead answering the offer: say the held update itself, word for word.
+    def _hand_over(self, heard, place=0):
+        """Say the update at `place`, then name any others still waiting. The one delivery path.
 
         Folded into a fresh brain turn instead, the content twice went missing - a "yes" answered
         with "Go check it out then", and the next one with "Checking if the Projects tab changes
         are actually live" - while the app marked the news delivered either way, so what the agent
-        had actually reported never reached him at all ("that's not an update"). His "yes" asked
-        for that content and nothing else; the content is the answer, and the app owes it rather
-        than asking the brain to remember to include it. Anything more than a bare go-ahead is
-        still a turn of his to answer, and rides into the reply as it always did."""
-        news = self._waiting.pop()
-        self._announced = ()
-        self._console.heads_up(news)
-        # Composed news is the brain's own sentence - spoken as known, so the unwritten-lines
-        # ledger never reads its own words back to it as someone else's.
-        self._say(news, record=False, known=getattr(news, "composed", False))
+        had actually reported never reached him at all ("that's not an update"). His go-ahead asks
+        for that content; the content is the answer, and the app owes it rather than asking the
+        brain to remember to include it. Anything more than a bare go-ahead is still a turn of
+        his to answer, and rides into the reply as it always did."""
+        news = self._waiting.pop(place)
+        said = news if not self._waiting else f"{news}\n\n{roll_call(self._waiting)}"
+        self._announced = self._roll()
+        self._console.heads_up(said)
+        # Known only when the whole utterance is the brain's own sentence; with a roll call
+        # appended, part of what they hear is app-authored and the ledger must carry it.
+        self._say(said, record=False,
+                  known=getattr(news, "composed", False) and said == news)
         self._delivered(news)
-        return Turn(heard=heard, said=news)
+        return Turn(heard=heard, said=said)
 
     def _superseded(self, news):
         """Tell the outbox this news will never be spoken - newer news about the same agent has
@@ -545,16 +547,7 @@ class Conversation:
         place = chosen(heard, self._waiting)
         if place is None:
             return None
-        news = self._waiting.pop(place)
-        said = news if not self._waiting else f"{news}\n\n{roll_call(self._waiting)}"
-        self._announced = self._roll()
-        self._console.heads_up(said)
-        # Known only when the whole utterance is the brain's own sentence; with a roll call
-        # appended, part of what they hear is app-authored and the ledger must carry it.
-        self._say(said, record=False,
-                  known=getattr(news, "composed", False) and said == news)
-        self._delivered(news)
-        return Turn(heard=heard, said=said)
+        return self._hand_over(heard, place)
 
     def _dormant(self):
         return (self._dormant_after is not None
@@ -569,10 +562,16 @@ class Conversation:
         return " and ".join(names)
 
     def _release_updates(self, heard):
-        """They said the word and several are waiting: read out the numbered choice."""
+        """They said the word and several are waiting: say the first, and name what is left.
+
+        It used to answer with the numbered list and "Which first?" - a QUESTION, in reply to a
+        "yes" that was itself the answer to one, about updates it had just named to him: "I
+        already said yes to the Highdeas-submission-feedback one. Why would you ask me this? You
+        sound insane." A go-ahead is a go-ahead. The list decides ORDER, not whether; the first
+        is the one he was offered first, and naming the rest keeps the choice open without making
+        him give it twice."""
         self._update_offered = False
-        self._announce()
-        return Turn(heard=heard, said=roll_call(self._waiting))
+        return self._hand_over(heard)
 
     def _they_are_talking(self):
         """Are they part-way through saying something? While they are, Excephalon says nothing of its
