@@ -479,6 +479,20 @@ def test_naming_one_of_them_speaks_that_one_and_says_what_is_still_waiting():
     assert "the drive link is fixed" not in spoken  # the one they didn't pick keeps waiting
 
 
+def test_an_agents_older_news_is_forgotten_durably_when_newer_news_replaces_it(tmp_path):
+    # The collapse used to be in memory only, so the older sentence sat on in the spool and the
+    # next process spoke it: work announced as "ready for your eyes" moments after he reviewed it.
+    spool = tmp_path / "outbox.json"
+    outbox = Outbox(spool=spool)
+    outbox.push("The split is ready for your eyes.", about="projects-tab")
+    outbox.push("All twelve are cards now.", about="projects-tab")
+    convo = Conversation(FakeSTT(["goodbye entity"]), FakeBrain(), FakeTTS(), outbox=outbox)
+
+    convo.turn()
+
+    assert Outbox(spool=spool).drain() == []  # both are finished with; neither comes back
+
+
 def test_a_list_already_read_out_is_not_recited_every_turn():
     # It is checked before every listen. Announcing the same names each time round would be the
     # nagging that made periodic progress updates worse than silence.

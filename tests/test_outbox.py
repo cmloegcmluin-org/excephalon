@@ -1,6 +1,23 @@
 from excephalon.outbox import Outbox
 
 
+def test_superseded_news_leaves_the_spool_so_a_restart_does_not_revive_it(tmp_path):
+    # "This heads up makes no sense. It comes out of nowhere and provides no new information that
+    # I didn't already have." An agent's older sentence, collapsed away in memory the moment its
+    # newer one arrived, stayed in the spool - and the next process read it out as fresh news,
+    # thirteen seconds after he had given his notes on that very work.
+    spool = tmp_path / "outbox.json"
+    outbox = Outbox(spool=spool)
+    outbox.push("The split is ready for your eyes.", about="projects-tab")
+    outbox.push("All twelve are cards now - which names need shortening?", about="projects-tab")
+    older, newest = outbox.drain()
+
+    outbox.superseded(older)  # newer news about the same agent replaced it: nobody will hear it
+    outbox.spoken(newest)     # and the newest actually reached him
+
+    assert Outbox(spool=spool).drain() == []
+
+
 def test_pushed_messages_drain_in_order_then_the_outbox_is_empty():
     outbox = Outbox()
     outbox.push("agent 1 needs you")

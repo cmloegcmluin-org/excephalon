@@ -103,12 +103,27 @@ class Outbox:
         """The conversation reports that this news actually reached the user - only then does it
         leave the spool. News merely drained is still owed."""
         with self._lock:
-            kept = self._spooled()
-            for i, held in enumerate(kept):
-                if held["message"] == str(news):
-                    del kept[i]
-                    break
-            self._write(kept)
+            self._forget(news)
+
+    def superseded(self, news):
+        """This news will never be spoken: newer news about the same agent has replaced it.
+
+        Not "spoken" - it never reached anyone - but just as finished, and its durable copy has to
+        go with it. Collapsing only the in-memory queue left the older sentence in the spool, and a
+        restart hours later read it out as if it were new: he was told work was "ready for your
+        eyes" thirteen seconds after giving his notes on that very work, "out of nowhere", with
+        nothing in it he did not already know."""
+        with self._lock:
+            self._forget(news)
+
+    def _forget(self, news):
+        """Drop one durable copy - the caller holds the lock and decides what it means."""
+        kept = self._spooled()
+        for i, held in enumerate(kept):
+            if held["message"] == str(news):
+                del kept[i]
+                break
+        self._write(kept)
 
     def _keep(self, message, about, composed):
         kept = self._spooled()
