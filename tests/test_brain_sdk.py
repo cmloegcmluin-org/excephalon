@@ -6,6 +6,27 @@ from excephalon.memory import compose_persona
 _LIMIT = "You've hit your monthly spend limit - raise it at claude.ai/settings/usage"
 
 
+def test_a_refreshed_persona_is_what_the_next_session_starts_from():
+    # A system prompt cannot be swapped under a running conversation, so the live session keeps
+    # the one it opened with and the change rides in as a note. This is for what comes after: a
+    # compaction reseed would otherwise resurrect the world as it was when the app booted.
+    made = []
+
+    class _Session:
+        def __init__(self, options):
+            made.append(options)
+
+        def close(self):
+            pass
+
+    brain = SdkBrain(persona="the world at boot", session_factory=_Session)
+
+    brain.refresh_persona("the world as he has since edited it")
+    brain._session = brain._new_session(brain._options())  # what a reseed does
+
+    assert "the world as he has since edited it" in str(made[-1])
+
+
 def test_the_shipped_persona_is_personalised_by_the_profile_not_by_the_source():
     # An edit that drops the placeholder would leave every user addressed as "the user" - and a
     # name written in its place would be wrong for everyone but its author.

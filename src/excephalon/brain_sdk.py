@@ -237,6 +237,15 @@ class SdkBrain:
         self._session = self._new_session(
             self._seeded_options() if self._recent else self._options())
 
+    def refresh_persona(self, persona):
+        """Replace the system prompt every FUTURE session of this brain starts from.
+
+        The live session keeps the one it was opened with - a system prompt cannot be swapped
+        under a running conversation - so the caller also puts the change in front of it as a
+        note. This is for what comes after: a compaction reseed, or the session shed by a
+        deadline, both of which would otherwise resurrect the world as it was at startup."""
+        self._persona = persona
+
     def interrupt(self):
         """Cancel the ask in flight so a barge-in doesn't have to wait it out. The flag is set
         first, and it's what makes `respond` abandon the turn rather than reconnect-and-retry -

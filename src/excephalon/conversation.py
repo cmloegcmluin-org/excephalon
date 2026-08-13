@@ -63,6 +63,13 @@ UNWRITTEN_NOTICE = (
 # what lets "how's it going" be answered in the breath it was asked: the old brain went off to read
 # the roster file with its own tools - thirty seconds to fifteen minutes of dead air for state the
 # process already held.
+STANDING_NOTICE = (
+    "[System note, not from the user: their standing context has CHANGED since this conversation "
+    "started. What follows is the current text and it replaces what you were told at the start - "
+    "never answer from the older version, and never tell them you cannot see something that is "
+    "here:\n\n{standing}]\n\n"
+)
+
 BRIEFING_NOTICE = (
     "[Fleet briefing, from the app - the live state of your agents as of this turn:\n{briefing}]\n\n"
 )
@@ -278,6 +285,7 @@ class Conversation:
         outbox=None,
         interrupt=None,
         briefing=None,
+        standing=None,
     ):
         self._stt = stt
         self._brain = brain
@@ -301,6 +309,9 @@ class Conversation:
         self._last_engaged = clock()  # startup counts: they just launched it, so they are here
         self._update_offered = False  # a dormant-lull offer stands; the news waits to be taken
         self._briefing = briefing  # callable: the live fleet state, put before the brain each turn
+        # callable: his standing context, but only the parts that have CHANGED since the brain was
+        # last told - "" on a turn where nothing of his has moved.
+        self._standing = standing
         self._brain_streams = _accepts_streaming(brain)
         self._interrupt_poll = interrupt_poll
         self._cancel_wait = cancel_wait
@@ -675,6 +686,10 @@ class Conversation:
         if offered is not None:
             notes += OFFERED_NOTICE.format(
                 about=getattr(offered, "about", None) or "your agents", news=offered)
+        if self._standing is not None:
+            moved = str(self._standing()).strip()
+            if moved:
+                notes += STANDING_NOTICE.format(standing=moved)
         if self._briefing is not None:
             facts = str(self._briefing()).strip()
             if facts:

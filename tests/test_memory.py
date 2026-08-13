@@ -672,6 +672,67 @@ def test_rewriting_an_id_nobody_has_says_so(tmp_path):
     assert "#7 an item" in path.read_text(encoding="utf-8")
 
 
+def test_the_watch_reports_a_change_once_and_re_arms_the_persona_for_later_sessions():
+    # The live session gets the change as a note; every session after it - a compaction reseed, a
+    # session shed by a deadline - starts from a persona composed as of now, rather than
+    # resurrecting the world the app booted into.
+    from excephalon.memory import StandingWatch
+
+    world = [{"Life context": "- he keeps bees"}]
+    composed = []
+    watch = StandingWatch(lambda: "persona as of now", on_change=composed.append,
+                          snapshot=lambda: world[0])
+
+    assert watch.moved() == ""  # nothing has moved; the boot persona is still true
+
+    world[0] = {"Life context": "- he keeps bees and chickens", "Goals": "- ship it"}
+
+    told = watch.moved()
+
+    assert "## Life context" + chr(10) + "- he keeps bees and chickens" in told
+    assert "## Goals" + chr(10) + "- ship it" in told
+    assert composed == ["persona as of now"]  # and the next session starts from it
+    assert watch.moved() == ""  # said once, not on every turn after
+
+
+def test_his_standing_context_is_snapshotted_by_its_own_headings_not_by_a_list():
+    # The guard against the whole category: nothing here names a part, so a section he invents
+    # next month is watched the day he makes it - no one has to remember to add it.
+    from excephalon.memory import standing_snapshot
+
+    profile = ("# Ada - standing profile" + chr(10) * 2
+               + "## Life context" + chr(10) + "- she keeps bees" + chr(10) * 2
+               + "## A heading nobody has thought of yet" + chr(10) + "- but she made it" + chr(10) * 2
+               + "## Project: Ledger app" + chr(10) + "- [ ] #7 no progress shown" + chr(10) * 2
+               + "## Enhancements she wants for you" + chr(10) + "- [ ] #1 be quieter" + chr(10))
+
+    parts = standing_snapshot(profile, learned="- she prefers mornings", lexicon="apiary")
+
+    assert parts["Life context"] == "- she keeps bees"
+    assert parts["A heading nobody has thought of yet"] == "- but she made it"
+    assert parts["What you have learned about him"] == "- she prefers mornings"
+    assert parts["His vocabulary"] == "apiary"
+    # These two already ride in the per-turn notes under their own headings; twice would just be
+    # the same fresh text said twice over.
+    assert not [name for name in parts if name.startswith("Project:") or name.startswith("Enhance")]
+
+
+def test_what_changed_in_his_standing_context_is_what_the_brain_is_told():
+    from excephalon.memory import changed_standing
+
+    before = {"Life context": "- she keeps bees", "Goals": "- ship it", "His vocabulary": "apiary"}
+    after = {"Life context": "- she keeps bees and chickens", "Goals": "- ship it",
+             "His vocabulary": "apiary", "New card": "- fresh"}
+
+    changes = changed_standing(before, after)
+
+    assert changes == {"Life context": "- she keeps bees and chickens", "New card": "- fresh"}
+    # A part he clears is a change he made: silence about it leaves the old words as the only
+    # thing the brain has ever heard.
+    assert changed_standing(before, {"Goals": "- ship it"}) == {
+        "Life context": "", "His vocabulary": ""}
+
+
 def test_his_projects_and_their_open_tasks_read_live_from_the_file(tmp_path):
     # "It's not aware of the new Projects tab apparently. It somehow still thinks it's in the old
     # world." Asked to take care of task #7 in one of his projects, the brain answered that it
