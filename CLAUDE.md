@@ -218,9 +218,16 @@ turn and streams the reply into the voice as it is written. `voice.py` is how a 
 becomes audible — sentences cut the moment they end, synthesized and played while the next forms,
 one stop draining everything — and `tts_neural.py` is the Kokoro engine behind it plus the
 one-time model fetch into `runtime/tts/`, with the System.Speech robot voice serving until the
-model is in. `actions.py` is everything the brain can DO: thirteen typed in-process tools wired to
-the desk — among them update_persona and remember, its levers to edit its own persona overlay
-(`runtime/persona.md`) and memory the way it files an enhancement, and file_improvement, which
+model is in. `actions.py` is everything the brain can DO: sixteen typed in-process tools wired to
+the desk — among them update_persona, drop_instruction, remember and forget_memory, its levers over
+its own standing instructions (`runtime/persona.md`) and memory in BOTH directions, because a card
+he can edit and it cannot ends with it handing him the chore ("I don't have a way to remove
+standing instructions... You'll need to manually remove the old unformatted one"). Every
+instruction row's `- **Name** rule` shape is composed by the saver, never trusted to the model's
+wording — the one row filed bare stood out on the card until he asked for it to be fixed by hand —
+and the name is the row's identity: restating one rewrites its row in place, because "fixing" that
+bare row by filing a named copy beside it is how the card gained the duplicate he then had to
+order deleted. There is also file_improvement, which
 REFUSES a feature request naming one of his other apps (their folder names are known; see
 `names_another_app`), because the Enhancements list is for changes to Excephalon itself and twice
 a Highdeas request was filed there instead of being handed to an agent, each time answered with a

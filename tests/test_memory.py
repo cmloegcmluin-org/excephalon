@@ -79,19 +79,119 @@ def test_persona_additions_are_saved_and_read_back(tmp_path):
     assert "always answer in a whisper after midnight" in load_persona_additions(path)
 
 
-def test_append_persona_addition_is_cumulative_and_bulleted(tmp_path):
-    # How Excephalon files one when told to change how it behaves - the same accretion as its learned
-    # facts, so the file reads as a list of standing instructions however it was started.
-    from excephalon.memory import append_persona_addition, load_persona_additions
+def test_save_persona_instruction_is_cumulative_and_files_each_under_its_bolded_name(tmp_path):
+    # How Excephalon files one when told to change how it behaves - the same accretion as its
+    # learned facts, but every row in the Instructions card's own shape: a short bolded name, then
+    # the rule. The name is composed HERE, not trusted to the model's wording, because the one row
+    # it filed bare stood out on the card until he asked for it to be fixed by hand.
+    from excephalon.memory import load_persona_additions, save_persona_instruction
 
     path = tmp_path / "persona.md"
-    append_persona_addition("never read a commit hash aloud", path=path)
-    append_persona_addition("keep answers to one sentence after midnight", path=path)
+    save_persona_instruction("Commit hashes", "never read a commit hash aloud", path=path)
+    save_persona_instruction("Night brevity", "keep answers to one sentence after midnight", path=path)
 
     text = load_persona_additions(path)
-    assert "never read a commit hash aloud" in text
-    assert "keep answers to one sentence after midnight" in text
-    assert text.count("- ") >= 2  # each landed as its own bullet, not smooshed into one
+    assert "- **Commit hashes** never read a commit hash aloud" in text
+    assert "- **Night brevity** keep answers to one sentence after midnight" in text
+
+
+def test_save_persona_instruction_restates_a_named_row_in_place_rather_than_twinning_it(tmp_path):
+    # "you added a new item instead of updating the one you already added" - asked to fix a row, it
+    # filed a second copy beside the first. The bolded name is the row's identity: saving under a
+    # name already on the card rewrites THAT row where it stands, and says so.
+    from excephalon.memory import load_persona_additions, save_persona_instruction
+
+    path = tmp_path / "persona.md"
+    save_persona_instruction("Commit hashes", "never read a commit hash aloud", path=path)
+    save_persona_instruction("Night brevity", "keep answers to one sentence after midnight", path=path)
+
+    replaced = save_persona_instruction("commit hashes", "spell out only the branch name", path=path)
+
+    rows = load_persona_additions(path).splitlines()
+    assert replaced is True
+    assert rows[0] == "- **Commit hashes** spell out only the branch name"  # in place, name as first filed
+    assert rows[1] == "- **Night brevity** keep answers to one sentence after midnight"
+    assert len(rows) == 2
+
+
+def test_save_persona_instruction_names_a_bare_row_carrying_the_same_rule_in_place(tmp_path):
+    # The incident itself: a row filed bare, then "fixed" by filing a named copy of the same rule
+    # beside it, leaving a duplicate he had to order deleted. The same rule already on the card IS
+    # the row being restated, whatever it is called - so the bare row gains its name where it
+    # stands and no twin appears.
+    from excephalon.memory import (load_persona_additions, save_persona_additions,
+                               save_persona_instruction)
+
+    path = tmp_path / "persona.md"
+    save_persona_additions("- Present one piece of work at a time.\n- **Other** unrelated rule", path)
+
+    replaced = save_persona_instruction("Sequential verdicts", "Present one piece of work at a time.",
+                                        path=path)
+
+    rows = load_persona_additions(path).splitlines()
+    assert replaced is True
+    assert rows[0] == "- **Sequential verdicts** Present one piece of work at a time."
+    assert rows[1] == "- **Other** unrelated rule"
+    assert len(rows) == 2
+
+
+def test_save_persona_instruction_keeps_the_row_shape_whatever_the_words_arrive_wearing(tmp_path):
+    # The format is the saver's, not the model's: a name wearing its own asterisks is not doubled,
+    # a name folded into the rule's text is read out of it, and a rule spread over lines lands as
+    # the one row the card draws. However the call is worded, the file gains `- **Name** rule`.
+    import pytest
+
+    from excephalon.memory import load_persona_additions, save_persona_instruction
+
+    path = tmp_path / "persona.md"
+    save_persona_instruction("**Starred name**", "no asterisks doubled", path=path)
+    save_persona_instruction("", "**Folded in** the name rode inside the rule", path=path)
+    save_persona_instruction("One row", "a rule\nspread over\nlines", path=path)
+
+    rows = load_persona_additions(path).splitlines()
+    assert rows[0] == "- **Starred name** no asterisks doubled"
+    assert rows[1] == "- **Folded in** the name rode inside the rule"
+    assert rows[2] == "- **One row** a rule spread over lines"
+
+    with pytest.raises(ValueError):
+        save_persona_instruction("", "a rule with no name at all", path=path)
+    with pytest.raises(ValueError):
+        save_persona_instruction("A name with no rule", "", path=path)
+    assert len(load_persona_additions(path).splitlines()) == 3  # a refusal changes nothing
+
+
+def test_drop_persona_instruction_deletes_the_one_row_those_words_name(tmp_path):
+    # The other half of the card being Excephalon's to edit: told a rule should no longer stand, it
+    # answered "I don't have a way to remove standing instructions" and handed the deletion to him.
+    # Matched on folded words - his paraphrase, or just the bolded name, lands on the row he means.
+    from excephalon.memory import (drop_persona_instruction, load_persona_additions,
+                               save_persona_additions)
+
+    path = tmp_path / "persona.md"
+    save_persona_additions("- **Night brevity** keep answers short after midnight\n"
+                           "- **Commit hashes** never read a commit hash aloud", path)
+
+    assert drop_persona_instruction("night   BREVITY", path=path) == 1
+
+    assert load_persona_additions(path).splitlines() == [
+        "- **Commit hashes** never read a commit hash aloud"]
+
+
+def test_drop_persona_instruction_refuses_to_guess_between_rows_or_invent_a_match(tmp_path):
+    # Deletion by pattern must never guess - the same refusal the command-line door makes. The
+    # count comes back so the caller can say WHY nothing changed: no such row, or too many.
+    from excephalon.memory import (drop_persona_instruction, load_persona_additions,
+                               save_persona_additions)
+
+    path = tmp_path / "persona.md"
+    stored = ("- **Night brevity** keep answers short after midnight\n"
+              "- **Day brevity** keep answers short before noon")
+    save_persona_additions(stored, path)
+
+    assert drop_persona_instruction("keep answers short", path=path) == 2
+    assert drop_persona_instruction("a rule never filed", path=path) == 0
+    assert drop_persona_instruction("   ", path=path) == 0  # no words name no row
+    assert load_persona_additions(path).splitlines() == stored.splitlines()  # nothing was changed
 
 
 def test_compose_persona_folds_in_the_lexicon_under_its_own_framing():

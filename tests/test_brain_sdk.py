@@ -35,6 +35,15 @@ def test_the_shipped_persona_is_personalised_by_the_profile_not_by_the_source():
     assert "Ada's voice companion" in persona
 
 
+def test_the_persona_teaches_editing_standing_instructions_in_both_directions():
+    # "I don't have a way to remove standing instructions - I can only add new ones. You'll need
+    # to manually remove the old one" - spoken about the user's own Config card. The levers exist
+    # now; this pins the sentence that tells the brain so, since a lever it is never told about
+    # is a lever it will deny having.
+    assert "update_persona" in DEFAULT_PERSONA
+    assert "drop_instruction" in DEFAULT_PERSONA
+
+
 def test_is_usage_limit_spots_the_cli_spend_notice():
     assert _is_usage_limit(_LIMIT) is True
     assert _is_usage_limit("You've hit your usage limit.") is True

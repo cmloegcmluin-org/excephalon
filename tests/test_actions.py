@@ -200,18 +200,88 @@ def test_filing_an_improvement_lands_it_in_the_profile():
     assert "filed" in said.lower()
 
 
-def test_updating_the_persona_records_a_standing_instruction():
+def test_updating_the_persona_records_a_standing_instruction_under_its_name():
     # The gap this closes: Excephalon could file an enhancement but had no lever to change how it
     # itself behaves. A typed tool, like every other - it cannot be half-written or leak into the
-    # voice, and it lands in the same overlay the window edits.
+    # voice, and it lands in the same overlay the window edits, always under the short bolded
+    # name the Instructions card draws.
     desk = FakeDesk()
     added = []
-    tools = _tools(desk, add_persona=added.append)
+    tools = _tools(desk, save_instruction=lambda name, rule: added.append((name, rule)) or False)
 
-    said = _call(tools["update_persona"], instruction="never read a commit hash aloud")
+    said = _call(tools["update_persona"], name="Commit hashes",
+                 instruction="never read a commit hash aloud")
 
-    assert added == ["never read a commit hash aloud"]
+    assert added == [("Commit hashes", "never read a commit hash aloud")]
     assert "persona" in said.lower() or "standing" in said.lower()
+
+
+def test_updating_the_persona_says_when_it_rewrote_a_standing_row_instead():
+    # Restating a rule already on the card rewrites that row in place (memory owns that), and the
+    # reply says WHICH happened - "Added" about a rewrite would read as a duplicate just filed,
+    # which is the exact confusion the rewrite exists to end.
+    desk = FakeDesk()
+    tools = _tools(desk, save_instruction=lambda name, rule: True)
+
+    said = _call(tools["update_persona"], name="Sequential verdicts",
+                 instruction="present one piece of work at a time")
+
+    assert "rewrote" in said.lower() or "updated" in said.lower()
+    assert "added" not in said.lower()
+
+
+def test_updating_the_persona_relays_a_refusal_rather_than_crashing():
+    # The saver refuses a call that yields no name or no rule (the malformed row the card once
+    # gained); the tool hands the model that sentence so it can call again correctly.
+    desk = FakeDesk()
+
+    def refuse(name, rule):
+        raise ValueError("a standing instruction needs its short bolded name")
+
+    tools = _tools(desk, save_instruction=refuse)
+
+    said = _call(tools["update_persona"], name="", instruction="a rule with no name")
+
+    assert "name" in said.lower()
+
+
+def test_dropping_an_instruction_deletes_the_row_those_words_name():
+    # "I don't have a way to remove standing instructions - I can only add new ones" - said to the
+    # user about a duplicate he then had to delete by hand. The card is Excephalon's to edit in
+    # both directions now.
+    desk = FakeDesk()
+    dropped = []
+    tools = _tools(desk, drop_instruction=lambda words: dropped.append(words) or 1)
+
+    said = _call(tools["drop_instruction"], words="Sequential verdicts")
+
+    assert dropped == ["Sequential verdicts"]
+    assert "dropped" in said.lower() or "deleted" in said.lower()
+
+
+def test_dropping_an_instruction_refuses_to_guess_and_says_why():
+    # Zero matches and several matches are different failures, and the model can only fix its call
+    # if the reply says which happened.
+    desk = FakeDesk()
+    tools = _tools(desk, drop_instruction=lambda words: 0)
+    said = _call(tools["drop_instruction"], words="a rule never filed")
+    assert "no " in said.lower()
+
+    tools = _tools(desk, drop_instruction=lambda words: 3)
+    said = _call(tools["drop_instruction"], words="keep answers")
+    assert "3" in said
+    assert "nothing" in said.lower() or "not" in said.lower()
+
+
+def test_every_tool_the_server_builds_is_one_the_brain_is_allowed_to_call():
+    # allowed_tools is TOOL_NAMES; a tool built here but missing from that tuple would exist and
+    # be silently uncallable - a lever the brain reaches for and finds welded still.
+    from excephalon.actions import SERVER, TOOL_NAMES
+
+    desk = FakeDesk()
+    tools = _tools(desk)
+
+    assert {f"mcp__{SERVER}__{name}" for name in tools} == set(TOOL_NAMES)
 
 
 def test_remembering_a_fact_appends_it_to_what_entity_has_learned():
