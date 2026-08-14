@@ -339,7 +339,13 @@ other order turns every unprompted line into an ordinary reply. Comments quoting
 words exactly as he said them, "Entity" and all — a quote rewritten to match today's name is a
 record of something he never said. `links.py` decides what a message names that can be
 opened, and opens it - and owns the other half of that question, what is SAID instead, so
-the written form stays clickable while the voice gets `as_spoken`. Its mirror `as_written`
+the written form stays clickable while the voice gets `as_spoken`. A local address is WRITTEN
+as localhost (`as_written` swaps the numeric loopback agents hand over, which is the same
+machine wearing an unreadable name) and SPOKEN as "localhost port 5210" - scheme dropped, path
+left to the screen - because spoken more literally it came out as letters and punctuation
+points read one at a time ("quite unnatural"); an em-dash the brain glues to an address gets
+its own space before the voice judges the words, or the address is read raw with the next
+word welded on. Its mirror `as_written`
 exists because the brain has only one channel: everything it writes is spoken, so an
 instruction to say an address naturally is obeyed in the only place it can be - the text -
 and "click through at localhost port 8752" reached the screen as words nobody could click.

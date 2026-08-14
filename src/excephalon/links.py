@@ -134,16 +134,25 @@ _LONG_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]
 _SPELLED_LOCAL = re.compile(r"\b(localhost|127\.0\.0\.1)[ ,]+port[ ]+(\d(?:[ -]?\d){1,4})\b",
                             re.IGNORECASE)
 
+# The loopback host by its number - what agents write when they hand a test instance over. It is
+# this same machine wearing an unreadable name, and he asked for the word: "it types 'localhost'
+# instead of '127.0.0.1'". The boundary keeps 127.0.0.10 - a genuinely different address - as it
+# is.
+_NUMERIC_LOCALHOST = re.compile(r"\b127\.0\.0\.1\b")
+
 
 def as_written(text):
-    """`text` with a spoken-out local address put back as an address - what the screen keeps.
+    """`text` as the screen keeps it: a spoken-out local address put back as an address, and the
+    numeric loopback written as the localhost it is.
 
     The mirror of `as_spoken`, and the reason both exist in one file: the split between what is
     said and what is written is this module's whole job, so a message that spells an address out
     in words is repaired HERE rather than begged for in a persona. The voice is unaffected - it
-    was already saying the words - and the page can offer a link again."""
-    return _SPELLED_LOCAL.sub(lambda found: f"{found.group(1)}:{re.sub(r'[ -]', '', found.group(2))}",
+    speaks the record's words through `as_spoken` - and the page can offer a link either way;
+    localhost and 127.0.0.1 open the same server."""
+    text = _SPELLED_LOCAL.sub(lambda found: f"{found.group(1)}:{re.sub(r'[ -]', '', found.group(2))}",
                               text)
+    return _NUMERIC_LOCALHOST.sub("localhost", text)
 
 
 def as_spoken(text):
@@ -153,6 +162,11 @@ def as_spoken(text):
     of "backslash". Exact identifiers get the same treatment - "859e704" spoken is a mangled
     transcription waiting to happen, and the standing instruction is screen, not voice. What is
     on screen is still the real thing, so it can be read and clicked."""
+    # An em- or en-dash glued to an address ("...5210/—drag the notes") rides inside the matched
+    # word, and the voice read the raw address out with "drag" welded on. The dashes are the
+    # sentence's, never the address's, so they get their own space before words are judged - the
+    # voice reads "a — b" and "a—b" alike, so only the judging changes.
+    text = re.sub(r"[–—]", lambda dash: f" {dash.group(0)} ", text)
     return " ".join(_said_aloud(word) for word in text.split())
 
 
@@ -171,17 +185,23 @@ def _said_aloud(word):
     return word
 
 
+# A local address in any of its written costumes - scheme or not, localhost or the numeric
+# loopback, path or not - reduced to the two parts a person says: the host and the port.
+_LOCAL_ADDRESS = re.compile(r"(?:https?://)?(?:localhost|127\.0\.0\.1):(?P<port>\d{2,5})(?:/\S*)?")
+
+
 def _stand_in(target):
     """An address is "the link"; a path is its last part, which is the part a person would say -
-    "it's in profile.md", never the eight folders above it."""
-    if _IS_BARE_LOCAL.fullmatch(target):
-        return target  # "localhost:5200" IS the natural spoken form; only the page needs more
+    "it's in profile.md", never the eight folders above it. A LOCAL address is said the way he
+    asked to hear it - "http://localhost:5210" as "localhost port 5210" - because spoken any more
+    literally it came out as letters and punctuation points read one at a time ("quite
+    unnatural"), with the numeric loopback the worst costume of all. The path stays on screen,
+    where it can be clicked."""
+    local = _LOCAL_ADDRESS.fullmatch(target)
+    if local:
+        return f"localhost port {local['port']}"
     if target.startswith(("http://", "https://")):
-        # A local address wearing its scheme is the same address: he asked to hear the host and
-        # port rather than a URL read out ("http://localhost:4444" said as "localhost port 4444"),
-        # and the bare form is the one he already liked hearing. Anything else is "the link".
-        bare = _IS_BARE_LOCAL.match(target.split("//", 1)[1])
-        return bare.group(0) if bare else SPOKEN_ADDRESS
+        return SPOKEN_ADDRESS
     return PureWindowsPath(target).name or SPOKEN_ADDRESS
 
 

@@ -824,7 +824,8 @@ def test_stacked_news_about_one_agent_collapses_to_the_newest():
 
     convo.turn()
 
-    assert tts.spoken[0] == "The fix is ready to look at on localhost:5200."  # one line, the truth
+    # One line, the truth - spoken with the address the natural way ("localhost port 5200").
+    assert tts.spoken[0] == "The fix is ready to look at on localhost port 5200."
     assert not any("Which first?" in line for line in tts.spoken)  # no roll call of one name
 
 
