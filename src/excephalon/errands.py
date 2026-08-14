@@ -59,21 +59,105 @@ def load_services(path):
     return servers, ""
 
 
-def services_note(services):
+def services_note(services, broken=None):
     """Persona line naming what errands can reach, or "" with nothing connected.
 
     A lever nobody mentions is a lever never pulled: without this the brain answers "I can't see
     your calendar" while the errand hand sits right there able to look. Empty when nothing is
-    connected, because a brain told about absent services promises checks that can only fail."""
+    connected, because a brain told about absent services promises checks that can only fail.
+
+    `broken` is {name: why} for services that are configured but do not answer (see
+    `check_services`). Those are named as FAULTY with their reason rather than left out or
+    passed off as working: told only the configured names, the brain answered that services set
+    up weeks ago "aren't set up yet" and that it had no idea how to fix them - while the fault
+    was a stale path in his own config file, sitting in the failure's own words."""
     if not services:
         return ""
-    named = ", ".join(sorted(services))
-    return (
-        f" The errand hand is also connected to his own services - {named} - so checking or "
-        "updating any of them ('what's on my calendar', 'any new email from X', 'what's due in "
-        "Asana') is a run_errand job: dispatch it and the answer comes back as its own note. "
-        "Never guess at what a service would say, and never claim you cannot see one of these."
-    )
+    broken = broken or {}
+    healthy = sorted(name for name in services if name not in broken)
+    note = ""
+    if healthy:
+        note = (
+            f" The errand hand is also connected to his own services - {', '.join(healthy)} - so "
+            "checking or updating any of them ('what's on my calendar', 'any new email from X', "
+            "'what's due in Asana') is a run_errand job: dispatch it and the answer comes back as "
+            "its own note. Never guess at what a service would say, and never claim you cannot "
+            "see one of these."
+        )
+    if broken:
+        faults = "; ".join(f"{name} ({why})" for name, why in sorted(broken.items()))
+        note += (
+            f" These of his services are SET UP but not answering right now: {faults}. They are "
+            "connected and broken, never missing - so never say one is not set up. If he asks "
+            "about one, say plainly that it is failing and what the fault says; the reason above "
+            "usually names the fix, and a run_errand can look closer at the app's own files."
+        )
+    return note
+
+
+def _probe_stdio(name, config, *, timeout=20.0):
+    """Speak MCP at one configured server and return "" when it answers, or why it did not.
+
+    Launch-and-initialize only: no tool is called, so nothing of his is touched and a check
+    costs a second. It catches exactly the failure that hid for weeks - a server that dies the
+    moment it starts (a stale path, a missing interpreter) while the app went on announcing it
+    as connected."""
+    import json as _json
+    import subprocess
+
+    command = [config.get("command")] + list(config.get("args") or [])
+    if not config.get("command"):
+        return "no command to launch (only stdio servers can be checked)"
+    proc = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, text=True, encoding="utf-8",
+                            errors="replace", **_no_console())
+    hello = _json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize",
+                         "params": {"protocolVersion": "2025-06-18", "capabilities": {},
+                                    "clientInfo": {"name": "excephalon-check", "version": "1"}}})
+    try:
+        answer, complaint = proc.communicate(hello + "\n", timeout=timeout)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        return f"it did not answer within {timeout:.0f}s"
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+    if '"result"' in (answer or ""):
+        return ""
+    trouble = " ".join((complaint or "").split())[-300:]
+    return trouble or "it started and said nothing"
+
+
+def _no_console():
+    """Keep a probe from flashing a console window on his screen - the app runs under pythonw,
+    where every child would otherwise conjure one."""
+    from excephalon import machine
+
+    if not machine.WINDOWS:
+        return {}
+    import subprocess
+
+    return {"creationflags": subprocess.CREATE_NO_WINDOW}
+
+
+def check_services(services, *, probe=_probe_stdio):
+    """{name: why} for every configured service that does not answer - {} when all of them do.
+
+    Run on the way up, so a service that is set up but broken is SAID rather than announced as
+    connected and then silently absent: "it's claiming that the Asana and Google integrations
+    that we worked so fucking hard for aren't working now, and that it has no idea how to fix
+    them" - Asana's server had been crashing at launch on a stale path in his own config. A probe
+    that itself falls over is that service's fault, never the app's: this runs before the window
+    exists, and a launch with no mouth is this project's oldest failure."""
+    broken = {}
+    for name, config in services.items():
+        try:
+            why = probe(name, config)
+        except Exception as exc:
+            why = f"the check could not run: {exc}"
+        if why:
+            broken[name] = why
+    return broken
 
 
 def _errand_options(cwd, services=None):

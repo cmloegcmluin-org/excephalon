@@ -114,6 +114,80 @@ def test_no_sign_in_answers_with_the_one_thing_he_can_do():
     assert held["isError"] and "Connect Google" in held["content"][0]["text"]
 
 
+def test_a_sign_in_that_cannot_be_refreshed_answers_with_the_same_one_thing_he_can_do():
+    # A refresh token Google has expired or revoked answered with its raw 401 JSON - "Request had
+    # invalid authentication credentials... Expected OAuth 2 access token" - and Excephalon relayed
+    # that as the integration being unset-up with no idea how to fix it. A dead sign-in is a dead
+    # sign-in however it died: the answer is the door, not Google's error page.
+    import io
+
+    def denied_401():
+        return urllib.error.HTTPError(
+            "url", 401, "Unauthorized", {},
+            io.BytesIO(b'{"error": {"message": "Invalid Credentials"}}'))
+
+    ask = FakeAsk(denies=denied_401())
+    ask.answers["/labels"] = None
+    tokens = Tokens(access="tok-dead", refresh="refresh-revoked")
+    post = lambda url, body, headers: (400, "application/json",
+                                       '{"error": "invalid_grant", '
+                                       '"error_description": "Token has been expired or revoked."}')
+
+    answer = json.loads(_bridge(ask=ask, tokens=tokens, post=post,
+                                client={"client_id": "id-1"}).handle(_call_line("list_labels")))
+
+    held = answer["result"]
+    assert held["isError"]
+    assert "Connect Google" in held["content"][0]["text"]  # the door, named
+    assert "Invalid Credentials" not in held["content"][0]["text"]  # not Google's error page
+
+
+def test_the_sign_in_can_be_checked_without_calling_a_single_tool(tmp_path):
+    # A launch check proves a server STARTS; the Google bridge starts perfectly with a sign-in
+    # Google has revoked, which is exactly how the failure hid - "(errands can reach: gmail,
+    # google-calendar)" announced at startup, and the first real errand hours later answering
+    # that the service was never set up. Trading the refresh token settles it in one request, and
+    # a success leaves a fresh access token behind rather than throwing the work away.
+    from excephalon.google_bridge import sign_in_fault
+
+    tokens = Tokens(access="tok-stale", refresh="refresh-1")
+    alive = lambda url, body, headers: (200, "application/json",
+                                        json.dumps({"access_token": "tok-new"}))
+    assert sign_in_fault(tokens=tokens, client={"client_id": "id-1"}, post=alive) == ""
+    assert tokens.held["access_token"] == "tok-new"  # kept, so the next call is already warm
+
+    revoked = lambda url, body, headers: (400, "application/json",
+                                          '{"error": "invalid_grant", "error_description": '
+                                          '"Token has been expired or revoked."}')
+    fault = sign_in_fault(tokens=Tokens(access="tok", refresh="dead"),
+                          client={"client_id": "id-1"}, post=revoked)
+    assert "Connect Google" in fault
+
+    assert "Connect Google" in sign_in_fault(tokens=Tokens(), client={}, post=revoked)
+
+
+def test_a_sign_in_check_that_cannot_reach_google_is_not_a_fault(tmp_path):
+    # Offline is not signed-out. Sending him to redo a sign-in that is perfectly good - because
+    # the wifi was down when the app started - is the wrong fix confidently given.
+    from excephalon.google_bridge import sign_in_fault
+
+    def unreachable(url, body, headers):
+        raise OSError("getaddrinfo failed")
+
+    assert sign_in_fault(tokens=Tokens(access="tok", refresh="r"),
+                         client={"client_id": "id-1"}, post=unreachable) == ""
+
+
+def test_the_door_named_is_the_one_this_desk_actually_has():
+    # The Mac has "Connect Google.command" and the hint named only that - on the Windows desk the
+    # file does not exist, and for months there was no door at all: the sign-in expired and the
+    # only way back was a command line he does not work from.
+    from excephalon.google_bridge import connect_hint
+
+    assert "Connect Google.bat" in connect_hint(windows=True)
+    assert "Connect Google.command" in connect_hint(windows=False)
+
+
 def test_googles_own_error_words_pass_through_as_the_answer():
     # "insufficient authentication scopes", "API has not been used in project..." - the denial's
     # words ARE the answer; a swallowed reason sends whoever asked off to fix the wrong thing.

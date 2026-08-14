@@ -21,7 +21,8 @@ from excephalon.brain_sdk import DEFAULT_PERSONA, SdkBrain
 from excephalon.sdk_session import open_sign_in
 from excephalon.console import Console
 from excephalon.conversation import Conversation
-from excephalon.errands import ErrandRunner, load_services, services_note
+from excephalon.errands import ErrandRunner, check_services, load_services, services_note
+from excephalon.google_bridge import sign_in_fault
 from excephalon.foreman import Foreman
 from excephalon.inbox_watcher import InboxWatcher, QuietMonitor
 from excephalon.mirror import TranscriptFeed
@@ -256,6 +257,32 @@ def _open_ears(announce):
     return transcriber, mic, recorder
 
 
+# Which of his configured services did not answer when the app came up ({name: why}). Probed once,
+# on the way up, because a check costs a launch per server and the persona is recomposed every time
+# his standing context moves; a fault that clears is picked up by the next restart, which is what
+# fixing one of these takes anyway.
+_SERVICE_FAULTS = {}
+
+
+def _google_faults(services):
+    """{name: why} for his Google services when the sign-in behind them is dead.
+
+    A launch check proves a server starts, and this bridge starts perfectly on a sign-in Google
+    has revoked - startup announced Gmail and Calendar as reachable, and the first real errand
+    hours later answered that they were never set up. The bridge is the app's own, so the app can
+    ask it: one refresh, which doubles as the warm-up. Which servers are the bridge is read off
+    the config he wrote, not assumed from their names."""
+    ours = [name for name, config in services.items()
+            if any("google_bridge" in str(part) for part in config.get("args") or ())]
+    if not ours:
+        return {}
+    try:
+        fault = sign_in_fault()
+    except Exception as exc:  # a check that falls over must never stop the app from opening
+        fault = f"its sign-in could not be checked: {exc}"
+    return {name: fault for name in ours} if fault else {}
+
+
 def _persona():
     """Everything Excephalon has been told about how to be - the standing rules, the user's own
     context, and every instruction added since (its own persona overlay). Composed in one place
@@ -265,7 +292,7 @@ def _persona():
         compose_persona(DEFAULT_PERSONA, profile_without_project_tasks(load_profile()),
                         load_learned(), load_lexicon(), additions=load_persona_additions())
         + _agent_inbox_note(AGENT_INBOX)
-        + services_note(load_services(SERVICES)[0])
+        + services_note(load_services(SERVICES)[0], broken=_SERVICE_FAULTS)
         + _fresh_worktree_note()
         + _projects_note()
         + _window_note(AGENT_LOGS)
@@ -373,7 +400,18 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     if services_problem:
         announce(services_problem)
     if services:
-        announce(f"(errands can reach: {', '.join(sorted(services))})")
+        # Each one is actually SPOKEN TO before it is announced as reachable. Announced from the
+        # config alone, a server that died the moment it launched still read as connected - his
+        # Asana sat broken on a stale path for a day while the brain, told only the name, said the
+        # service "isn't set up yet" and had no idea how to fix it.
+        _SERVICE_FAULTS.clear()
+        _SERVICE_FAULTS.update(check_services(services))
+        _SERVICE_FAULTS.update(_google_faults(services))
+        working = sorted(name for name in services if name not in _SERVICE_FAULTS)
+        if working:
+            announce(f"(errands can reach: {', '.join(working)})")
+        for name, why in sorted(_SERVICE_FAULTS.items()):
+            announce(f"({name} is set up but not answering: {why})")
     errands = ErrandRunner(RUNTIME_DIR, agent_events, services=services)
     if hooks is not None:
         # His name for an agent, from the page's own heading - the desk owns the key, the log and
