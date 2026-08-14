@@ -145,7 +145,7 @@ def test_an_address_spelled_out_in_words_is_written_back_as_an_address():
     assert (as_written("Ready for your eyes - click through at localhost port 8752 and look.")
             == "Ready for your eyes - click through at localhost:8752 and look.")
     assert as_written("localhost port 8-7-5-2") == "localhost:8752"  # however it spells the digits
-    assert as_written("127.0.0.1 port 5200") == "127.0.0.1:5200"
+    assert as_written("127.0.0.1 port 5200") == "localhost:5200"
     assert link_in(as_written("try localhost port 8752").split()[-1]) == "localhost:8752"
 
     # Prose about ports is left alone: only a NAMED local host becomes an address.
@@ -153,16 +153,39 @@ def test_an_address_spelled_out_in_words_is_written_back_as_an_address():
     assert as_written("It is live at localhost:8752.") == "It is live at localhost:8752."
 
 
-def test_a_local_address_wearing_its_scheme_is_still_said_the_short_way():
-    # He asked to hear the host and port rather than a URL read out; the bare form is the one he
-    # liked hearing, and a local URL is that same address with a scheme on the front.
-    assert as_spoken("Open http://localhost:4444 now.") == "Open localhost:4444 now."
+def test_the_numeric_loopback_is_written_as_localhost():
+    # "please also change it so that it types 'localhost' instead of '127.0.0.1'" - the numeric
+    # host is this same machine wearing an unreadable name, and agents hand their test instances
+    # over in exactly that form. Swapped where the words become the record, so the page shows the
+    # readable address; it opens the same server either way.
+    assert (as_written("Smart grouping is ready at http://127.0.0.1:5210/ now.")
+            == "Smart grouping is ready at http://localhost:5210/ now.")
+    assert as_written("visit 127.0.0.1:8791/agents for it") == "visit localhost:8791/agents for it"
+    # A different machine that merely starts the same way is not this machine.
+    assert as_written("127.0.0.10 is another box") == "127.0.0.10 is another box"
+
+
+def test_a_local_address_is_spoken_as_localhost_port_number():
+    # "reads 'http://localhost:5210' as 'localhost port 5210'... it's currently writing out the
+    # 127.0.0.1 and reading each letter and punctuation point aloud, which is quite unnatural."
+    # Scheme dropped, the numeric loopback said as the localhost it is, any path left to the
+    # screen - which keeps the exact address for clicking.
+    assert as_spoken("Open http://localhost:4444 now.") == "Open localhost port 4444 now."
+    assert as_spoken("It's live at localhost:5200 now.") == "It's live at localhost port 5200 now."
+    assert as_spoken("Ready at http://127.0.0.1:5210/ for you.") == \
+        "Ready at localhost port 5210 for you."
+    assert as_spoken("Head to http://127.0.0.1:8791/agents and click through.") == \
+        "Head to localhost port 8791 and click through."
     assert as_spoken("It is at https://example.com/x") == f"It is at {SPOKEN_ADDRESS}"
 
 
-def test_a_bare_localhost_address_is_spoken_as_written():
-    # He liked hearing "localhost 5200" - it IS the natural spoken form, unlike a full URL.
-    assert as_spoken("It's live at localhost:5200 now.") == "It's live at localhost:5200 now."
+def test_a_dash_glued_to_an_address_does_not_ride_into_what_is_spoken():
+    # The brain writes "at http://127.0.0.1:5210/—drag the notes": the em-dash glues prose to
+    # the address, the whole lump matches as one link, and the voice read the address raw with
+    # "drag" welded on. The dashes are the sentence's, never the address's, so they get their own
+    # space before words are judged - the voice reads "a — b" and "a—b" alike.
+    assert as_spoken("ready at http://127.0.0.1:5210/—drag the notes") == \
+        "ready at localhost port 5210 — drag the notes"
 
 
 def test_a_path_the_other_desk_writes_is_openable_too():
