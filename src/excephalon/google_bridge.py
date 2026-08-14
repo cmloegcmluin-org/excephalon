@@ -48,8 +48,18 @@ SCOPES = (
     "https://www.googleapis.com/auth/calendar.events.readonly",
 )
 
-CONNECT_HINT = ("Google is not connected yet - run Connect Google.command (or "
-                "`python -m excephalon.google_bridge --connect`) and sign in once.")
+def connect_hint(windows=None):
+    """The one thing he can do, naming the door THIS desk actually has.
+
+    The hint named only the Mac's `Connect Google.command` while the Windows desk had no such
+    file - and no launcher of any kind, so when the sign-in died the only way back was a command
+    line he does not work from. Each desk names its own door."""
+    from excephalon import machine
+
+    door = "Connect Google.bat" if (machine.WINDOWS if windows is None else windows) \
+        else "Connect Google.command"
+    return (f"Google's sign-in has expired or was never done - double-click {door} in the "
+            "Excephalon folder and sign in once, and this works again.")
 
 # The sign-in catcher's FIXED port: a Web-application OAuth client honors only redirect URIs
 # registered in advance, exactly, so the port cannot be whatever the machine had free.
@@ -65,7 +75,7 @@ def load_client(path):
 
     The download wraps the values in {"installed": {...}} (or {"web": ...}); asking him to
     rewrap them is asking a person to be a JSON parser. A flat file works too, and an absent or
-    unreadable one is {} - the bridge still serves, and the CONNECT_HINT is what says why
+    unreadable one is {} - the bridge still serves, and `connect_hint` is what says why
     nothing is signed in."""
     try:
         held = json.loads(Path(path).read_text(encoding="utf-8"))
@@ -94,6 +104,39 @@ class FileTokens:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._path.write_text(json.dumps(tokens), encoding="utf-8")
         os.chmod(self._path, 0o600)  # his sign-in; no other account on the machine needs it
+
+
+def sign_in_fault(*, tokens=None, client=None, post=None):
+    """"" when Google's sign-in is alive, or the one thing he can do when it is not.
+
+    A launch check proves a server STARTS; this bridge starts perfectly with a sign-in Google has
+    revoked, which is exactly how the failure hid - startup announced Gmail and Calendar as
+    reachable, and the first real errand hours later answered that they were never set up. Trading
+    the refresh token settles it in one request and leaves a fresh access token behind, so the
+    check is also the warm-up.
+
+    A request that cannot reach Google at all is NOT a fault: offline is not signed-out, and
+    sending him to redo a good sign-in is the wrong fix confidently given."""
+    tokens = tokens if tokens is not None else FileTokens(RUNTIME_GOOGLE / "tokens.json")
+    client = client if client is not None else load_client(RUNTIME_GOOGLE / "client.json")
+    post = post or _https_post
+    held = tokens.read()
+    if not (held.get("refresh_token") and client.get("client_id")):
+        return connect_hint()
+    try:
+        status, _, body = post(
+            TOKEN_URL,
+            urlencode({"grant_type": "refresh_token",
+                       "refresh_token": held["refresh_token"],
+                       "client_id": client["client_id"],
+                       "client_secret": client.get("client_secret", "")}).encode("utf-8"),
+            {"Content-Type": "application/x-www-form-urlencoded"})
+    except Exception:
+        return ""  # unreachable, not refused - his sign-in is not what is wrong
+    if status != 200:
+        return connect_hint()
+    tokens.write({**held, "access_token": json.loads(body)["access_token"]})
+    return ""
 
 
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -320,10 +363,17 @@ class Bridge:
             return {"content": [{"type": "text", "text": f"no such tool: {params.get('name')}"}],
                     "isError": True}
         if not self._tokens.read().get("access_token"):
-            return {"content": [{"type": "text", "text": CONNECT_HINT}], "isError": True}
+            return {"content": [{"type": "text", "text": connect_hint()}], "isError": True}
         try:
             answer = tool[2](self._ask, params.get("arguments") or {})
         except urllib.error.HTTPError as denied:
+            if denied.code == 401:
+                # A 401 that survived `_ask`'s refresh is a sign-in that cannot be revived -
+                # Google had expired or revoked the refresh token. Its raw error page ("Request
+                # had invalid authentication credentials...") was relayed to the user as the
+                # integration being unset-up with no idea how to fix it; a dead sign-in is a dead
+                # sign-in however it died, and the answer is the door.
+                return {"content": [{"type": "text", "text": connect_hint()}], "isError": True}
             return {"content": [{"type": "text",
                                  "text": denied.read().decode("utf-8", errors="replace")[:1000]}],
                     "isError": True}

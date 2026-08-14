@@ -170,6 +170,53 @@ def test_the_brain_is_told_what_errands_can_reach_and_told_nothing_when_nothing(
     assert services_note({}) == ""
 
 
+def test_a_service_that_will_not_start_is_named_broken_with_its_reason_and_its_fix():
+    # "it's claiming that the Asana and Google integrations that we worked so fucking hard for
+    # aren't working now, and that it has no idea how to fix them." Asana's server was crashing
+    # at launch on a stale path in his own config, and the brain - told only the CONFIGURED names -
+    # said the service "isn't set up yet". A configured service that does not answer is named as
+    # broken, with the reason, so the brain reports the fault instead of denying the setup.
+    from excephalon.errands import services_note
+
+    note = services_note({"asana": {}, "gmail": {}},
+                         broken={"asana": "No such file or directory: 'runtime/asana/pat.txt'"})
+
+    assert "gmail" in note
+    assert "asana" in note and "pat.txt" in note  # the fault, in the words the failure used
+    assert "not connected yet" not in note.lower()
+
+
+def test_a_service_check_launches_each_server_and_reports_only_the_ones_that_fail():
+    # Startup announced "(errands can reach: asana, gmail, google-calendar)" while asana's server
+    # died the moment it was launched - a config applied unseen reads as a broken app, and one
+    # applied but non-functional reads the same way. Each configured server is actually spoken to.
+    from excephalon.errands import check_services
+
+    spoken = {}
+
+    def probe(name, config):
+        spoken[name] = config
+        return "" if name == "gmail" else "exited at once: FileNotFoundError pat.txt"
+
+    broken = check_services({"gmail": {"command": "py"}, "asana": {"command": "py"}}, probe=probe)
+
+    assert set(spoken) == {"gmail", "asana"}  # every one is tried, not just the first
+    assert broken == {"asana": "exited at once: FileNotFoundError pat.txt"}
+
+
+def test_a_probe_that_itself_explodes_is_a_broken_service_not_a_broken_startup():
+    # The check runs on the way up, before the window exists: a probe that raises must never be
+    # what stops the app from opening - a launch with no mouth is this project's oldest failure.
+    from excephalon.errands import check_services
+
+    def explode(name, config):
+        raise RuntimeError("the probe itself fell over")
+
+    broken = check_services({"asana": {}}, probe=explode)
+
+    assert "fell over" in broken["asana"]
+
+
 def test_an_errand_session_sees_only_the_servers_it_was_given():
     # Account-level connectors (claude.ai Gmail and friends) attach themselves to ANY session the
     # CLI opens, and a headless one that tries to OAuth them has no browser and no user - sessions

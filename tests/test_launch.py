@@ -179,6 +179,15 @@ def test_every_launcher_points_at_a_file_that_is_actually_there(launcher):
         assert (REPO / name).exists(), f"{launcher} launches {name}, which is not in the repo"
 
 
+@pytest.mark.parametrize("door", ("Learn my voice", "Connect Google"))
+def test_every_double_click_door_exists_for_both_desks(door):
+    """A door built only for the Mac is no door at all on the desk he actually sits at. Google's
+    sign-in had `Connect Google.command` and nothing else, so when the sign-in expired the only
+    way back was a command line he does not work from - and the app told him to use one."""
+    assert (REPO / f"{door}.bat").exists(), f"{door} has no Windows door"
+    assert (REPO / f"{door}.command").exists(), f"{door} has no Mac door"
+
+
 def test_the_start_menu_shortcut_is_installed_pointing_at_the_launcher():
     """The one file whose output becomes a .lnk on his machine. Whatever it writes there is what
     a click will go on asking for, long after the code has moved on."""
