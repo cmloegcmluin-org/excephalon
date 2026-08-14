@@ -7,7 +7,7 @@ import pytest
 from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, StreamEvent
 
 from excephalon.sdk_session import (BrainUnavailable, SdkSession, _context_tokens, extract_text,
-                                needs_sign_in)
+                                needs_sign_in, open_sign_in)
 
 
 class FakeBlock:
@@ -30,6 +30,22 @@ def test_needs_sign_in_spots_a_dead_sign_in_anywhere_in_the_cause_chain():
     assert needs_sign_in(outer) is True
     assert needs_sign_in(BrainUnavailable("OAuth session expired and could not be refreshed")) is True
     assert needs_sign_in(BrainUnavailable("the turn failed: error_during_execution")) is False
+
+
+def test_open_sign_in_walks_the_user_to_the_claude_prompt_and_reports_failure_plainly():
+    # "ideally Excephalon should do more than just tell me what to do, but pop open whatever I
+    # need to do it and run it itself if possible." The terminal opens at the claude prompt; the
+    # signing in stays his. False on any failure, so the spoken line never claims an open door
+    # that is not there.
+    opened = []
+
+    assert open_sign_in(spawn=lambda command, **kw: opened.append(command)) is True
+    assert "claude" in " ".join(opened[0])
+
+    def refuse(command, **kw):
+        raise OSError("no console to be had")
+
+    assert open_sign_in(spawn=refuse) is False
 
 
 def test_extract_text_concatenates_text_blocks_within_a_message():

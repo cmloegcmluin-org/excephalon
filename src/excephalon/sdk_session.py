@@ -28,6 +28,30 @@ class BrainUnavailable(RuntimeError):
     """
 
 
+def open_sign_in(spawn=None):
+    """Open a terminal sitting at the `claude` prompt - the door to the sign-in - instead of only
+    reciting steps: "ideally Excephalon should do more than just tell me what to do, but pop open
+    whatever I need to do it and run it itself if possible." The signing in itself stays the
+    user's act (their account, approved in their browser); this walks them to the prompt, where
+    the signed-out CLI offers the login flow itself. True when the terminal opened, so the spoken
+    line can match what actually happened - a failed opener must never eat the reply."""
+    import subprocess
+
+    from excephalon import machine
+
+    try:
+        if machine.WINDOWS:
+            (spawn or subprocess.Popen)(["cmd", "/k", "claude"],
+                                        creationflags=subprocess.CREATE_NEW_CONSOLE)
+        else:
+            (spawn or subprocess.Popen)(
+                ["osascript", "-e", 'tell application "Terminal" to do script "claude"',
+                 "-e", 'tell application "Terminal" to activate'])
+        return True
+    except Exception:
+        return False
+
+
 def needs_sign_in(error):
     """Whether this brain failure is the machine's Claude sign-in being dead - the one failure a
     restart cannot fix and the user can, so the reply must say the fix rather than "ask me again"

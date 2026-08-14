@@ -46,6 +46,14 @@ DEFAULT_SIGN_IN_REPLY = (
     "expired. Open a terminal, type claude and press Enter, then type /login and press Enter, "
     "and sign in in the browser window that opens. Then restart me."
 )
+# When the app could open that terminal itself - "ideally Excephalon should do more than just
+# tell me what to do, but pop open whatever I need to do it and run it itself if possible" -
+# the reply matches what actually happened: the door is open, the signing in is his.
+DEFAULT_SIGN_IN_OPENED_REPLY = (
+    "I can't reach my mind: this machine's Claude sign-in has expired, and a restart won't fix "
+    "it. I've opened a terminal for you - type /login there if it isn't already offering the "
+    "sign-in, finish it in the browser window that opens, and then restart me."
+)
 # They ended a turn ("over") but said nothing in it. Rather than ignore them - which just makes them
 # repeat "over" wondering if they were heard - acknowledge that the turn registered and invite them on.
 DEFAULT_EMPTY_TURN_REPLY = "Go ahead."
@@ -294,6 +302,8 @@ class Conversation:
         farewell_reply=DEFAULT_FAREWELL_REPLY,
         error_reply=DEFAULT_ERROR_REPLY,
         sign_in_reply=DEFAULT_SIGN_IN_REPLY,
+        sign_in_opened_reply=DEFAULT_SIGN_IN_OPENED_REPLY,
+        sign_in_helper=None,
         suspend_reply=DEFAULT_SUSPEND_REPLY,
         resume_reply=DEFAULT_RESUME_REPLY,
         empty_turn_reply=DEFAULT_EMPTY_TURN_REPLY,
@@ -322,6 +332,11 @@ class Conversation:
         self._stray_goodbye = _goodbye_sentence(farewell_reply)
         self.error_reply = error_reply
         self.sign_in_reply = sign_in_reply
+        self.sign_in_opened_reply = sign_in_opened_reply
+        # Opens a terminal at the claude prompt when the sign-in is dead (sdk_session.open_sign_in,
+        # wired in __main__); None - the default, and every test - only recites the steps, so no
+        # suite run ever pops a console.
+        self._sign_in_helper = sign_in_helper
         self.suspend_reply = suspend_reply
         self.resume_reply = resume_reply
         self.empty_turn_reply = empty_turn_reply
@@ -808,8 +823,13 @@ class Conversation:
             self._console.evidence(f"(brain error: {_cause(exc)})")
             # A dead sign-in is the one cause "ask me again" cannot outwait and a restart cannot
             # fix - he restarted on exactly that advice and met the same wall. The fix is his to
-            # do, so the reply is the fix.
-            said = self.sign_in_reply if needs_sign_in(exc) else self.error_reply
+            # do, so the reply is the fix - and where the app can open the terminal itself, it
+            # does, and says so instead of reciting steps for a door already standing open.
+            if needs_sign_in(exc):
+                opened = self._sign_in_helper is not None and self._sign_in_helper()
+                said = self.sign_in_opened_reply if opened else self.sign_in_reply
+            else:
+                said = self.error_reply
             self._speak_reply(said)
             return Turn(heard=heard, said=said, error=True)
         think_time = time.monotonic() - think_start
