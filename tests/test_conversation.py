@@ -1234,6 +1234,47 @@ def test_a_brain_failure_speaks_plainly_and_keeps_the_cause_in_the_record():
     assert "RuntimeError" in kept  # and what kind, so a repeat is recognisable
 
 
+def test_a_dead_sign_in_is_answered_with_the_fix_not_with_try_again():
+    # "Something's broken in my head - give me a moment, then ask me again" was said about an
+    # expired Claude sign-in - a failure no moment and no restart fixes, so he restarted on that
+    # advice and met the same wall ("Something is broken in Excephalon's head right now, even
+    # after a restart"). The one brain failure the user can fix is answered with the fix.
+    from excephalon.sdk_session import BrainUnavailable
+
+    class SignedOutBrain:
+        def respond(self, utterance):
+            raise BrainUnavailable("authentication_failed")
+
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["hi"]), SignedOutBrain(), tts)
+
+    turn = convo.turn()
+
+    assert turn.error is True
+    assert "/login" in " ".join(tts.spoken)
+    assert convo.error_reply not in tts.spoken  # "ask me again" would be a lie here
+
+
+def test_a_requested_update_is_spoken_by_the_app_word_for_word_after_the_turn():
+    # The deep fix for one piece of news in two mouths: asked for an agent's update in a full
+    # sentence, the brain hands it over (deliver_update) instead of retelling it, and the app
+    # speaks the held copy word for word at the first opening - one teller, the exact words.
+    outbox = Outbox()
+    outbox.push("fixer: the drive link is fixed", about="fixer")
+    outbox.push("docs-sidebar: needs your call on the width", about="docs-sidebar")
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["what time is it", "goodbye entity"]), FakeBrain(), tts,
+                         outbox=outbox)
+
+    convo.turn()  # a roll call of two; both held in hand
+    outbox.request("fixer")  # what the brain's deliver_update tool records mid-turn
+    convo.turn()
+
+    spoken = "\n".join(tts.spoken)
+    assert "fixer: the drive link is fixed" in spoken  # word for word, from the app
+    assert "Still waiting: docs-sidebar." in spoken    # and what remains is named
+
+
 def test_the_error_line_is_spoken_under_its_own_leak_script_not_the_turns():
     # The wedge reply was once spoken while the turn's floor still held the mic, scripted with
     # the streamed reply - of which a wedge never streamed a word. Judged against that empty

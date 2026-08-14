@@ -46,6 +46,7 @@ class Outbox:
         self._lock = threading.Lock()
         self._spool = spool
         self._dropped = set()  # agents whose news was dropped since last collected - see drop()
+        self._requested = set()  # agents whose held news was asked spoken - see request()
         self.arrived = threading.Event()  # set while something is waiting to be spoken
         for held in self._spooled():  # last life's undelivered news, back in the queue
             # NOT composed, whoever wrote it: `composed` means "the brain that will be asked about
@@ -118,6 +119,21 @@ class Outbox:
         prunes its hand with these on its next pass."""
         with self._lock:
             taken, self._dropped = self._dropped, set()
+            return taken
+
+    def request(self, about):
+        """Ask that this agent's held news be SPOKEN at the next opening - the brain's way of
+        delivering a held update instead of retelling it in its own words, which produced two
+        versions of the same news 13 seconds apart. The request rides here because the news may
+        be in the queue or already drained into the conversation's hand; the holder collects
+        (`take_requested`) and speaks the item word for word."""
+        with self._lock:
+            self._requested.add(about)
+
+    def take_requested(self):
+        """Collect (and clear) the agents whose held news was requested spoken."""
+        with self._lock:
+            taken, self._requested = self._requested, set()
             return taken
 
     def spoken(self, news):

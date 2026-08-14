@@ -69,6 +69,7 @@ def _approved(desk, name, steps="look at it"):
     an idle state: approval dispatches on a thread of its own, and retiring while that thread is
     still writing the agent's log cannot move the file on Windows."""
     desk.present(name, steps)
+    desk._outbox.drain()  # its report reached him - approval is only legal on work he was shown
     desk.verdict(name, True)
     agent = desk._desked[name].agent
     _wait_for(lambda: len(agent.messages) >= 2 and desk._desked[name].state == "idle")
@@ -613,6 +614,45 @@ def test_an_agent_cannot_be_wrapped_up_over_work_he_has_not_ruled_on(tmp_path):
     desk.close()
 
 
+def test_no_approval_can_be_recorded_while_the_walkthrough_is_still_unspoken(tmp_path):
+    # The submission-feedback breach: its ready-for-your-eyes walkthrough sat queued unspoken, an
+    # ambiguous "yes" got recorded as approval, and the work merged without his eyes ever on it -
+    # "I never even accepted it; it was never presented to me to be validated." A verdict on work
+    # he has not been shown cannot exist, so approval is refused until the walkthrough is spoken.
+    import pytest
+
+    from excephalon.delivery import DeliveryError
+
+    logs = tmp_path / "agent-logs"
+    desk, outbox, _ = _desk(log_dir=logs)
+    desk.start("shipper", str(tmp_path / "wt"), "build the spinner")
+    assert _wait_for(lambda: bool(outbox))  # its report is queued - and stays queued, unheard
+
+    desk.present("shipper", "watch the spinner hold through the send")
+    with pytest.raises(DeliveryError):
+        desk.verdict("shipper", approved=True)
+
+    outbox.drain()  # the walkthrough reached him
+    desk.verdict("shipper", approved=True)  # now his yes can mean the work
+    desk.close()
+
+
+def test_a_rejection_stands_even_with_the_walkthrough_unspoken_and_drops_it(tmp_path):
+    # He can reject from his own looking (he is often already at the test instance); holding his
+    # rejection hostage to a walkthrough he no longer needs would be the app arguing with him.
+    # The stale walkthrough is dropped instead - his feedback has moved past it.
+    logs = tmp_path / "agent-logs"
+    desk, outbox, _ = _desk(log_dir=logs)
+    desk.start("shipper", str(tmp_path / "wt"), "build the spinner")
+    assert _wait_for(lambda: bool(outbox))  # the walkthrough is queued, unheard
+
+    desk.present("shipper", "watch the spinner")
+    desk.verdict("shipper", approved=False, feedback="the spinner still vanishes")
+
+    assert "shipper" not in {getattr(news, "about", None) for news in outbox.drain()}
+    desk.close()
+
+
 def test_an_agent_cannot_be_wrapped_up_while_its_news_has_not_reached_him(tmp_path):
     # The submission-feedback agent merged its work, its "Merged." report was queued - and the
     # wrap-up dropped that report unheard, so the landed feature read as lost: "clearly my
@@ -1063,6 +1103,33 @@ def test_presented_work_shows_in_the_digest_awaiting_a_verdict():
     desk.close()
 
 
+def test_the_digest_names_recently_wrapped_agents_so_their_names_still_resolve(tmp_path):
+    # "it couldn't figure out which agent I was talking about even though I was using the same
+    # name for it that it had been using" - briefed from the live fleet alone, the brain could
+    # not see that a wrapped agent had ever existed, and reconstructed its fate from stale memory
+    # ("That agent stalled on the merge") about work that had in fact merged.
+    import os
+    import time as _time
+
+    logs = tmp_path / "agent-logs"
+    logs.mkdir()
+    archive = tmp_path / "agent-logs-archive"
+    archive.mkdir()
+    (archive / "submission-feedback.log").write_text("old\n", encoding="utf-8")
+    (archive / "smart-grouping.log").write_text("new\n", encoding="utf-8")
+    past = _time.time() - 3600
+    os.utime(archive / "submission-feedback.log", (past, past))
+    desk, _, _ = _desk(log_dir=logs)
+
+    briefing = desk.digest()
+
+    assert "Recently wrapped up" in briefing
+    # Newest first, so the name he used a minute ago is the first one the brain sees.
+    assert briefing.index("smart-grouping") < briefing.index("submission-feedback")
+    assert "archive" in briefing
+    desk.close()
+
+
 def test_the_digest_says_when_presented_work_has_not_actually_reached_them_yet():
     # mark_ready fires when the announcement is COMPOSED; the announcement itself can then wait
     # in the queue for an hour. Briefed "presented, awaiting their verdict" across that gap, the
@@ -1078,6 +1145,19 @@ def test_the_digest_says_when_presented_work_has_not_actually_reached_them_yet()
     briefing = desk.digest()
     assert "presented, awaiting their verdict" not in briefing
     assert "has NOT reached them yet" in briefing
+    desk.close()
+
+
+def test_hand_over_news_marks_held_news_to_be_spoken_and_says_when_there_is_none():
+    # The brain's one honest way to answer "give me the update on X": the app speaks the held
+    # copy word for word. Retold in the brain's own words instead, the app then delivered its
+    # copy too - the same news twice, 13 seconds apart.
+    desk, outbox, _ = _desk()
+    outbox.push("fixer: ready for your eyes", about="fixer")
+
+    assert desk.hand_over_news("fixer") is True
+    assert outbox.take_requested() == {"fixer"}
+    assert desk.hand_over_news("nobody") is False  # nothing held: the brain answers, not the app
     desk.close()
 
 
