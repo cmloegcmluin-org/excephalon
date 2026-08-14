@@ -1255,6 +1255,33 @@ def test_a_dead_sign_in_is_answered_with_the_fix_not_with_try_again():
     assert convo.error_reply not in tts.spoken  # "ask me again" would be a lie here
 
 
+def test_a_dead_sign_in_opens_the_terminal_itself_when_it_can_and_says_so():
+    # "ideally Excephalon should do more than just tell me what to do, but pop open whatever I
+    # need to do it and run it itself if possible." With the helper wired (as __main__ wires it),
+    # the terminal opens and the reply matches the open door; if opening fails, the steps are
+    # spoken instead - never a claim of a door that is not there.
+    from excephalon.sdk_session import BrainUnavailable
+
+    class SignedOutBrain:
+        def respond(self, utterance):
+            raise BrainUnavailable("authentication_failed")
+
+    opened = []
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["hi"]), SignedOutBrain(), tts,
+                         sign_in_helper=lambda: opened.append(True) or True)
+
+    convo.turn()
+
+    assert opened == [True]
+    assert any("opened a terminal" in line for line in tts.spoken)
+
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["hi"]), SignedOutBrain(), tts, sign_in_helper=lambda: False)
+    convo.turn()
+    assert any("Open a terminal" in line for line in tts.spoken)  # the steps, since nothing opened
+
+
 def test_a_requested_update_is_spoken_by_the_app_word_for_word_after_the_turn():
     # The deep fix for one piece of news in two mouths: asked for an agent's update in a full
     # sentence, the brain hands it over (deliver_update) instead of retelling it, and the app

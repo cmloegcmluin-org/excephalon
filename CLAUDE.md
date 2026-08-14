@@ -472,9 +472,12 @@ total silence. Never match on the wording; the structure is what is true. Warmup
 that swallows it, into an app aside naming the one thing he can do, because a warmup that raises
 is an app that never opens and a traceback with no console to land in. Mid-session, a failure
 that is the machine's sign-in being dead (`needs_sign_in`, keyed on the CLI's own tokens) is
-answered with the FIX - run claude, /login, restart - never with the generic "give me a moment,
-then ask me again": that was said about an expired sign-in, he restarted on that advice, and met
-the same wall ("Something is broken in Excephalon's head right now, even after a restart"). `memory.py` is the profile, what Excephalon has learned, and the lexicon - and `StandingWatch`,
+answered with the door already open - `open_sign_in` pops a terminal at the claude prompt
+("ideally Excephalon should do more than just tell me what to do, but pop open whatever I need"),
+the reply matching whether it actually opened, the signing in staying his - never with the
+generic "give me a moment, then ask me again": that was said about an expired sign-in, he
+restarted on that advice, and met the same wall ("Something is broken in Excephalon's head right
+now, even after a restart"). `memory.py` is the profile, what Excephalon has learned, and the lexicon - and `StandingWatch`,
 which is why none of it can go stale again: every turn it re-reads his standing context, compares
 it whole against what the brain has been told, and puts whatever MOVED in front of the brain,
 then recomposes the persona so the next session starts from the current world. Nothing in it names

@@ -18,6 +18,7 @@ from excephalon import machine
 from excephalon.actions import fleet_actions
 from excephalon.agent_desk import AgentDesk
 from excephalon.brain_sdk import DEFAULT_PERSONA, SdkBrain
+from excephalon.sdk_session import open_sign_in
 from excephalon.console import Console
 from excephalon.conversation import Conversation
 from excephalon.errands import ErrandRunner, load_services, services_note
@@ -528,6 +529,9 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
             Conversation(
                 stt, brain, tts, outbox=outbox, interrupt=barge_in,
                 console=console, read_pause=read_pause, timings=timings,
+                # A dead sign-in answers with the door already open: a terminal at the claude
+                # prompt, not just the steps to get one.
+                sign_in_helper=open_sign_in,
                 # The live truth about the fleet AND his Enhancements list, re-read from the file
                 # every turn: the boot persona's copy of the list went stale and got DISBELIEVED
                 # ("I can't see the Enhancements list"), while nothing carried in these per-turn
