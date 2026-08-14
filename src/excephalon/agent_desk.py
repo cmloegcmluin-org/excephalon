@@ -532,6 +532,8 @@ class AgentDesk:
         restart) is just its leftover log, and the move alone closes it. A worktree that refuses
         removal (dirty, locked) is left for a maintenance sweep - the wrap-up itself never fails
         over it. Only a cleanly finished agent ticks its item: a DIED one never marks its ask done."""
+        held = getattr(self._outbox, "owed_about", None)
+        owed = held() if held is not None else set()
         with self._lock:
             entry = self._desked.get(name)
             if entry is not None and entry.state not in ("idle", "failed"):
@@ -544,6 +546,15 @@ class AgentDesk:
             # it is just a file to file away.
             if (entry is not None and entry.state == "idle"
                     and entry.delivery.stage != "landing"):
+                return False
+            # And a wrap-up is illegal while anything about this agent is still waiting to be
+            # spoken. The drop further down is for news he has MOVED PAST - but a merged report
+            # he was never told is the loop's last word, and the wrap-up once dropped exactly
+            # that unheard: the landed feature then read as lost ("clearly my feature just got
+            # dropped in a black hole and Excephalon somehow doesn't know anything about it").
+            # Scoped to desked agents: a leftover log with no agent behind it still closes, its
+            # stale news still dropped.
+            if entry is not None and name in owed:
                 return False
             # Judged and taken off the desk in ONE hold, and the judgement carried out rather than
             # re-read. The state was read twice - here, and again after a `git worktree remove` -

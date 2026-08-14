@@ -60,9 +60,10 @@ def _desk(outbox=None, made=None, hold=None, roster=None, monitor=None, log_dir=
 
 
 def _approved(desk, name, steps="look at it"):
-    """Walk one agent through the review loop to an approved verdict - the state a wrap-up is
-    now only legal from, since a tab closed over unruled work delivered a feature behind his
-    back. Tests about the wrap-up ITSELF start here rather than restating the loop.
+    """Walk one agent through the review loop to an approved verdict, its news all spoken - the
+    state a wrap-up is now only legal from, since a tab closed over unruled work delivered a
+    feature behind his back, and a tab closed over an UNSPOKEN merge report dropped the one fact
+    he was owed. Tests about the wrap-up ITSELF start here rather than restating the loop.
 
     The wait is for the landing instruction to have been DELIVERED and answered, not merely for
     an idle state: approval dispatches on a thread of its own, and retiring while that thread is
@@ -71,6 +72,7 @@ def _approved(desk, name, steps="look at it"):
     desk.verdict(name, True)
     agent = desk._desked[name].agent
     _wait_for(lambda: len(agent.messages) >= 2 and desk._desked[name].state == "idle")
+    desk._outbox.drain()  # the landing report reached him; nothing about the agent is still owed
 
 
 def _wait_for(predicate, timeout=2.0):
@@ -522,12 +524,14 @@ def test_a_failed_agent_never_ticks_its_enhancement_done(tmp_path):
     # Retiring a DIED agent still wraps up its leftovers, but its ask is NOT answered - ticking it
     # off would record a failure as a completion, the checklist's worst possible lie.
     ticked = []
-    desk = AgentDesk(Outbox(), agent_factory=lambda *a, **k: _DyingAgent(),
+    outbox = Outbox()
+    desk = AgentDesk(outbox, agent_factory=lambda *a, **k: _DyingAgent(),
                      log_dir=tmp_path / "agent-logs",
                      complete_enhancement=lambda item: ticked.append(item) or True)
     desk.start("doomed", "/tmp/wt", "attempt it", enhancement="Better voice")
     assert _wait_for(lambda: bool(desk._desked) and desk._desked["doomed"].state == "failed")
 
+    outbox.drain()  # the death notice reached him - a wrap-up never buries unspoken news
     assert desk.retire("doomed") is True
 
     assert ticked == []
@@ -552,7 +556,8 @@ def test_the_enhancement_tag_survives_a_restart_and_still_ticks(tmp_path):
     first.close()
 
     ticked = []
-    revived = AgentDesk(Outbox(),
+    revived_outbox = Outbox()
+    revived = AgentDesk(revived_outbox,
                         agent_factory=lambda name, cwd, decide, **k: FakeAgent(name, cwd, decide),
                         state_path=state, log_dir=logs,
                         complete_enhancement=lambda item: ticked.append(item) or True)
@@ -560,6 +565,7 @@ def test_the_enhancement_tag_survives_a_restart_and_still_ticks(tmp_path):
 
     # The revived agent carries the approved verdict across the restart, so its wrap-up is legal.
     assert _wait_for(lambda: revived._desked["voice"].state == "idle")
+    revived_outbox.drain()  # its picked-back-up report reached him
     assert revived.retire("voice") is True
     assert ticked == ["Better voice"]  # and the revived agent still ticks it
 
@@ -602,7 +608,33 @@ def test_an_agent_cannot_be_wrapped_up_over_work_he_has_not_ruled_on(tmp_path):
     assert _wait_for(lambda: len(builder.messages) >= 2
                      and desk._desked["builder"].state == "idle")
 
-    assert desk.retire("builder") is True  # approved: the wrap-up is the mechanical last leg
+    outbox.drain()  # the landing report reached him
+    assert desk.retire("builder") is True  # approved and told: the wrap-up is the last leg
+    desk.close()
+
+
+def test_an_agent_cannot_be_wrapped_up_while_its_news_has_not_reached_him(tmp_path):
+    # The submission-feedback agent merged its work, its "Merged." report was queued - and the
+    # wrap-up dropped that report unheard, so the landed feature read as lost: "clearly my
+    # feature just got dropped in a black hole and Excephalon somehow doesn't know anything
+    # about it". The drop is for news he has moved past; a report he was never told is the
+    # loop's last word, so the wrap-up waits for it to be spoken.
+    logs = tmp_path / "agent-logs"
+    desk, outbox, _ = _desk(log_dir=logs)
+    desk.start("lander", str(tmp_path / "wt"), "land the spinner fix")
+    assert _wait_for(lambda: bool(outbox))
+    outbox.drain()
+    desk.present("lander", "watch the spinner hold through the whole send")
+    desk.verdict("lander", True)
+    agent = desk._desked["lander"].agent
+    assert _wait_for(lambda: len(agent.messages) >= 2
+                     and desk._desked["lander"].state == "idle")
+
+    assert desk.retire("lander") is False       # its merge report is still waiting to be spoken
+    assert (logs / "lander.log").exists()       # nothing was archived over the debt
+
+    outbox.drain()                              # the report reached him
+    assert desk.retire("lander") is True
     desk.close()
 
 
@@ -1349,6 +1381,7 @@ def test_a_landing_agents_silence_clock_keeps_running():
 
     # It finished its landing TURN but has not merged: the clock must still be running.
     assert monitor.finished == ["lander"]  # done() was NOT called a second time
+    outbox.drain()  # its report reached him, so the wrap-up is legal
     assert desk.retire("lander")
     assert monitor.finished == ["lander", "lander"]  # retirement is what stops the clock
     desk.close()

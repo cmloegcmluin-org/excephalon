@@ -248,8 +248,8 @@ def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement
     async def close_agent_tab(args):
         name = str(args["name"]).strip()
         if not desk.retire(name):
-            return _say(f"Couldn't close {name} - it is still working, or there is no tab by "
-                        "that name.")
+            return _say(f"Couldn't close {name} - it is still working, still has news waiting "
+                        "to be spoken, or there is no tab by that name. Try again shortly.")
         return _say(f"Closed {name}'s tab.")
 
     @tool("mark_ready", "Record that an agent's finished work is standing up for the user to SEE, "
