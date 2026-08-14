@@ -6,7 +6,8 @@ from pathlib import Path
 import pytest
 from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, StreamEvent
 
-from excephalon.sdk_session import BrainUnavailable, SdkSession, _context_tokens, extract_text
+from excephalon.sdk_session import (BrainUnavailable, SdkSession, _context_tokens, extract_text,
+                                needs_sign_in)
 
 
 class FakeBlock:
@@ -17,6 +18,18 @@ class FakeBlock:
 class FakeMsg:
     def __init__(self, content):
         self.content = content
+
+
+def test_needs_sign_in_spots_a_dead_sign_in_anywhere_in_the_cause_chain():
+    # The observed failure was two layers deep: the retry's "authentication_failed" wrapping the
+    # first ask's "the turn failed: success". Either layer alone must be enough - and an ordinary
+    # brain failure must NOT be, or every hiccup would send the user off to sign in again.
+    outer = BrainUnavailable("authentication_failed")
+    outer.__cause__ = BrainUnavailable("the turn failed: success")
+
+    assert needs_sign_in(outer) is True
+    assert needs_sign_in(BrainUnavailable("OAuth session expired and could not be refreshed")) is True
+    assert needs_sign_in(BrainUnavailable("the turn failed: error_during_execution")) is False
 
 
 def test_extract_text_concatenates_text_blocks_within_a_message():

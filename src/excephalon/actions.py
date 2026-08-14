@@ -32,7 +32,8 @@ SERVER = "excephalon"
 # The names the model calls, and the only tools its options allow: the conversational brain has no
 # Bash, no Read, no way to wander a repo mid-turn - investigation belongs to the agents it starts.
 TOOL_NAMES = tuple(f"mcp__{SERVER}__{name}"
-                   for name in ("start_agent", "tell_agent", "set_next_agent_model",
+                   for name in ("start_agent", "tell_agent", "deliver_update",
+                                "set_next_agent_model",
                                 "file_improvement", "revise_enhancement", "check_off_enhancement",
                                 "update_persona", "drop_instruction", "remember", "forget_memory",
                                 "close_agent_tab", "mark_ready", "rename_agent",
@@ -146,6 +147,20 @@ def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement
         if drop_held is not None:
             drop_held(name)
         return _say(f"Delivered to {name}.")
+
+    @tool("deliver_update", "Hand over an agent's HELD update: the app speaks it word for word "
+          "the moment your reply ends. Call this whenever the user asks for an agent's update "
+          "and the briefing says news for that agent is still waiting to be spoken - and never "
+          "retell or summarize a held update in your own words; that is how the user heard two "
+          "versions of the same news 13 seconds apart. After calling, say at most one short "
+          "lead-in sentence, never the update's content.", {"name": str})
+    async def deliver_update(args):
+        name = str(args["name"]).strip()
+        if not desk.hand_over_news(name):
+            return _say(f"Nothing is waiting to be spoken about {name} - answer from the fleet "
+                        "briefing, and say plainly if it holds no answer.")
+        return _say(f"{name}'s update will be spoken the moment your reply ends - do not repeat "
+                    "or summarize its content.")
 
     @tool("set_next_agent_model", "Set which model and effort the NEXT agent starts on, from the "
           "user's words ('fable on max', 'back to opus'). Agents already working keep the model "
@@ -291,7 +306,8 @@ def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement
         foreman.consider(str(args["name"]).strip(), str(args["question"]))
         return _say("The foreman has it - it will settle it with the agent, or say what's needed.")
 
-    tools = [start_agent, tell_agent, set_next_agent_model, file_improvement, revise_item,
+    tools = [start_agent, tell_agent, deliver_update, set_next_agent_model, file_improvement,
+             revise_item,
              check_off_item_tool, run_errand, update_persona, drop_instruction_tool, rename_agent,
              remember, forget_memory, close_agent_tab, mark_ready, record_verdict, ask_foreman]
     return create_sdk_mcp_server(name=SERVER, tools=tools), tools

@@ -10,6 +10,7 @@ from excephalon.links import as_spoken
 from excephalon.phrases import canonical as _canonical
 from excephalon.phrases import ends_with_command as _ends_with_command
 from excephalon.phrases import wakes as _wakes
+from excephalon.sdk_session import needs_sign_in
 from excephalon.waiting import chosen, roll_call
 
 # Both names, as the window's wake phrases already carried both: the app says "Excephalon" every
@@ -36,6 +37,15 @@ DEFAULT_FAREWELL_REPLY = "Be seeing you."
 # through the insulation. The cause now goes to the session record instead (console.evidence):
 # durable, diagnosable, and never spoken or shown.
 DEFAULT_ERROR_REPLY = "Something's broken in my head - give me a moment, then ask me again."
+# The one brain failure the user can fix and a restart cannot: the machine's Claude sign-in died.
+# "Ask me again" was said about exactly this, he restarted on that advice, and met the same wall
+# ("Something is broken in Excephalon's head right now, even after a restart"). Plain steps, no
+# jargon: he is not technical outside code, and this is the whole of what there is to do.
+DEFAULT_SIGN_IN_REPLY = (
+    "I can't reach my mind, and a restart won't fix this one: this machine's Claude sign-in has "
+    "expired. Open a terminal, type claude and press Enter, then type /login and press Enter, "
+    "and sign in in the browser window that opens. Then restart me."
+)
 # They ended a turn ("over") but said nothing in it. Rather than ignore them - which just makes them
 # repeat "over" wondering if they were heard - acknowledge that the turn registered and invite them on.
 DEFAULT_EMPTY_TURN_REPLY = "Go ahead."
@@ -283,6 +293,7 @@ class Conversation:
         resumes=DEFAULT_RESUMES,
         farewell_reply=DEFAULT_FAREWELL_REPLY,
         error_reply=DEFAULT_ERROR_REPLY,
+        sign_in_reply=DEFAULT_SIGN_IN_REPLY,
         suspend_reply=DEFAULT_SUSPEND_REPLY,
         resume_reply=DEFAULT_RESUME_REPLY,
         empty_turn_reply=DEFAULT_EMPTY_TURN_REPLY,
@@ -310,11 +321,13 @@ class Conversation:
         # the record-scrub both remove, so it is only ever heard when the app itself closes.
         self._stray_goodbye = _goodbye_sentence(farewell_reply)
         self.error_reply = error_reply
+        self.sign_in_reply = sign_in_reply
         self.suspend_reply = suspend_reply
         self.resume_reply = resume_reply
         self.empty_turn_reply = empty_turn_reply
         self._unwritten = []  # lines spoken in its name that it didn't compose; told to it next turn
         self._waiting = []  # news drained from the outbox and not delivered yet
+        self._requested = set()  # agents whose held news the brain asked spoken (deliver_update)
         self._announced = ()  # the news the roll call last read out, so fresh news re-reads
         self._clock = clock
         self._dormant_after = dormant_after
@@ -475,11 +488,27 @@ class Conversation:
         self._waiting, superseded = _newest_per_agent(self._waiting)
         for stale in superseded:
             self._superseded(stale)  # its durable copy goes with it, or a restart revives it
+        # What the brain asked spoken (deliver_update) - collected every pass, kept until its
+        # item can go out, and pruned to what is actually held, so a request for news that has
+        # since been dropped dies quietly instead of waiting forever.
+        wanted = getattr(self._outbox, "take_requested", None)
+        if wanted is not None:
+            self._requested |= wanted()
+        self._requested &= {getattr(held, "about", None) for held in self._waiting}
         if not self._waiting:
             self._announced = ()  # nothing outstanding, so the next single item is simply spoken
             self._update_offered = False
             return
         if self._they_are_talking():
+            return
+        place = next((at for at, held in enumerate(self._waiting)
+                      if getattr(held, "about", None) in self._requested), None)
+        if place is not None:
+            # The brain handed this update over rather than retelling it: the app speaks the held
+            # copy word for word the moment the reply ends - one teller, the exact words, instead
+            # of two versions of the same news 13 seconds apart.
+            self._requested.discard(getattr(self._waiting[place], "about", None))
+            self._speak_held(place)
             return
         if self._dormant():
             # They are off doing something else; news breaking in "out of nowhere" is a jolt.
@@ -519,6 +548,21 @@ class Conversation:
         if spoken is not None:
             spoken(news)
 
+    def _speak_held(self, place):
+        """Speak the held update at `place` word for word, then name any others still waiting -
+        the one shape a held update ever reaches him in, whoever set it in motion (his pick, his
+        go-ahead, or the brain handing it over with deliver_update)."""
+        news = self._waiting.pop(place)
+        said = news if not self._waiting else f"{news}\n\n{roll_call(self._waiting)}"
+        self._announced = self._roll()
+        self._console.heads_up(said)
+        # Known only when the whole utterance is the brain's own sentence; with a roll call
+        # appended, part of what they hear is app-authored and the ledger must carry it.
+        self._say(said, record=False,
+                  known=getattr(news, "composed", False) and said == news)
+        self._delivered(news)
+        return said
+
     def _hand_over(self, heard, place=0):
         """Say the update at `place`, then name any others still waiting. The one delivery path.
 
@@ -529,16 +573,7 @@ class Conversation:
         for that content; the content is the answer, and the app owes it rather than asking the
         brain to remember to include it. Anything more than a bare go-ahead is still a turn of
         his to answer, and rides into the reply as it always did."""
-        news = self._waiting.pop(place)
-        said = news if not self._waiting else f"{news}\n\n{roll_call(self._waiting)}"
-        self._announced = self._roll()
-        self._console.heads_up(said)
-        # Known only when the whole utterance is the brain's own sentence; with a roll call
-        # appended, part of what they hear is app-authored and the ledger must carry it.
-        self._say(said, record=False,
-                  known=getattr(news, "composed", False) and said == news)
-        self._delivered(news)
-        return Turn(heard=heard, said=said)
+        return Turn(heard=heard, said=self._speak_held(place))
 
     def _superseded(self, news):
         """Tell the outbox this news will never be spoken - newer news about the same agent has
@@ -771,7 +806,10 @@ class Conversation:
             # the line it is about to speak, and the leak is dropped as Excephalon's own.
             release_floor()
             self._console.evidence(f"(brain error: {_cause(exc)})")
-            said = self.error_reply
+            # A dead sign-in is the one cause "ask me again" cannot outwait and a restart cannot
+            # fix - he restarted on exactly that advice and met the same wall. The fix is his to
+            # do, so the reply is the fix.
+            said = self.sign_in_reply if needs_sign_in(exc) else self.error_reply
             self._speak_reply(said)
             return Turn(heard=heard, said=said, error=True)
         think_time = time.monotonic() - think_start

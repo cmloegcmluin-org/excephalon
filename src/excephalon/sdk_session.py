@@ -28,6 +28,21 @@ class BrainUnavailable(RuntimeError):
     """
 
 
+def needs_sign_in(error):
+    """Whether this brain failure is the machine's Claude sign-in being dead - the one failure a
+    restart cannot fix and the user can, so the reply must say the fix rather than "ask me again"
+    (he restarted on that advice and met the same wall). Keyed on the tokens every shape of that
+    failure has carried - the authentication_failed subtype, the OAuth-expiry sentence, the
+    signed-out /login notice - across the whole cause chain, since the retry wraps the original."""
+    seen = []
+    while error is not None and error not in seen:
+        seen.append(error)
+        error = getattr(error, "__cause__", None)
+    text = " ".join(str(err) for err in seen).casefold()
+    return any(token in text for token in
+               ("authentication", "oauth", "/login", "logged in", "signed out"))
+
+
 def _cli_refusal(message):
     """The CLI's own refusal, or None when this is really the model talking.
 

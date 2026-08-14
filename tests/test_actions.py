@@ -10,6 +10,7 @@ class FakeDesk:
         self.started = []
         self.told = []
         self.news_dropped = []
+        self.handed = []
         self.chosen = []
         self.retired = []
         self.renamed = []
@@ -26,6 +27,10 @@ class FakeDesk:
 
     def drop_news(self, name):
         self.news_dropped.append(name)
+
+    def hand_over_news(self, name):
+        self.handed.append(name)
+        return name in self._known
 
     def choose(self, model=None, effort=None):
         self.chosen.append((model, effort))
@@ -260,6 +265,29 @@ def test_telling_an_agent_drops_its_held_news_because_he_has_moved_past_it():
     _call(tools["tell_agent"], name="gdoc-export", message="strip the extra suggestions")
 
     assert desk.news_dropped == ["gdoc-export"]
+
+
+def test_delivering_an_update_hands_the_held_news_to_the_app_to_speak():
+    # "give me the update on the smart grouping" went to the brain, which retold the update in
+    # its own words - and the app then spoke its held copy too, 13 seconds later. The tool is the
+    # brain's one honest answer: the app speaks the held copy, the brain adds nothing.
+    desk = FakeDesk()
+    tools = _tools(desk)
+
+    said = _call(tools["deliver_update"], name="gdoc-export")
+
+    assert desk.handed == ["gdoc-export"]
+    assert "do not repeat" in said.lower()
+
+
+def test_delivering_an_update_with_nothing_held_says_to_answer_from_the_briefing():
+    desk = FakeDesk()
+    tools = _tools(desk)
+
+    said = _call(tools["deliver_update"], name="nobody-here")
+
+    assert "nothing is waiting" in said.lower()
+    assert "briefing" in said.lower()
 
 
 def test_telling_a_missing_agent_drops_nothing():

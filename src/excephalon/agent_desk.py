@@ -408,6 +408,18 @@ class AgentDesk:
         if drop is not None:
             drop(name)
 
+    def hand_over_news(self, name):
+        """Ask that this agent's held news be spoken at the next opening - True when there was
+        news to hand over. The brain calls this instead of retelling a held update in its own
+        words: retold, the app then delivered its held copy too, and the user heard two versions
+        of the same news 13 seconds apart."""
+        held = getattr(self._outbox, "owed_about", None)
+        request = getattr(self._outbox, "request", None)
+        if held is None or request is None or name not in held():
+            return False
+        request(name)
+        return True
+
     def roster(self):
         """(name, state, task) for each agent, newest state - what the roster file is written from."""
         with self._lock:
@@ -431,16 +443,30 @@ class AgentDesk:
     def verdict(self, name, approved, feedback=""):
         """Record the user's verdict on presented work, and set the mechanical consequence going:
         approval sends the agent to land it, rejection carries the feedback back. The Delivery
-        refuses a verdict on work never presented - the loop's whole point."""
+        refuses a verdict on work never presented - the loop's whole point.
+
+        And no APPROVAL can be recorded while the agent's walkthrough is still waiting to be
+        spoken: an ambiguous "yes" was once recorded as approval of work whose ready-for-your-eyes
+        steps had never reached the user, and it merged without his eyes ever on it - "I never
+        even accepted it; it was never presented to me to be validated." A rejection stands either
+        way - he often judges from his own looking - and it drops the now-stale walkthrough, since
+        his feedback has moved past it."""
+        held = getattr(self._outbox, "owed_about", None)
+        owed = held() if held is not None else set()
         with self._lock:
             entry = self._desked.get(name)
             if entry is None:
                 raise DeliveryError(f"no agent called {name} is at the desk")
+            if approved and name in owed:
+                raise DeliveryError(
+                    f"{name}'s walkthrough is still waiting to be spoken - the user cannot have "
+                    "approved work they were never shown, so deliver its update first")
             entry.delivery.verdict(approved)
         self._persist()
         if approved:
             self._dispatch(name, APPROVED_LAND_IT)
         else:
+            self.drop_news(name)
             self._dispatch(name, REJECTED_TRY_AGAIN.format(feedback=feedback))
 
     def delivery_stage(self, name):
@@ -497,7 +523,23 @@ class AgentDesk:
         if orphans:
             fleet += ("\nTabs still open from agents no longer at the desk - close_agent_tab "
                       "closes one: " + ", ".join(orphans))
+        recently = self._recently_wrapped()
+        if recently:
+            fleet += ("\nRecently wrapped up, each log in the archive (run_errand can read "
+                      "one): " + ", ".join(recently))
         return fleet
+
+    def _recently_wrapped(self, count=3):
+        """The newest wrapped-up agents, off their archived logs - so a name the user is still
+        using resolves even after its tab closed. Briefed from the live fleet alone, the brain
+        could not even see that a wrapped agent had existed, and reconstructed its fate from
+        stale memory instead ("That agent stalled on the merge") - about work that had in fact
+        merged. Newest first and a few only; the archive goes back months."""
+        if self._archive_dir is None or not self._archive_dir.exists():
+            return []
+        logs = sorted(self._archive_dir.glob("*.log"),
+                      key=lambda log: log.stat().st_mtime, reverse=True)
+        return [log.stem for log in logs[:count]]
 
     @staticmethod
     def _delivery_truth(name, entry, owed):

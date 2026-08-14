@@ -372,7 +372,10 @@ mid-task told to pick back up, one recorded mid-landing told to settle the merge
 in the foreground (a backgrounded watch once ended the turn, nothing re-engages an idle agent, and
 the merged report never existed) — its digest also names tabs whose log files linger with no agent
 behind them, because the window draws a tab per log file and a brain briefed from the desk alone
-once could not see the tab the user was pointing at, and it claims "presented, awaiting their
+once could not see the tab the user was pointing at; it names the recently wrapped agents too,
+logs in the archive, because asked about one by the very name it had been using all day the brain
+could not see that the agent had ever existed ("it couldn't figure out which agent I was talking
+about"); and it claims "presented, awaiting their
 verdict" only once nothing about that agent is still waiting to be spoken (`Outbox.owed_about`,
 the spool's view of the whole debt): `mark_ready` fires when the walkthrough is COMPOSED, that
 walkthrough then sat in hand for over an hour, and the brain briefed across the gap told him "I
@@ -400,7 +403,11 @@ pointer to the machine-wide engineering law file when one exists (`law_path`, ho
 and reply-format hook break a coding agent. `delivery.py` is the review loop as code — building →
 presented-with-steps → landing, a verdict impossible on work never presented, approval dispatching
 the landing and rejection the feedback mechanically, so the loop's order is a rule rather than a
-persona habit; `steps.py` decides
+persona habit — and since the walkthrough itself can wait unspoken, `desk.verdict` refuses any
+APPROVAL while it does: an ambiguous "yes" was once recorded as approval of steps that had never
+been spoken, and the work merged without his eyes ever on it ("I never even accepted it; it was
+never presented to me to be validated"). A rejection stands either way — he often judges from his
+own looking — and drops the now-stale walkthrough; `steps.py` decides
 what a streamed message becomes there — the agent's words as messages, and its commands, diffs and
 output as the machinery under them, capped at both ends with what was dropped counted in place.
 `waiting.py` is what happens when several agents finish at once: they are read out numbered and
@@ -409,7 +416,12 @@ the APP's to answer, never the brain's: the first update is spoken word for word
 still held is NAMED after it (`_hand_over`, the one delivery path) - answering a go-ahead with the
 numbered list and "Which first?" is answering the answer to a question with the question again
 ("I already said yes to the Highdeas-submission-feedback one. Why would you ask me this? You sound
-insane."); the list decides ORDER, not whether. Word for word, because folded into a fresh
+insane."); the list decides ORDER, not whether. The brain reaches that same path with its
+deliver_update tool when a full-sentence ask names an agent whose news is held (a full sentence
+never reads as a pick - see MOST_WORDS): the app speaks the held copy word for word the moment
+the reply ends, because the brain retelling held news in its own words put "two versions of the
+same message in quick succession" thirteen seconds apart, and the app then delivered its copy
+anyway. Word for word, because folded into a fresh
 turn the content twice went missing - a "Yes" answered with "Go check it out then" - while
 the news was marked delivered either way, so what the agent reported reached him not at
 all ("that's not an update"). Anything more than a bare
@@ -458,7 +470,11 @@ message carrying an `error` at all, and a result flagged `is_error` with nothing
 the second is the one the retry hits, and catching only the first bought a turn that passed in
 total silence. Never match on the wording; the structure is what is true. Warmup is the one caller
 that swallows it, into an app aside naming the one thing he can do, because a warmup that raises
-is an app that never opens and a traceback with no console to land in. `memory.py` is the profile, what Excephalon has learned, and the lexicon - and `StandingWatch`,
+is an app that never opens and a traceback with no console to land in. Mid-session, a failure
+that is the machine's sign-in being dead (`needs_sign_in`, keyed on the CLI's own tokens) is
+answered with the FIX - run claude, /login, restart - never with the generic "give me a moment,
+then ask me again": that was said about an expired sign-in, he restarted on that advice, and met
+the same wall ("Something is broken in Excephalon's head right now, even after a restart"). `memory.py` is the profile, what Excephalon has learned, and the lexicon - and `StandingWatch`,
 which is why none of it can go stale again: every turn it re-reads his standing context, compares
 it whole against what the brain has been told, and puts whatever MOVED in front of the brain,
 then recomposes the persona so the next session starts from the current world. Nothing in it names

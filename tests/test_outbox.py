@@ -148,6 +148,17 @@ def test_a_spoolless_outbox_answers_owed_about_from_its_queue():
     assert outbox.owed_about() == {"fixer"}
 
 
+def test_a_requested_hand_over_is_collected_once_by_the_holder():
+    # The brain's way of DELIVERING a held update instead of retelling it: the request rides the
+    # outbox to wherever the news is held, and the holder speaks that item word for word. Two
+    # versions of the same update, 13 seconds apart, is what retelling produced.
+    outbox = Outbox()
+    outbox.request("fixer")
+
+    assert outbox.take_requested() == {"fixer"}
+    assert outbox.take_requested() == set()  # collected once; the next pass starts clean
+
+
 def test_news_that_survived_a_restart_is_app_authored_to_the_new_brain(tmp_path):
     # `composed` means "the brain that will be asked about this wrote it" - and the brain that
     # wrote it died with the last process. Carried over as composed, a spooled line skipped the
