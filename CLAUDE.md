@@ -348,9 +348,15 @@ machine wearing an unreadable name) and SPOKEN as "localhost port 5210" - scheme
 left to the screen - because spoken more literally it came out as letters and punctuation
 points read one at a time ("quite unnatural"); an em-dash the brain glues to an address gets
 its own space before the voice judges the words, or the address is read raw with the next
-word welded on - and the address match itself stops at an em- or en-dash (no URL carries one),
-so the page's link ends where the address does instead of swallowing "the dash and the
-following word" into it. Its mirror `as_written`
+word welded on - and EVERY link shape stops at an em- or en-dash, path as well as address,
+because scoping that to URLs alone left "...aug14-20.html—and send your routine" still swallowing
+"the dash and the following word" into the link a day later; an ordinary hyphen is a name's own
+character and stays. A path wearing the `file://` scheme an agent writes for Claude's own app is
+recognized, WRITTEN as the plain path (`bare_path`, percent-escapes and all) since this window
+draws and opens that already, and opened on the machine rather than handed to a browser. A file
+is SPOKEN by name only when the name is one a person says - "it's in profile.md" - and as "the
+file" otherwise, because "weekly-schedule-aug14-20.html" read aloud is a string of letters and
+numbers. Its mirror `as_written`
 exists because the brain has only one channel: everything it writes is spoken, so an
 instruction to say an address naturally is obeyed in the only place it can be - the text -
 and "click through at localhost port 8752" reached the screen as words nobody could click.
