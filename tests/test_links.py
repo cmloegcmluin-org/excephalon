@@ -179,6 +179,67 @@ def test_a_local_address_is_spoken_as_localhost_port_number():
     assert as_spoken("It is at https://example.com/x") == f"It is at {SPOKEN_ADDRESS}"
 
 
+def test_a_file_url_is_written_as_the_plain_path_it_names():
+    # "it gave me a link to a file on my filesystem... it's not a clickable link... the 'file:///'
+    # prefix is rendered, but it's of no visual value to me as a human here." Agents write the
+    # scheme because a link in Claude's own desktop app needs one; this window needs the path,
+    # which it already draws as a link and already opens.
+    assert (as_written("double-click file:///C:/Users/ada/notes/plan.html to open it")
+            == "double-click C:/Users/ada/notes/plan.html to open it")
+    assert as_written("it is at file:///Users/ada/notes/plan.html") == \
+        "it is at /Users/ada/notes/plan.html"
+    assert as_written("file:///C:/My%20Notes/plan.html") == "C:/My Notes/plan.html"
+
+
+def test_a_file_url_is_openable_and_the_page_draws_it_as_one_link(tmp_path):
+    from excephalon.links import link_parts
+
+    assert link_in("file:///C:/Users/ada/notes/plan.html") == "file:///C:/Users/ada/notes/plan.html"
+    parts = link_parts("open file:///C:/Users/ada/notes/plan.html now")
+    assert {"text": "file:///C:/Users/ada/notes/plan.html",
+            "link": "file:///C:/Users/ada/notes/plan.html"} in parts
+
+    real = tmp_path / "plan.html"
+    real.write_text("<h1>the week</h1>", encoding="utf-8")
+    shown, opened = [], []
+    open_link("file:///" + str(real).replace("\\", "/"), browser=opened.append, shell=shown.append)
+
+    assert shown == [str(real)]  # opened on this machine, by whatever owns .html
+    assert opened == []          # never handed to a browser as a URL
+
+
+def test_a_file_nobody_would_say_aloud_is_spoken_as_the_file():
+    # "the agent read the whole file name aloud instead of saying 'the file' or something natural
+    # like a human would have said here" - "weekly-schedule-aug14-20.html" comes out as a string
+    # of letters and numbers. A name made of plain words still gets said, because "it's in
+    # profile.md" is exactly how a person says that one.
+    assert as_spoken("double-click file:///C:/Users/ada/weekly-schedule-aug14-20.html to open it") \
+        == "double-click the file to open it"
+    assert as_spoken(r"I put it in C:\Users\ada\runtime\profile.md.") == "I put it in profile.md."
+    assert as_spoken(r"It is in C:\Users\ada\runtime\session-20260813-220738.log.") == \
+        "It is in the file."
+
+
+def test_a_dash_glued_to_a_PATH_stays_out_of_the_link_as_well_as_an_address():
+    # The same failure in the flavor the first fix missed: web addresses stopped at an em-dash,
+    # but a Windows path went on matching \S+, so "...aug14-20.html—and send your L-sit routine"
+    # swallowed the dash and the word after it. "while you claimed you fixed the bug with links
+    # followed by dashes, it did the same thing again, and the ' — and' is part of the link
+    # still." An ordinary hyphen is still a name's own character; an em- or en-dash is the
+    # sentence's punctuation, on every shape of link.
+    from excephalon.links import link_parts
+
+    glued = r"C:\Users\ada\notes\weekly-schedule-aug14-20.html—and send your routine"
+    assert link_in(glued.split()[0]) == r"C:\Users\ada\notes\weekly-schedule-aug14-20.html"
+    parts = link_parts("Double-click to open " + glued)
+    assert {"text": r"C:\Users\ada\notes\weekly-schedule-aug14-20.html",
+            "link": r"C:\Users\ada\notes\weekly-schedule-aug14-20.html"} in parts
+    assert any(part["text"].startswith("—and") and not part["link"] for part in parts)
+
+    assert link_in("/Users/ada/notes/plan.html–then") == "/Users/ada/notes/plan.html"
+    assert link_in("file:///C:/Users/ada/plan.html—open") == "file:///C:/Users/ada/plan.html"
+
+
 def test_a_dash_glued_to_an_address_stays_out_of_the_page_link_too():
     # "because no space was placed after the URL before the dash, the dash and the following word
     # got grouped into the URL link." A web address has no em- or en-dash - that is the sentence's

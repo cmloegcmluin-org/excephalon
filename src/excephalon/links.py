@@ -18,6 +18,7 @@ import re
 import subprocess
 import webbrowser
 from pathlib import Path, PureWindowsPath
+from urllib.parse import unquote
 
 from excephalon import machine
 
@@ -32,17 +33,38 @@ from excephalon import machine
 # sentence. Asking which machine this is would only make `C:\...` on the Mac - and the whole
 # suite's paths with it - stop being what it plainly is. A POSIX path needs TWO segments, so a
 # lone "/shrug" stays prose.
-# A web address stops at an em- or en-dash: no URL carries one (it would be percent-encoded), and
-# the brain glues them straight onto addresses - "at http://localhost:5210/—drag the notes" - so
-# a dash swallowed into the match took the following word into the link with it ("because no
-# space was placed after the URL before the dash, the dash and the following word got grouped
-# into the URL link"). Path shapes keep their dashes: a folder really can be named with one.
-_URL_BODY = r"[^\s–—]"
-_BARE_LOCAL = rf"(?:localhost|127\.0\.0\.1):\d{{2,5}}(?:/{_URL_BODY}*)?"
-_POSIX_PATH = r"/[^/\s]+/\S*"
+# EVERY shape stops at an em- or en-dash. The brain glues them straight onto whatever it just
+# named - "at http://localhost:5210/—drag the notes", "...aug14-20.html—and send your routine" -
+# and a dash swallowed into the match takes the following word into the link with it ("the ' —
+# and' is part of the link still"). An ordinary hyphen is a name's own character and stays; an
+# em- or en-dash is the sentence's punctuation everywhere, in a URL (which would percent-encode
+# one) and in a path alike. Scoping this to web addresses alone is what left the path case
+# broken after the first fix.
+#
+# `file:///C:/...` is a path wearing a scheme - what an agent writes, because a link in the
+# desktop Claude app needs one. Here it is neither clickable nor readable: unrecognized, it was
+# drawn as plain text and read out character by character.
+_BODY = r"[^\s–—]"
+_BARE_LOCAL = rf"(?:localhost|127\.0\.0\.1):\d{{2,5}}(?:/{_BODY}*)?"
+_POSIX_PATH = rf"/[^/\s–—]+/{_BODY}*"
+_FILE_URL = rf"file://{_BODY}+"
 _LINK = re.compile(
-    rf"https?://{_URL_BODY}+|{_BARE_LOCAL}|[A-Za-z]:[\\/]\S+|\\\\[^\s\\]+\\\S+|{_POSIX_PATH}")
+    rf"https?://{_BODY}+|{_FILE_URL}|{_BARE_LOCAL}|[A-Za-z]:[\\/]{_BODY}+|\\\\[^\s\\–—]+\\{_BODY}+"
+    rf"|{_POSIX_PATH}")
 _IS_BARE_LOCAL = re.compile(_BARE_LOCAL)
+_IS_FILE_URL = re.compile(_FILE_URL)
+
+
+def bare_path(target):
+    """A `file://` URL as the plain path it names, or `target` unchanged.
+
+    `file:///C:/My%20Notes/x.html` -> `C:/My Notes/x.html`: the scheme dropped, the slash before a
+    drive letter dropped with it, and the percent-escapes read back as the characters they stand
+    for. That plain form is what this module already draws as a link and already opens."""
+    if not _IS_FILE_URL.fullmatch(target):
+        return target
+    path = unquote(target[len("file://"):])
+    return path[1:] if re.match(r"/[A-Za-z]:[\\/]", path) else path
 
 # Excephalon writes these inside sentences, so the full stop after a filename is the sentence's and
 # the bracket around an address is the sentence's too.
@@ -130,6 +152,12 @@ def _widest(words, index, exists):
 # it would leave a sentence that no longer says there IS anything to open, and they have already
 # objected to hearing less than what was written.
 SPOKEN_ADDRESS = "the link"
+SPOKEN_FILE = "the file"
+
+# A file name a person would say aloud: plain words, no digits, short. "profile.md" is how he says
+# that one; "weekly-schedule-aug14-20.html" read out is a string of letters and numbers, and he
+# asked for "the file" instead ("or something natural like a human would have said here").
+_SAYABLE_NAME = re.compile(r"[A-Za-z][A-Za-z-]{0,23}(?:\.[A-Za-z]{1,4})?")
 
 # Identifiers nobody should hear read out: transcription mangles them, and the user's standing
 # instruction is to put them on screen instead - which the screen already does; only the AUDIO
@@ -154,6 +182,9 @@ _SPELLED_LOCAL = re.compile(r"\b(localhost|127\.0\.0\.1)[ ,]+port[ ]+(\d(?:[ -]?
 # is.
 _NUMERIC_LOCALHOST = re.compile(r"\b127\.0\.0\.1\b")
 
+# A path wearing the `file://` scheme, anywhere in a sentence - written back as the plain path.
+_WRITTEN_FILE_URL = re.compile(_FILE_URL)
+
 
 def as_written(text):
     """`text` as the screen keeps it: a spoken-out local address put back as an address, and the
@@ -166,6 +197,7 @@ def as_written(text):
     localhost and 127.0.0.1 open the same server."""
     text = _SPELLED_LOCAL.sub(lambda found: f"{found.group(1)}:{re.sub(r'[ -]', '', found.group(2))}",
                               text)
+    text = _WRITTEN_FILE_URL.sub(lambda found: bare_path(found.group(0)), text)
     return _NUMERIC_LOCALHOST.sub("localhost", text)
 
 
@@ -216,7 +248,14 @@ def _stand_in(target):
         return f"localhost port {local['port']}"
     if target.startswith(("http://", "https://")):
         return SPOKEN_ADDRESS
-    return PureWindowsPath(target).name or SPOKEN_ADDRESS
+    name = PureWindowsPath(bare_path(target)).name
+    if not name:
+        return SPOKEN_ADDRESS
+    # A name a person would actually say gets said - "it's in profile.md" is exactly how he says
+    # that one. A name carrying digits or running long is not speech: read out,
+    # "weekly-schedule-aug14-20.html" is a string of letters and numbers, and he asked for "the
+    # file" instead. The screen still shows the real name, which is where a name is read anyway.
+    return name if _SAYABLE_NAME.fullmatch(name) else SPOKEN_FILE
 
 
 def _on_this_machine(where):
@@ -242,7 +281,9 @@ def open_link(target, *, browser=webbrowser.open, shell=_on_this_machine):
     if _IS_BARE_LOCAL.fullmatch(target):
         browser(f"http://{target}")  # written the human way; the browser still needs its scheme
         return
-    where = Path(target)
+    # A `file://` URL is a path in a costume: opened on this machine like any other path, never
+    # handed to a browser, which would show the file instead of the app that owns it.
+    where = Path(bare_path(target))
     while not where.exists() and where.parent != where:
         where = where.parent
     if where.exists():
