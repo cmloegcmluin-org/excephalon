@@ -18,8 +18,8 @@ class FakeDesk:
         self.verdicts = []
         self._known = set(known)
 
-    def start(self, name, cwd, task, enhancement=None):
-        self.started.append((name, cwd, task, enhancement))
+    def start(self, name, cwd, task, enhancement=None, project=None):
+        self.started.append((name, cwd, task, enhancement, project))
 
     def send(self, name, message):
         self.told.append((name, message))
@@ -101,7 +101,7 @@ def test_start_agent_puts_a_fresh_agent_on_the_task(tmp_path):
 
     said = _call(tools["start_agent"], path=str(worktree), task="fix the drive link")
 
-    assert desk.started == [("fix-drive-link", str(worktree), "fix the drive link", None)]
+    assert desk.started == [("fix-drive-link", str(worktree), "fix the drive link", None, None)]
     assert "fix-drive-link" in said
 
 
@@ -116,7 +116,8 @@ def test_start_agent_tags_the_agent_with_the_enhancement_it_takes_on(tmp_path):
     _call(tools["start_agent"], path=str(worktree), task="wire the neural voice",
           enhancement="Better voice")
 
-    assert desk.started == [("better-voice", str(worktree), "wire the neural voice", "Better voice")]
+    assert desk.started == [("better-voice", str(worktree), "wire the neural voice", "Better voice",
+                             None)]
 
 
 def test_start_agent_leaves_the_tag_empty_when_no_enhancement_is_named(tmp_path):
@@ -129,7 +130,7 @@ def test_start_agent_leaves_the_tag_empty_when_no_enhancement_is_named(tmp_path)
 
     _call(tools["start_agent"], path=str(worktree), task="a one-off fix", enhancement="  ")
 
-    assert desk.started == [("one-off", str(worktree), "a one-off fix", None)]
+    assert desk.started == [("one-off", str(worktree), "a one-off fix", None, None)]
 
 
 def test_start_agent_makes_the_worktree_when_the_path_is_new(tmp_path):
@@ -542,6 +543,36 @@ def test_checking_off_by_id_flips_the_tick_and_a_missing_id_is_said():
     assert "no item" in said_no.lower()
 
 
+def test_checking_off_a_project_card_task_reaches_that_card():
+    # "for the three tasks Excephalon took care of today, it did not check them off in the
+    # Projects tab. please make Excephalon behave that way moving forward." Two of the three
+    # lived on the Highdeas card, which no tool could reach - every tick landed on the
+    # Enhancements card or nowhere.
+    desk, ticked = FakeDesk(), []
+    tools = _tools(desk, check_off=lambda item_id, **where: ticked.append(
+        (item_id, where.get("heading"))) or True)
+
+    said = _call(tools["check_off_enhancement"], id=7, project="Highdeas")
+
+    assert ticked == [(7, "Project: Highdeas")]
+    assert "#7 on Highdeas is checked off" in said
+
+
+def test_start_agent_carries_the_project_card_its_item_lives_on(tmp_path):
+    # The card rides with the agent from the start, like the item itself, so the wrap-up's tick
+    # lands where the task actually lives.
+    desk = FakeDesk()
+    worktree = tmp_path / "spinner-fix"
+    worktree.mkdir()
+    tools = _tools(desk, resolve=lambda target: [str(worktree)], prepare=lambda path: None)
+
+    _call(tools["start_agent"], path=str(worktree), task="hold the spinner",
+          enhancement="#7 the spinner holds", project="Highdeas")
+
+    assert desk.started == [("spinner-fix", str(worktree), "hold the spinner",
+                             "#7 the spinner holds", "Highdeas")]
+
+
 def test_a_feature_request_for_another_app_is_not_filed_on_his_own_list():
     # "No, you fucker. This is the second time you've done this. If I ask you for a feature on
     # anything other than yourself, you're supposed to go out and do it with a Claude agent. The
@@ -593,7 +624,7 @@ def test_an_agent_can_be_started_under_the_name_he_asks_for(tmp_path):
     said = _call(tools["start_agent"], path=str(worktree), task="add the checkbox",
                  name="the auto-play fix")
 
-    assert desk.started == [("the-auto-play-fix", str(worktree), "add the checkbox", None)]
+    assert desk.started == [("the-auto-play-fix", str(worktree), "add the checkbox", None, None)]
     assert "the-auto-play-fix" in said
 
 
