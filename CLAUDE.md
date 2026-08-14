@@ -387,8 +387,12 @@ ticked only for a cleanly finished agent, never a died one, because a wrong tick
 list's record of ask and answer. `retire` also REFUSES an agent holding work he has not ruled on -
 a tab was once closed over a finished feature and he met it as a fait accompli ("are you saying
 you delivered a feature without me verifying it first?"), so a verdict is the only state a
-wrap-up is legal from, exactly as it is for the push - and it drops that agent's queued news on
-the way out, since an update about closed work arrives as a surprise rather than news. Every task the desk hands out carries the standing
+wrap-up is legal from, exactly as it is for the push - and it REFUSES a desked agent whose news
+is still waiting to be spoken (`Outbox.owed_about`): the wrap-up drops the agent's queued news
+on the way out, which is right for news he has moved past ("that feature is already done") and
+was catastrophic for a merged report he had never heard - the submission-feedback agent's
+"Merged." died in exactly that drop, and the landed feature read as lost ("clearly my feature
+just got dropped in a black hole and Excephalon somehow doesn't know anything about it"). Every task the desk hands out carries the standing
 rules (rebase before presenting, present for the user's EYES, the engineering law in brief) and a
 pointer to the machine-wide engineering law file when one exists (`law_path`, home-relative in
 `__main__` so nothing personal enters the source); agents load their repo's checked-in CLAUDE.md

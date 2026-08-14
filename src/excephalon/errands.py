@@ -32,7 +32,9 @@ PROMPT = (
     "[Errand from Excephalon on the user's behalf - no user is in this exchange. Do this small "
     "chore now, using your tools - files here, or the user's own connected services - and reply "
     "with a short plain report (a sentence or two) of what you found or did, or exactly what "
-    "stopped you:\n{chore}]"
+    "stopped you. The app's own records are under runtime/: live agent logs in "
+    "runtime/agent-logs/, wrapped-up agents' logs in runtime/agent-logs-archive/, conversation "
+    "transcripts in runtime/transcripts/.\n{chore}]"
 )
 
 

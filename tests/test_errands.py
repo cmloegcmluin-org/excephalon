@@ -50,6 +50,18 @@ def test_a_chore_runs_quietly_and_its_outcome_becomes_an_event():
     assert report == "Moved the log into the archive."
 
 
+def test_the_errand_prompt_maps_where_the_apps_own_records_live():
+    # Asked to read "the most recently archived agent logs", the errand hand looked in the live
+    # folder, found only the one live log there, and answered "there are no archived logs" while
+    # three sat in runtime/agent-logs-archive/. A helper with file tools gets told where the
+    # app's records actually are, so a lookup fails only when the record is truly absent.
+    from excephalon.errands import PROMPT
+
+    assert "runtime/agent-logs-archive/" in PROMPT
+    assert "runtime/agent-logs/" in PROMPT
+    assert "runtime/transcripts/" in PROMPT
+
+
 def test_a_failed_errand_is_news_not_silence():
     class BrokenSession:
         def ask(self, prompt, on_message=None, on_text=None):
