@@ -37,6 +37,26 @@ def test_tick_checks_an_enhancement_off_by_number(tmp_path, monkeypatch):
         main(["tick", "99"])  # no such item: say so, change nothing
 
 
+def test_tick_reaches_a_project_card_when_one_is_named(tmp_path, monkeypatch):
+    # "it did not check them off in the Projects tab" - the CLI door could only ever tick the
+    # Enhancements card, so a finished Highdeas task had no terminal-side tick at all. The card
+    # name resolves by stem through the same saver the brain's tool uses.
+    from excephalon import cards, memory
+
+    profile = tmp_path / "profile.md"
+    profile.write_text("## Enhancements he wants\n- [ ] #7 louder voice\n\n"
+                       "## Project: Highdeas\n- [ ] #7 the spinner holds\n", encoding="utf-8")
+    monkeypatch.setattr(cards, "complete_enhancement_by_id",
+                        lambda item_id, **where: memory.complete_enhancement_by_id(
+                            item_id, path=profile, **where))
+
+    assert main(["tick", "7", "Highdeas"]) == 0
+
+    text = profile.read_text(encoding="utf-8")
+    assert "- [x] #7 the spinner holds" in text
+    assert "- [ ] #7 louder voice" in text  # the Enhancements card's #7 stands untouched
+
+
 def test_drop_instruction_rewrites_the_card_through_its_own_saver(tmp_path, monkeypatch):
     from excephalon import cards
 

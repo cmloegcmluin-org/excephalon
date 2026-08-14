@@ -25,6 +25,7 @@ import time
 from pathlib import Path
 
 from excephalon.delivery import Delivery, DeliveryError
+from excephalon.memory import PROJECT_PREFIX
 from excephalon.models import DEFAULT_EFFORT, DEFAULT_MODEL, describe
 from excephalon.relay import notice
 from excephalon.steps import SAID, render
@@ -166,7 +167,8 @@ REJECTED_TRY_AGAIN = (
 class _Desked:
     """One agent and what it's doing, so the roster can say more than just a name."""
 
-    def __init__(self, agent, cwd, task, log, *, model, effort, delivery=None, enhancement=None):
+    def __init__(self, agent, cwd, task, log, *, model, effort, delivery=None, enhancement=None,
+                 project=None):
         self.agent = agent
         self.cwd = cwd
         self.task = task
@@ -174,10 +176,14 @@ class _Desked:
         self.model = model  # what it was started on, so a revival can put it back on the same
         self.effort = effort
         self.delivery = delivery or Delivery()  # where this work stands in the review loop
-        # The Enhancements-list item this agent is here to complete, verbatim, or None. Carried
-        # from the start rather than matched from the task later, so the tick lands on exactly the
-        # line the user wrote - a wrong tick would corrupt the list's record of ask and answer.
+        # The list item this agent is here to complete, verbatim, or None. Carried from the start
+        # rather than matched from the task later, so the tick lands on exactly the line the user
+        # wrote - a wrong tick would corrupt the list's record of ask and answer. `project` names
+        # the Projects-tab card the item lives on ("Highdeas"); None means his Enhancements card -
+        # the three tasks a whole afternoon delivered were left unticked on their cards because
+        # only the Enhancements card could ever be ticked.
         self.enhancement = enhancement
+        self.project = project
         self.state = "starting"
         self.last_heard = None  # when it last said anything at all, step or reply
         self.last_word = None  # the last thing it said back, trimmed for the roster
@@ -226,10 +232,11 @@ class AgentDesk:
         self._lock = threading.Lock()
         self._threads = []
 
-    def start(self, name, cwd, task, enhancement=None):
+    def start(self, name, cwd, task, enhancement=None, project=None):
         """Put a fresh agent on `task` in `cwd`. Returns immediately; the agent's reply arrives in
-        the Outbox when it lands. `enhancement`, when given, is the Enhancements-list item this
-        agent is completing - ticked off its list when the agent is retired.
+        the Outbox when it lands. `enhancement`, when given, is the list item this agent is
+        completing - ticked off its card when the agent is retired - and `project` names the
+        Projects-tab card that item lives on ("Highdeas"), with None meaning his Enhancements card.
 
         The standing rule rides along with the task itself - not with every later message, since
         the session keeps it, and repeating it would be most of what the agent's tab is made of."""
@@ -237,7 +244,7 @@ class AgentDesk:
         with self._lock:
             self._desked[name] = _Desked(agent, cwd, task, self._open_log(name),
                                          model=self._model, effort=self._effort,
-                                         enhancement=enhancement)
+                                         enhancement=enhancement, project=project)
         self._dispatch(name, task + STANDING_RULE + self._law_note())
 
     def _law_note(self):
@@ -337,7 +344,8 @@ class AgentDesk:
                                  self._open_log(name), model=model, effort=effort,
                                  delivery=Delivery(entry.get("delivery") or "building",
                                                    entry.get("steps")),
-                                 enhancement=entry.get("enhancement"))
+                                 enhancement=entry.get("enhancement"),
+                                 project=entry.get("project"))
                 desked.recorded_session = session  # what the next persist writes until it speaks
                 desked.state = "idle"
                 self._desked[name] = desked
@@ -633,14 +641,18 @@ class AgentDesk:
                 # The tick's own miss report used to be thrown away, and the user met the result
                 # cold: work merged, log archived, and the ticket still open with nobody told -
                 # "as far as I know it's still open work." A tick that cannot land (or is
-                # rightly withheld from a died agent) is NEWS, not a silent shrug.
+                # rightly withheld from a died agent) is NEWS, not a silent shrug. The tick goes
+                # to the card the item RIDES FROM - a Projects-tab card as readily as the
+                # Enhancements card, since a whole afternoon's Highdeas tasks were delivered and
+                # left standing open ("it did not check them off in the Projects tab").
+                where = {"heading": PROJECT_PREFIX + entry.project} if entry.project else {}
                 ticked = (finished_cleanly and self._complete_enhancement is not None
-                          and self._complete_enhancement(entry.enhancement))
+                          and self._complete_enhancement(entry.enhancement, **where))
                 if not ticked:
                     self._outbox.push(
-                        f"{name} is wrapped up, but its Enhancements item did not get checked "
-                        "off - settle that item by hand (check_off_enhancement by its number, "
-                        "or tell the user why it stays open).", about=name)
+                        f"{name} is wrapped up, but its list item did not get checked "
+                        "off - settle that item by hand (check_off_enhancement by its number "
+                        "and card, or tell the user why it stays open).", about=name)
             self._finished(name)  # a landing agent's clock runs until here; a retired one is off it
             self._persist()
         return True
@@ -775,7 +787,8 @@ class AgentDesk:
                  "session_id": getattr(entry.agent, "session_id", None) or entry.recorded_session,
                  "state": entry.state, "model": entry.model, "effort": entry.effort,
                  "delivery": entry.delivery.stage, "steps": entry.delivery.steps,
-                 "enhancement": entry.enhancement}
+                 "enhancement": entry.enhancement,
+                 "project": entry.project}
                 for name, entry in self._desked.items()
             ]
         self._state_path.parent.mkdir(parents=True, exist_ok=True)

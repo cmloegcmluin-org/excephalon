@@ -20,8 +20,8 @@ from pathlib import Path
 from claude_agent_sdk import create_sdk_mcp_server, tool
 
 from excephalon.delivery import DeliveryError
-from excephalon.memory import (append_enhancement, append_learned, drop_persona_instruction,
-                           forget_learned, save_persona_instruction,
+from excephalon.memory import (PROJECT_PREFIX, append_enhancement, append_learned,
+                           drop_persona_instruction, forget_learned, save_persona_instruction,
                            complete_enhancement_by_id, revise_enhancement)
 from excephalon.models import resolve as resolve_model
 from excephalon.tailing import safe_name
@@ -101,14 +101,17 @@ def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement
           "path of the worktree to work in (a new path gets a new worktree cut from current "
           "origin/main). `task` is the user's requirements, passed on faithfully and completely - "
           "every constraint they stated. `enhancement` is optional: when this agent is taking on "
-          "an item from the user's Enhancements list, pass that item's exact text so it ticks "
-          "itself off the list when the work lands; leave it out for any other work.",
-          {"path": str, "task": str, "enhancement": str, "name": str})
+          "an item from one of the user's lists, pass that item's exact text so it ticks itself "
+          "off when the work lands - and when the item lives on a Projects-tab card rather than "
+          "the Enhancements card, pass that card's name as `project` (e.g. 'Highdeas'). Leave "
+          "both out for any other work.",
+          {"path": str, "task": str, "enhancement": str, "project": str, "name": str})
     async def start_agent(args):
         paths = resolve(str(args["path"]))
         if not paths:
             return _say("I couldn't find any sessions to drive there.")
         enhancement = str(args.get("enhancement") or "").strip() or None
+        project = str(args.get("project") or "").strip() or None
         # The name he asked for, when he asked for one: "call it the auto-play fix". Only for a
         # single agent - one name cannot cover a fan-out - and it labels the agent, never the
         # worktree, which is git's to name.
@@ -119,7 +122,7 @@ def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement
                 prepare(path)
             name = asked or Path(path).name
             desk.start(name, path, str(args.get("task") or default_task),
-                       enhancement=enhancement)
+                       enhancement=enhancement, project=project)
             started.append(name)
         return _say(f"Started {', '.join(started)} on {desk.running_on()}.")
 
@@ -201,13 +204,19 @@ def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement
             return _say(f"No item carries #{args['id']} - check the number on the tab.")
         return _say(f"Rewrote #{args['id']}.")
 
-    @tool("check_off_enhancement", "Mark one Enhancements-list item DONE by its #id, the moment "
-          "the thing it asks for is finished - never by rewriting its words. The tick flips; the "
-          "number and the words stay.", {"id": int})
+    @tool("check_off_enhancement", "Mark one list item DONE by its #id, the moment the thing it "
+          "asks for is finished - never by rewriting its words. The tick flips; the number and "
+          "the words stay. `project` is the Projects-tab card the item lives on (e.g. "
+          "'Highdeas'); leave it out for the Enhancements card. An afternoon's finished tasks "
+          "once sat unticked on their cards because only the Enhancements card was reachable.",
+          {"id": int, "project": str})
     async def check_off_item_tool(args):
-        if not check_off(int(args["id"])):
-            return _say(f"No item carries #{args['id']} - check the number on the tab.")
-        return _say(f"#{args['id']} is checked off.")
+        project = str(args.get("project") or "").strip()
+        where = {"heading": f"{PROJECT_PREFIX}{project}"} if project else {}
+        card = f" on {project}" if project else ""
+        if not check_off(int(args["id"]), **where):
+            return _say(f"No item carries #{args['id']}{card} - check the number on the tab.")
+        return _say(f"#{args['id']}{card} is checked off.")
 
     @tool("update_persona", "Record a lasting change to how YOU behave - a standing instruction "
           "about how you talk or act - when the user tells you to work differently from now on (not "

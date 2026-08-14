@@ -29,6 +29,7 @@ from pathlib import Path
 
 from excephalon.memory import (
     DEFAULT_PERSONA_ADDITIONS_PATH,
+    PROJECT_PREFIX,
     complete_enhancement_by_id,
     instruction_rows,
     load_persona_additions,
@@ -100,25 +101,36 @@ def main(argv=None):
         save_persona_additions(kept, DEFAULT_PERSONA_ADDITIONS_PATH)
         print(f"dropped {len(argv) - 1}; the card now holds {len(kept.splitlines())} rows")
         return 0
-    if argv[:1] == ["tick"] and len(argv) == 2:
-        if complete_enhancement_by_id(int(argv[1])):
-            print(f"#{argv[1]} checked off")
+    if argv[:1] == ["tick"] and len(argv) in (2, 3):
+        if _tick(argv[1], argv[2] if len(argv) == 3 else None):
             return 0
-        raise SystemExit(f"no open Enhancements item carries #{argv[1]} - nothing was changed")
-    if argv[:1] == ["retire"] and len(argv) in (2, 4) and (len(argv) == 2 or argv[2] == "--tick"):
+        raise SystemExit(f"no open item carries #{argv[1]}"
+                         + (f" on {argv[2]}" if len(argv) == 3 else "")
+                         + " - nothing was changed")
+    if argv[:1] == ["retire"] and len(argv) in (2, 4, 5) and (len(argv) == 2 or argv[2] == "--tick"):
         # The tick goes FIRST: a wrap-up whose ticket never got settled is the failure this
         # command exists to end, so it is not left to a second command anyone can forget.
-        if len(argv) == 4:
-            if not complete_enhancement_by_id(int(argv[3])):
-                raise SystemExit(f"no open Enhancements item carries #{argv[3]} - nothing done")
-            print(f"#{argv[3]} checked off")
+        if len(argv) >= 4:
+            if not _tick(argv[3], argv[4] if len(argv) == 5 else None):
+                raise SystemExit(f"no open item carries #{argv[3]} - nothing done")
         done = retire(argv[1])
         print(f"{argv[1]}: " + (", ".join(done) if done else "nothing to wrap up"))
         return 0
     print("usage: python -m excephalon.cards drop-instruction <unique fragment>...\n"
-          "       python -m excephalon.cards tick <enhancement number>\n"
-          "       python -m excephalon.cards retire <agent> [--tick <enhancement number>]")
+          "       python -m excephalon.cards tick <number> [<project card>]\n"
+          "       python -m excephalon.cards retire <agent> [--tick <number> [<project card>]]")
     return 2
+
+
+def _tick(number, project):
+    """One item checked off by number - on a Projects-tab card when one is named, the Enhancements
+    card otherwise, exactly as the brain's own check_off_enhancement resolves it. An afternoon's
+    finished Highdeas tasks sat unticked because every door here reached only the one card."""
+    where = {"heading": PROJECT_PREFIX + project} if project else {}
+    if not complete_enhancement_by_id(int(number), **where):
+        return False
+    print(f"#{number}" + (f" on {project}" if project else "") + " checked off")
+    return True
 
 
 if __name__ == "__main__":

@@ -385,9 +385,13 @@ the fleet's one archive (`runtime/agent-logs-archive/`, a SIBLING of the live fo
 log is outside what the roster globs and can never come back as a tab — `tailing.archive_dir` names
 it in one place, shared with the window's own close button), the Enhancements item it was completing
 ticked off the user's list, its session closed, its worktree removed. That item rides with the
-agent from `start` (the brain passes it to `start_agent` when the work is one off the list) and is
+agent from `start` (the brain passes it to `start_agent` when the work is one off a list) and is
 ticked only for a cleanly finished agent, never a died one, because a wrong tick would corrupt the
-list's record of ask and answer. `retire` also REFUSES an agent holding work he has not ruled on -
+list's record of ask and answer. The CARD rides along too (`project`, the Projects-tab card the
+item lives on, None meaning the Enhancements card), because every tick could once land only on the
+Enhancements card and an afternoon's three delivered tasks sat open on their cards ("it did not
+check them off in the Projects tab") — check_off_enhancement and the CLI's `tick` take the card
+name the same way. `retire` also REFUSES an agent holding work he has not ruled on -
 a tab was once closed over a finished feature and he met it as a fait accompli ("are you saying
 you delivered a feature without me verifying it first?"), so a verdict is the only state a
 wrap-up is legal from, exactly as it is for the push - and it REFUSES a desked agent whose news

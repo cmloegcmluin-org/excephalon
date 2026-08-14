@@ -521,6 +521,25 @@ def test_retiring_an_agent_ticks_off_the_enhancement_it_was_completing(tmp_path)
     desk.close()
 
 
+def test_retiring_ticks_the_item_on_the_project_card_it_rode_from(tmp_path):
+    # "for the three tasks Excephalon took care of today, it did not check them off in the
+    # Projects tab" - two of the three lived on the Highdeas card, and every tick could only ever
+    # land on the Enhancements card. The card rides with the agent from the start, like the item.
+    ticked = []
+    desk, outbox, _ = _desk(log_dir=tmp_path / "agent-logs",
+                            complete=lambda item, **where: ticked.append(
+                                (item, where.get("heading"))) or True)
+    desk.start("spinner", "/tmp/wt", "hold the spinner through the send",
+               enhancement="#7 submitting to google drive", project="Highdeas")
+    assert _wait_for(lambda: bool(outbox))
+    _approved(desk, "spinner")
+
+    assert desk.retire("spinner") is True
+
+    assert ticked == [("#7 submitting to google drive", "Project: Highdeas")]
+    desk.close()
+
+
 def test_a_failed_agent_never_ticks_its_enhancement_done(tmp_path):
     # Retiring a DIED agent still wraps up its leftovers, but its ask is NOT answered - ticking it
     # off would record a failure as a completion, the checklist's worst possible lie.
