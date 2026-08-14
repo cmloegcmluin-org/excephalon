@@ -345,7 +345,9 @@ machine wearing an unreadable name) and SPOKEN as "localhost port 5210" - scheme
 left to the screen - because spoken more literally it came out as letters and punctuation
 points read one at a time ("quite unnatural"); an em-dash the brain glues to an address gets
 its own space before the voice judges the words, or the address is read raw with the next
-word welded on. Its mirror `as_written`
+word welded on - and the address match itself stops at an em- or en-dash (no URL carries one),
+so the page's link ends where the address does instead of swallowing "the dash and the
+following word" into it. Its mirror `as_written`
 exists because the brain has only one channel: everything it writes is spoken, so an
 instruction to say an address naturally is obeyed in the only place it can be - the text -
 and "click through at localhost port 8752" reached the screen as words nobody could click.

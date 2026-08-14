@@ -32,10 +32,16 @@ from excephalon import machine
 # sentence. Asking which machine this is would only make `C:\...` on the Mac - and the whole
 # suite's paths with it - stop being what it plainly is. A POSIX path needs TWO segments, so a
 # lone "/shrug" stays prose.
-_BARE_LOCAL = r"(?:localhost|127\.0\.0\.1):\d{2,5}(?:/\S*)?"
+# A web address stops at an em- or en-dash: no URL carries one (it would be percent-encoded), and
+# the brain glues them straight onto addresses - "at http://localhost:5210/—drag the notes" - so
+# a dash swallowed into the match took the following word into the link with it ("because no
+# space was placed after the URL before the dash, the dash and the following word got grouped
+# into the URL link"). Path shapes keep their dashes: a folder really can be named with one.
+_URL_BODY = r"[^\s–—]"
+_BARE_LOCAL = rf"(?:localhost|127\.0\.0\.1):\d{{2,5}}(?:/{_URL_BODY}*)?"
 _POSIX_PATH = r"/[^/\s]+/\S*"
 _LINK = re.compile(
-    rf"https?://\S+|{_BARE_LOCAL}|[A-Za-z]:[\\/]\S+|\\\\[^\s\\]+\\\S+|{_POSIX_PATH}")
+    rf"https?://{_URL_BODY}+|{_BARE_LOCAL}|[A-Za-z]:[\\/]\S+|\\\\[^\s\\]+\\\S+|{_POSIX_PATH}")
 _IS_BARE_LOCAL = re.compile(_BARE_LOCAL)
 
 # Excephalon writes these inside sentences, so the full stop after a filename is the sentence's and
@@ -44,9 +50,17 @@ _LEADING, _TRAILING = "\"'<([{", ".,;:!?\"'>)]}"
 
 
 def link_in(word):
-    """What this one word opens, or None."""
+    """What this one word opens, or None. A word that OPENS with an address and runs on into an
+    em- or en-dash ("http://localhost:5210/—drag") is that address with the sentence's own
+    punctuation glued on: the address is the link, and the dash with whatever follows stays
+    prose - `link_parts` already draws any leftover after a link as plain text."""
     target = word.strip().lstrip(_LEADING).rstrip(_TRAILING)
-    return target if _LINK.fullmatch(target) else None
+    if _LINK.fullmatch(target):
+        return target
+    found = _LINK.match(target)
+    if found and target[found.end():].startswith(("–", "—")):
+        return found.group(0)
+    return None
 
 
 MAX_PATH_WORDS = 8  # a path with more spaces than this is not worth probing the disk over

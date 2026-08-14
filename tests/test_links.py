@@ -179,6 +179,20 @@ def test_a_local_address_is_spoken_as_localhost_port_number():
     assert as_spoken("It is at https://example.com/x") == f"It is at {SPOKEN_ADDRESS}"
 
 
+def test_a_dash_glued_to_an_address_stays_out_of_the_page_link_too():
+    # "because no space was placed after the URL before the dash, the dash and the following word
+    # got grouped into the URL link." A web address has no em- or en-dash - that is the sentence's
+    # punctuation - so the address stops at one: the head of the word is the link, and the dash
+    # with what follows stays prose, drawn exactly as written.
+    from excephalon.links import link_parts
+
+    assert link_in("http://127.0.0.1:5210/—drag") == "http://127.0.0.1:5210/"
+    assert link_in("localhost:5200–go") == "localhost:5200"
+    parts = link_parts("ready at http://localhost:5210/—drag the notes")
+    assert {"text": "http://localhost:5210/", "link": "http://localhost:5210/"} in parts
+    assert any(part["text"].startswith("—drag") and not part["link"] for part in parts)
+
+
 def test_a_dash_glued_to_an_address_does_not_ride_into_what_is_spoken():
     # The brain writes "at http://127.0.0.1:5210/—drag the notes": the em-dash glues prose to
     # the address, the whole lump matches as one link, and the voice read the address raw with
