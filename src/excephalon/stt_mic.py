@@ -22,6 +22,8 @@ from collections import deque
 
 import numpy as np
 
+from excephalon.recorder import record
+
 FRAME = 480  # 30 ms at 16 kHz
 PAUSE_FRAMES = 17  # ~0.5 s of quiet = you paused, so check whether you said "over"
 MIN_VOICED_RUN = 4  # 120 ms - shorter than any syllable, so a burst under it holds no word
@@ -275,8 +277,7 @@ class MicSTT:
         silence_run = 0
         started = False
         for frame in self._mic.frames():
-            if self._recorder is not None:
-                self._recorder.write(frame)  # to disk first, so a crash can't lose what they said
+            record(self._recorder, frame)  # to disk first, so a crash can't lose what they said
             if self._stop is not None and self._stop.is_set():
                 return ""  # a quit was requested while we were waiting for speech
             level = rms(frame)

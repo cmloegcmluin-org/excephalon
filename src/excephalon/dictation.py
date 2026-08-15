@@ -43,6 +43,7 @@ import time
 
 from excephalon.hesitation import without_hesitations
 from excephalon.phrases import canonical, ends_with_command, strip_leading_command, wakes
+from excephalon.recorder import record
 from excephalon.stt_mic import (
     PAUSE_FRAMES,
     STOP_WORDS,
@@ -323,8 +324,7 @@ class Dictation:
         was_speaking = self._speaking
         speech_tail = 0  # frames of grace after end_speaking that are still "it talking"
         for frame in self._mic.frames():
-            if self._recorder is not None:
-                self._recorder.write(frame)  # to disk first, so a crash can't lose what they said
+            record(self._recorder, frame)  # to disk first, so a crash can't lose what they said
             if self._stop is not None and self._stop.is_set():
                 return
             speaking_now = self._speaking

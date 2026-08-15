@@ -92,7 +92,7 @@ Every session leaves artifacts. Use them before forming any theory:
 | What | Where | Answers |
 |---|---|---|
 | What was on screen | `runtime/transcripts/session-*.log` | every printed and spoken line, timestamped |
-| What the mic actually heard | `runtime/audio/session-*.wav` | whether a word reached the machine at all |
+| What the mic actually heard | `runtime/audio/session-*.wav` (a long session rolls on into `-2`, `-3`) | whether a word reached the machine at all |
 | What an agent said, as it said it | `runtime/agent-logs/<name>.log` (retired ones move to `runtime/agent-logs-archive/`) | whether an agent is working or dead |
 | Who is running right now | `runtime/active-agents.txt` | the roster, with last-heard times |
 | What Excephalon knows about its user | `runtime/profile.md`, `runtime/learned.md` | standing context; both gitignored |
@@ -177,6 +177,14 @@ a known weakness rather than a solution.
 - **Latched flags.** `Outbox.arrived` is cleared only by draining. Any path that decides not to
   deliver must still drain, or the window's mic yields empty turns forever and submissions are
   never read. That froze a whole session.
+- **A helper that kills its host.** The mic pump writes every frame to the crash-proof recording
+  before doing anything else, and that call was unguarded: 37 hours in, the WAV crossed the format's
+  4 GiB ceiling, `wave` raised while patching the header, and the pump thread died — Excephalon went
+  silently deaf with its window still saying "recording". Anything called from inside a pump, a
+  loop, or a callback that the user's experience depends on gets the same two questions: what
+  happens when it fails, and what bound stops it from failing eventually (`recorder.record`
+  swallows; `AudioRecorder` rolls to a new file). A safety net that can take down the thing it
+  protects is worse than no net.
 - **Fan-out where one thing was named.** A worktree is recognized by its `.git`; globbing a directory
   once started an agent in `.venv`, `docs` and `src` of a single worktree.
 - **A snapshot of something he edits.** Everything of his in the boot persona - his life context,

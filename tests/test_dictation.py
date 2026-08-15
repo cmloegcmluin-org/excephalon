@@ -399,6 +399,31 @@ def test_every_frame_reaches_the_recorder_even_while_muted():
     assert len(written) == 3
 
 
+def test_a_recorder_that_fails_never_deafens_the_pump():
+    # The recording is a safety net, not the ear. When the WAV hit its 4 GiB ceiling the write
+    # raised inside the pump loop, the pump thread died, and Excephalon went silently deaf mid-
+    # session with the window still saying it was recording. A failed recording costs the net.
+    ears = Ears()
+
+    class BrokenRecorder:
+        def __init__(self):
+            self.tried = 0
+
+        def write(self, frame):
+            self.tried += 1
+            raise OSError("the disk said no")
+
+    recorder = BrokenRecorder()
+    frames = _burst_then_pause()
+    dictation = Dictation(FakeTranscriber("add eggs to the list"), FakeMic(frames),
+                          pause_frames=3, recorder=recorder, **ears.kwargs())
+
+    dictation.pump()
+
+    assert recorder.tried == len(frames)             # offered every frame, never switched off
+    assert ears.drafted == ["add eggs to the list"]  # and the words still reached him
+
+
 def _speaking_scripted(texts, script, **kwargs):
     """A Dictation whose mic script can reference the dictation itself (begin/end_speaking events
     mid-stream) - resolved through a late-bound holder, since the mic exists before it does."""
