@@ -52,6 +52,13 @@ from excephalon.relay import notice
 from excephalon.shutdown import consolidate, leave_process
 from excephalon.stt_console import ConsoleSTT
 from excephalon.tailing import safe_name
+from excephalon.homecoming import (
+    STOCK_GREETING,
+    changes_since,
+    homecoming_note,
+    last_boot,
+    record_boot,
+)
 from excephalon.transcript import MessageLog, Transcript, recent_turns
 from excephalon.tts_neural import KokoroEngine, ensure_voice, voice_choice
 from excephalon.tts_system import NullTTS, SystemTTS
@@ -81,6 +88,7 @@ TRANSCRIPTS = RUNTIME_DIR / "transcripts"  # one timestamped record per conversa
 MIC_OVERRIDE = RUNTIME_DIR / "mic.txt"  # optional: a device-name substring to force a specific mic
 MIC_GAIN = RUNTIME_DIR / "mic-gain.txt"  # optional: a number to boost a quiet mic (e.g. 5)
 SERVICES = RUNTIME_DIR / "services.json"  # his connected services (MCP servers), errand-hand reach
+BOOT_RECORD = RUNTIME_DIR / "boot.json"  # where the last process stood: what the welcome-back reads
 VOCAB_ROOTS = RUNTIME_DIR / "vocab-roots.txt"  # optional: extra dirs (one per line) to mine for project names
 WORKSPACE = Path.home() / "workspace"  # default project tree; its folder names seed the custom vocabulary
 AGENT_QUIET_AFTER = 20 * 60  # seconds of silence from an agent before Excephalon flags it to the user
@@ -264,6 +272,30 @@ def _open_ears(announce):
 _SERVICE_FAULTS = {}
 
 
+def _greeting(brain, booted_at, previous_boot, note=None):
+    """The first line of the session: a welcome back mid-conversation, or the stock greeting.
+
+    "It shouldn't always say 'I'm ready. What can I do for you?' That should only be the default
+    if we weren't in the middle of something when I restarted." A restart is his only way to pick
+    up a fix, so most of them happen mid-thread - and the stock line greets him as a stranger
+    about a conversation minutes old, with his own unanswered question still on the screen behind
+    it. The brain does the wording; anything that goes wrong falls back to the stock line, because
+    a greeting is not worth a launch."""
+    if note is None:
+        note = homecoming_note(
+            turns=recent_turns(TRANSCRIPTS, keep=1),
+            changes=changes_since(Path(__file__).resolve().parents[2],
+                                  previous_boot.get("commit", "")),
+            away=max(0.0, booted_at - float(previous_boot.get("at") or booted_at)))
+    if not note:
+        return STOCK_GREETING
+    try:
+        said = brain.respond(note)
+    except Exception:
+        return STOCK_GREETING
+    return said.strip() or STOCK_GREETING
+
+
 def _google_faults(services):
     """{name: why} for his Google services when the sign-in behind them is dead.
 
@@ -344,6 +376,11 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     within a moment of the click, and the model loading, the brain waking and the spoken greeting
     all happen where they can watch them. They were hearing "I'm ready" before any window appeared.
     """
+    # Where the LAST process stood, read BEFORE this one records itself over it - that gap, and
+    # the commits inside it, are the whole of what a welcome-back knows (see homecoming).
+    booted_at = time.time()
+    previous_boot = last_boot(BOOT_RECORD)
+    record_boot(BOOT_RECORD, head_commit(Path(__file__).resolve().parents[2]), booted_at)
     # Word from the agents Excephalon drives lands in this inbox; the watcher tails it and the
     # Excephalon speaks each new line at the next lull (never cutting the user off).
     AGENT_INBOX.mkdir(parents=True, exist_ok=True)
@@ -552,7 +589,7 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
         # console AFTER it exists, so the greeting is a message like any other. Still guarded,
         # because the mic is already live: unguarded, the greeting went out of their speakers,
         # back into the mic, and opened their draft box with "I do for you".
-        greeting = "I'm ready. What can I do for you?"
+        greeting = _greeting(brain, booted_at, previous_boot)
         console.reply(greeting)
         if dictation is not None:
             dictation.begin_speaking()

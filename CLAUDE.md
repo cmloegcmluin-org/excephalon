@@ -220,6 +220,15 @@ Test fixtures use invented facts. When you add a comment here, write the failure
 the Mac bundle and the Restart button's relaunch all run it, and it is a FILE rather than
 `-m excephalon` so that a rename can never invalidate a shortcut nothing here can reach into. It
 imports nothing above `run` — the failure it exists to report is the package failing to import.
+`homecoming.py` decides its FIRST line: "I'm ready. What can I do for you?" only when this really
+is a fresh start, since a restart is his only way to pick up a fix and most of them happen
+mid-thread — greeted as a stranger, with his own unanswered question still on the screen behind
+it. Three things already on disk settle it: the tail of the transcript (what was in flight), the
+commit `runtime/boot.json` says the last process ran against this one's (what landed while it was
+down, in the commits' own words, never a summary invented here), and the gap between the two
+boots (past an hour it is a new day, not a restart). Those become one note and the BRAIN words
+the welcome back — a greeting assembled from templates is the stock line wearing more of them —
+and every failure falls back to the stock line, because a greeting is not worth a launch.
 `conversation.py` is the loop (listen → think → speak) and owns turn-taking, barge-in, and the
 delivery of agent news at a lull; it puts the desk's fleet briefing in front of the brain every
 turn and streams the reply into the voice as it is written. `voice.py` is how a streamed reply
