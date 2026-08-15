@@ -288,8 +288,10 @@ body.page .topbar, body.config .topbar {
 .historical .box { color: var(--past); }
 .historical .who { color: #6b6b6b; }
 
-/* A remark that is not a message: the ignore counter, the mic's own lines. */
-.aside { align-self: center; color: var(--dim); font-size: .74rem; padding: 3px 0; }
+/* A remark that is not a message: the ignore counter, the mic's own lines - and the startup
+   failure, which is the one line in the window most worth copying to someone who can fix it. */
+.aside { align-self: center; color: var(--dim); font-size: .74rem; padding: 3px 0;
+         user-select: text; cursor: text; }
 
 /* The two breaks, deliberately unalike: a day is a ruled line carrying its date, a session is
    three dots. Made to look the same they read as one thing repeated, which is what a day
