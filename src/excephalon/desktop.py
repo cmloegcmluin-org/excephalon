@@ -22,7 +22,12 @@ from excephalon.mirror import APP_ID
 # now, not the OS message box: the native one turned up in light mode with a system font inside
 # an app that is neither. So the native confirm is off, the closing event hands the question to
 # the page, and only the dialog's own Close button (through Controls.quit) actually closes.
-WINDOW = {"width": 980, "height": 760, "min_size": (620, 520)}
+# `text_select` because pywebview turns selection OFF by default: every part of a message had to
+# opt back in with `user-select: text`, and whatever nobody thought to opt in could not be dragged
+# over at all - a startup failure printed itself on screen and he could not copy the error out of
+# it to send to anyone. Selection is the page's business, and the page says what must not be
+# selected (its tags, its buttons) in its own stylesheet.
+WINDOW = {"width": 980, "height": 760, "min_size": (620, 520), "text_select": True}
 
 
 def _set_app_id_via_shell32(app_id):

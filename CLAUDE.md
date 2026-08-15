@@ -196,6 +196,12 @@ a known weakness rather than a solution.
   ask what happens when he edits it mid-session - the answer must not be "it waits for a restart".
 - **Believing the model over the file.** Excephalon has claimed to have filed something, opened
   something, or verified something that had not happened. Check the artifact.
+- **A name only the app itself reaches.** `__main__._session` needs a mic, a model and a window,
+  so no test drives it: a `head_commit` call added there, against an import that lived inside a
+  different function, passed the whole suite green and killed the app on the next launch
+  (`NameError`, a startup-failure box instead of a session). `test_imports_resolve.py` walks the
+  bytecode of every function this package defines and asserts each global it loads is actually in
+  its module — the check that reaches the code paths no test can run.
 - **A launch with no mouth.** Everything the user clicks runs under an interpreter with no console
   — `pythonw.exe`, a Mac bundle, a detached relaunch — so a traceback on the way up is written
   NOWHERE and the app simply does not appear: a click, and nothing, three times now. Hence

@@ -63,8 +63,10 @@ from excephalon.transcript import MessageLog, Transcript, recent_turns
 from excephalon.tts_neural import KokoroEngine, ensure_voice, voice_choice
 from excephalon.tts_system import NullTTS, SystemTTS
 from excephalon.voice import Speaker, play_samples
+from excephalon.worktrees import head_commit
 
-RUNTIME_DIR = Path(__file__).resolve().parents[2] / "runtime"
+REPO = Path(__file__).resolve().parents[2]
+RUNTIME_DIR = REPO / "runtime"
 
 
 def _live_instructions():
@@ -284,8 +286,7 @@ def _greeting(brain, booted_at, previous_boot, note=None):
     if note is None:
         note = homecoming_note(
             turns=recent_turns(TRANSCRIPTS, keep=1),
-            changes=changes_since(Path(__file__).resolve().parents[2],
-                                  previous_boot.get("commit", "")),
+            changes=changes_since(REPO, previous_boot.get("commit", "")),
             away=max(0.0, booted_at - float(previous_boot.get("at") or booted_at)))
     if not note:
         return STOCK_GREETING
@@ -380,7 +381,7 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     # the commits inside it, are the whole of what a welcome-back knows (see homecoming).
     booted_at = time.time()
     previous_boot = last_boot(BOOT_RECORD)
-    record_boot(BOOT_RECORD, head_commit(Path(__file__).resolve().parents[2]), booted_at)
+    record_boot(BOOT_RECORD, head_commit(REPO), booted_at)
     # Word from the agents Excephalon drives lands in this inbox; the watcher tails it and the
     # Excephalon speaks each new line at the next lull (never cutting the user off).
     AGENT_INBOX.mkdir(parents=True, exist_ok=True)
@@ -714,7 +715,6 @@ def main(argv=None):
 
     from excephalon.chord import ChordListener, SubmitChord, foreground_is_ours
     from excephalon.desktop import open_window
-    from excephalon.worktrees import head_commit
     from excephalon.memory import (
         DEFAULT_LEARNED_PATH,
         DEFAULT_PERSONA_ADDITIONS_PATH,
@@ -747,8 +747,7 @@ def main(argv=None):
         renamed = hooks.get("rename_agent", lambda *_: False)(name, to)
         return safe_name(to) if renamed else ""
 
-    _REPO = Path(__file__).resolve().parents[2]
-    booted_from = head_commit(_REPO)
+    booted_from = head_commit(REPO)
     from excephalon.memory import reconcile_lexicon
     from excephalon.vocabulary import scan_terms
 
@@ -780,7 +779,7 @@ def main(argv=None):
 
             from excephalon.relauncher import spawn
 
-            spawn(os.getpid(), _REPO)
+            spawn(os.getpid(), REPO)
             control.restart()
 
     app = create_app(
@@ -811,7 +810,7 @@ def main(argv=None):
         on_lexicon_saved=save_lexicon_rows,
         # The Restart button shows only when there is genuinely something to restart INTO: the
         # checkout on disk has moved past the commit this process booted from.
-        upgrade_ready=lambda: head_commit(_REPO) not in ("", booted_from),
+        upgrade_ready=lambda: head_commit(REPO) not in ("", booted_from),
         # His Config edits take effect NOW, not at the next launch: new translations are swapped
         # into the running transcriber the moment they save.
         on_translations_saved=lambda own: hooks.get("retune", lambda **_: None)(translations=own),

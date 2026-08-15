@@ -94,6 +94,14 @@ def test_the_window_is_pointed_at_the_app_on_loopback_only():
     assert webview.started == [{}]
 
 
+def test_the_window_lets_him_select_the_words_in_it():
+    # pywebview turns text selection OFF unless asked (create_window's text_select defaults to
+    # False), so every part of a message had to opt back in by hand - and anything nobody thought
+    # to opt in could not be selected at all. The app aside was one: a startup failure printed
+    # itself on screen and he could not drag over it to copy the error to anyone.
+    assert WINDOW["text_select"] is True
+
+
 def test_closing_the_window_asks_first_in_the_apps_own_styling(tmp_path):
     # "Godddamnit, I accidentally closed this app. There should definitely be an 'are you sure'
     # confirmation dialog!!" - and behind that X are a live conversation, a mic and running agents.
