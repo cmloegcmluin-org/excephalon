@@ -23,6 +23,12 @@ _WORD = re.compile(r"[a-z0-9]+")
 # look like now"). Reading a notice at them instead of answering that would lose the turn.
 MOST_WORDS = 6
 
+# Picking is affirmative. A short sentence that DENIES something is doing another job - correcting
+# a mishearing, most often, since the app reads a name back and the transcriber mangles it: "I
+# said errands, not Aaron's" was read as picking that agent and answered with its held news, which
+# was a question he had already answered ("What the fuck I already told you, it's Spanish").
+_DENIALS = frozenset(("no", "not", "nope", "isnt", "wasnt", "didnt", "dont", "never"))
+
 
 def roll_call(news):
     """The one line that says who is waiting, numbered so that one of them can be named."""
@@ -38,10 +44,12 @@ def roll_call(news):
 
 def chosen(heard, news):
     """Which of the waiting agents they just named, or None if they were not naming one."""
-    spoken = _WORD.findall(heard.lower())
+    spoken = _WORD.findall(heard.lower().replace("'", ""))
     if len(spoken) > MOST_WORDS:
         return None
     said = set(spoken)
+    if said & _DENIALS:
+        return None  # a correction, not a choice
     # A name first, then a number. "the drive one" carries the word "one", and reading that as the
     # number would answer about a different agent while sounding exactly as though it understood.
     named = [place for place, item in enumerate(news) if said & _name_words(item)]

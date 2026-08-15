@@ -26,6 +26,12 @@ _HANDLED_LEAD = re.compile(r"(?i)^handled\b[\s\-–—:,.!]*")
 # never die with a wedged session - that is this module's whole reason to exist.
 NARRATE_DEADLINE = 120.0
 
+# Events whose news is not an item on his list. The desk's agents have tabs, verdicts and
+# landings, and several ready at once are read out numbered so he can take them one at a time.
+# The errand hand and the memory inbox are the app's own machinery - a chore he never asked to
+# see, and a housekeeping question - and each is simply something to say.
+UNLISTED_KINDS = frozenset(("errand", "memory"))
+
 # What the brain is asked, by kind of event. Each is a system-originated turn: the brain answers
 # it the way it answers anything - and because it composed the words, it remembers saying them.
 # Every narration carries this, because a narrated line is a line he HEARS - and the standing
@@ -163,6 +169,11 @@ class Narrator:
         threading.Thread(target=self._narrate, args=(kind, agent, report), daemon=True).start()
 
     def _narrate(self, kind, agent, report):
+        # An errand and a memory nudge are the app's own machinery, not agents with tabs and
+        # verdicts: their news is something to SAY, never a name he is asked to choose between.
+        # Read out numbered beside a real agent, "errands" cost him five turns trying to close a
+        # task that never existed ("I don't even know what errands would be").
+        listed = kind not in UNLISTED_KINDS
         if kind == "finished" and self._stage_of(agent) == "landing":
             kind = "landing"
         stage = self._stage_of(agent)
@@ -201,17 +212,17 @@ class Narrator:
                 if said.strip() and _claims_deployed(said, stage):
                     # It said the work is out there when it is not. The plain notice carries the
                     # news without the claim; a sentence he would act on must not be a guess.
-                    self._outbox.push(notice(agent, report), about=agent)
+                    self._outbox.push(notice(agent, report), about=agent, listed=listed)
                 elif said.strip():
-                    self._outbox.push(said.strip(), about=agent, composed=True)
+                    self._outbox.push(said.strip(), about=agent, composed=True, listed=listed)
                 else:
                     # The brain could not answer; the capped plain notice still carries the news,
                     # marked app-authored so the ledger reads it back to the brain next turn.
-                    self._outbox.push(notice(agent, report), about=agent)
+                    self._outbox.push(notice(agent, report), about=agent, listed=listed)
             composed.set()
 
         threading.Thread(target=compose, daemon=True).start()
         if not composed.wait(self._deadline) and take():
             # The brain has sat on this past the deadline - wedged, or buried under a queue that
             # will outlive the user's patience. The notice ships now; the late answer is dropped.
-            self._outbox.push(notice(agent, report), about=agent)
+            self._outbox.push(notice(agent, report), about=agent, listed=listed)

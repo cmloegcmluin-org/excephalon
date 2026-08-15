@@ -148,6 +148,31 @@ def test_a_spoolless_outbox_answers_owed_about_from_its_queue():
     assert outbox.owed_about() == {"fixer"}
 
 
+def test_news_can_arrive_unlisted_so_it_never_becomes_a_name_to_pick():
+    # "I thought we're only working on one thing. I don't even know what errands would be." The
+    # errand hand exists so a small chore is NOT a visible agent - and its result was read out
+    # numbered, beside a real agent, under the internal word for the machinery. Some news is just
+    # something to say; only an agent's news is an item on a list.
+    outbox = Outbox()
+    outbox.push("You're on italki as of this week.", about="errands", listed=False)
+    outbox.push("fixer: the drive link is fixed", about="fixer")
+
+    errand, agent = outbox.drain()
+
+    assert errand.listed is False
+    assert agent.listed is True  # an agent's news is a thing he chooses between, as before
+
+
+def test_unlisted_survives_the_spool_like_everything_else_about_a_piece_of_news(tmp_path):
+    spool = tmp_path / "outbox.json"
+    first = Outbox(spool=spool)
+    first.push("You're on italki as of this week.", about="errands", listed=False)
+
+    [held] = Outbox(spool=spool).drain()
+
+    assert held.listed is False  # a restart must not turn it back into a name to pick
+
+
 def test_a_requested_hand_over_is_collected_once_by_the_holder():
     # The brain's way of DELIVERING a held update instead of retelling it: the request rides the
     # outbox to wherever the news is held, and the holder speaks that item word for word. Two
