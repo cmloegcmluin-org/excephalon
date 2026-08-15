@@ -447,7 +447,16 @@ own looking — and drops the now-stale walkthrough; `steps.py` decides
 what a streamed message becomes there — the agent's words as messages, and its commands, diffs and
 output as the machinery under them, capped at both ends with what was dropped counted in place.
 `waiting.py` is what happens when several agents finish at once: they are read out numbered and
-held, and it says which one a reply just named. A bare go-ahead answering the update offer is
+held, and it says which one a reply just named — but a short reply carrying a DENIAL ("no",
+"not") is never a pick, because picking is affirmative and the sentence that got read as one was
+him correcting the transcriber ("I said errands, not Aaron's"), answered with that agent's held
+news, which was a question he had already answered. What the list holds is agents only: news the
+narrator marks unlisted (`UNLISTED_KINDS` — the errand hand, the memory inbox) is the app's own
+machinery, spoken as something to SAY and never a name he is asked to choose between. Read out
+numbered beside a real agent, "errands" cost him five turns trying to close a task that never
+existed ("I don't even know what errands would be"), and the errand hand is told it may never ask
+him a question either: its report is spoken and its session then ends, so it would never hear the
+answer — asked again later, it reads as not having listened. A bare go-ahead answering the update offer is
 the APP's to answer, never the brain's: the first update is spoken word for word and whatever is
 still held is NAMED after it (`_hand_over`, the one delivery path) - answering a go-ahead with the
 numbered list and "Which first?" is answering the answer to a question with the question again

@@ -516,6 +516,16 @@ class Conversation:
             return
         if self._they_are_talking():
             return
+        # Unlisted news is not an item to choose between - the errand hand is machinery, not an
+        # agent with a tab and a verdict, and reading its tag out as a name beside a real agent
+        # cost him five turns trying to close a "task" that never existed ("I don't even know
+        # what errands would be"). It is simply said, at the first opening, and the list behind
+        # it is whatever the AGENTS are still owed.
+        loose = next((at for at, held in enumerate(self._waiting)
+                      if not getattr(held, "listed", True)), None)
+        if loose is not None:
+            self._speak_held(loose, name_the_rest=False)
+            return
         place = next((at for at, held in enumerate(self._waiting)
                       if getattr(held, "about", None) in self._requested), None)
         if place is not None:
@@ -563,13 +573,22 @@ class Conversation:
         if spoken is not None:
             spoken(news)
 
-    def _speak_held(self, place):
+    def _speak_held(self, place, name_the_rest=True):
         """Speak the held update at `place` word for word, then name any others still waiting -
         the one shape a held update ever reaches him in, whoever set it in motion (his pick, his
-        go-ahead, or the brain handing it over with deliver_update)."""
+        go-ahead, or the brain handing it over with deliver_update).
+
+        `name_the_rest=False` for news that is not an item on his list: an errand's result is
+        something to say, and hanging a roll call off it turns the machinery he should never see
+        into the thing he is answering about."""
         news = self._waiting.pop(place)
-        said = news if not self._waiting else f"{news}\n\n{roll_call(self._waiting)}"
-        self._announced = self._roll()
+        listed = [held for held in self._waiting if getattr(held, "listed", True)]
+        named = bool(name_the_rest and listed)
+        said = f"{news}\n\n{roll_call(listed)}" if named else news
+        # What has been READ OUT, which is only ever a roll call that actually went out. Recorded
+        # after an errand's answer instead, it would mark the agents' list announced and that list
+        # would then never be spoken, since it re-reads only when it has changed.
+        self._announced = self._roll() if named else ()
         self._console.heads_up(said)
         # Known only when the whole utterance is the brain's own sentence; with a roll call
         # appended, part of what they hear is app-authored and the ledger must carry it.
@@ -601,13 +620,14 @@ class Conversation:
 
     def _roll(self):
         """What is waiting right now, as the comparison the roll call is remembered by: the news
-        itself, not how much of it there is."""
-        return tuple(str(item) for item in self._waiting)
+        itself, not how much of it there is - and only the LISTED news, because the roll IS the
+        list, and unlisted news is never a name on it."""
+        return tuple(str(item) for item in self._waiting if getattr(item, "listed", True))
 
     def _announce(self):
         """Read out who is waiting, numbered, so one of them can be named."""
         self._announced = self._roll()
-        line = roll_call(self._waiting)
+        line = roll_call([held for held in self._waiting if getattr(held, "listed", True)])
         self._console.heads_up(line)
         self._say(line, record=False)
 
@@ -619,10 +639,11 @@ class Conversation:
         `waiting.chosen`), so a sentence that happens to carry an agent's name is still their turn:
         answering it with a notice instead would lose the question.
         """
-        place = chosen(heard, self._waiting)
+        listed = [held for held in self._waiting if getattr(held, "listed", True)]
+        place = chosen(heard, listed)
         if place is None:
             return None
-        return self._hand_over(heard, place)
+        return self._hand_over(heard, self._waiting.index(listed[place]))
 
     def _dormant(self):
         return (self._dormant_after is not None

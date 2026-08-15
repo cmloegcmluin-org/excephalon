@@ -39,6 +39,36 @@ def test_news_reaches_the_outbox_in_the_brains_own_words():
     assert news.composed is True  # the brain wrote it, so nothing need be read back to it
 
 
+def test_an_errand_and_a_memory_nudge_are_never_items_on_his_list():
+    # "Two updates waiting. One, weekly-schedule-builder. Two, errands." - "I thought we're only
+    # working on one thing. I don't even know what errands would be." The errand hand and the
+    # memory inbox are the app's own machinery; their news is something to say, never a name he
+    # is asked to choose between beside a real agent.
+    outbox = Outbox()
+    narrator = Narrator(FakeBrain("Found your italki signup from this week."), outbox)
+
+    narrator.tell("errand", "errands", "he signed up for italki")
+    assert _wait_for(outbox)
+    [news] = outbox.drain()
+    assert news.listed is False
+
+    narrator.tell("memory", "memory", "he takes his coffee black")
+    assert _wait_for(outbox)
+    [nudge] = outbox.drain()
+    assert nudge.listed is False
+
+
+def test_an_agents_own_news_stays_an_item_he_can_choose():
+    outbox = Outbox()
+    narrator = Narrator(FakeBrain("The drive link is fixed."), outbox)
+
+    narrator.tell("finished", "fixer", "done")
+
+    assert _wait_for(outbox)
+    [news] = outbox.drain()
+    assert news.listed is True
+
+
 def test_the_brain_is_told_which_agent_and_what_it_reported():
     brain, outbox = FakeBrain(), Outbox()
     Narrator(brain, outbox).tell("finished", "fixer", "Done. 621 passing, not merged.")

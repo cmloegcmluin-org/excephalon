@@ -574,6 +574,43 @@ def test_a_refreshed_agent_keeps_its_number_even_as_the_list_grows():
             in tts.spoken)
 
 
+def test_unlisted_news_is_simply_said_and_never_joins_the_numbered_list():
+    # "Two updates waiting. One, weekly-schedule-builder. Two, errands." - "I thought we're only
+    # working on one thing. I don't even know what errands would be." The errand hand is
+    # machinery, not an agent with a tab and a verdict; its result is something to say, and it
+    # cost him five turns trying to close a "task" that never existed.
+    outbox = Outbox()
+    outbox.push("You're on italki as of this week.", about="errands", listed=False)
+    outbox.push("fixer: the drive link is fixed", about="fixer")
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["what time is it", "goodbye entity"]), FakeBrain(), tts,
+                         outbox=outbox)
+
+    convo.turn()  # the errand's answer, said as itself
+    convo.turn()  # then the one agent's news, on its own
+
+    spoken = "\n".join(tts.spoken)
+    assert "You're on italki as of this week." in spoken   # said, in its own words
+    assert "errands" not in spoken                          # never named as a thing to pick
+    assert "Which first?" not in spoken                     # one agent left: no menu at all
+    assert "the drive link is fixed" in spoken
+
+
+def test_unlisted_news_does_not_hold_back_a_real_roll_call():
+    outbox = Outbox()
+    outbox.push("You're on italki as of this week.", about="errands", listed=False)
+    outbox.push("fixer: the drive link is fixed", about="fixer")
+    outbox.push("docs-sidebar: needs your call on the width", about="docs-sidebar")
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["what time is it", "goodbye entity"]), FakeBrain(), tts,
+                         outbox=outbox)
+
+    convo.turn()  # the errand's answer first, as itself
+    convo.turn()
+
+    assert "Two updates waiting. One, fixer. Two, docs-sidebar. Which first?" in tts.spoken
+
+
 def test_news_already_in_hand_is_pruned_when_its_agent_is_dropped():
     # A drop cleans the queue and the spool, but drained news waits in the conversation's hand -
     # and that copy was still offered after the user had sent the agent new instructions: "surely

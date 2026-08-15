@@ -57,6 +57,20 @@ def test_a_word_two_of_them_share_picks_neither():
     assert chosen("the sidebar one", news) is None
 
 
+def test_correcting_a_mishearing_is_not_picking_the_thing_it_names():
+    # "I said errands, not Aaron's." - five words, one of them an agent's name, so it was read as
+    # a pick and answered with that agent's held news. He was correcting the transcriber, not
+    # choosing anything, and the answer was a question he had already answered ("What the fuck I
+    # already told you, it's Spanish"). Picking is affirmative; a sentence that denies something
+    # is doing another job.
+    news = [News("a", about="errands"), News("b", about="fixer")]
+
+    assert chosen("I said errands, not Aaron's", news) is None
+    assert chosen("no, the fixer one", news) is None
+    assert chosen("not fixer", news) is None
+    assert chosen("errands", news) == 0  # a plain pick is untouched
+
+
 def test_words_that_name_none_of_them_are_not_a_pick():
     assert chosen("what time is it", _three()) is None
     assert chosen("", _three()) is None

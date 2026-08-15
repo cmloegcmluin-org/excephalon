@@ -32,7 +32,10 @@ PROMPT = (
     "[Errand from Excephalon on the user's behalf - no user is in this exchange. Do this small "
     "chore now, using your tools - files here, or the user's own connected services - and reply "
     "with a short plain report (a sentence or two) of what you found or did, or exactly what "
-    "stopped you. The app's own records are under runtime/: live agent logs in "
+    "stopped you. NEVER ask the user a question in your report: your report is read out to them "
+    "and this session then ends, so you would never hear the answer - and asked again later it "
+    "reads as not having listened. State what you found and let Excephalon do any asking. The "
+    "app's own records are under runtime/: live agent logs in "
     "runtime/agent-logs/, wrapped-up agents' logs in runtime/agent-logs-archive/, conversation "
     "transcripts in runtime/transcripts/.\n{chore}]"
 )

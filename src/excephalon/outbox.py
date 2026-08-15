@@ -20,15 +20,23 @@ class News(str):
 
     `composed` says the BRAIN wrote these words (the narrator asked it to): spoken as its own,
     they need no unwritten-lines ledger entry - it remembers saying them the way it remembers any
-    reply. App-authored news stays composed=False and is read back to it next turn."""
+    reply. App-authored news stays composed=False and is read back to it next turn.
+
+    `listed` says this news is an ITEM - one of several he may be asked to choose between by
+    name. Only an agent's news is: the errand hand exists so a small chore is not a visible
+    agent, and its result was read out numbered beside a real one, under the internal word for
+    the machinery ("I don't even know what errands would be"). Unlisted news is simply something
+    to say."""
 
     about = None  # the agent, when there is one
     composed = False  # whether the brain itself wrote the words
+    listed = True  # whether it is an item on the numbered list, or just a thing to say
 
-    def __new__(cls, message, about=None, composed=False):
+    def __new__(cls, message, about=None, composed=False, listed=True):
         news = super().__new__(cls, message)
         news.about = about
         news.composed = composed
+        news.listed = listed
         return news
 
 
@@ -55,14 +63,15 @@ class Outbox:
             # denied saying it - to his face, about a line he had watched it say ("I don't see
             # that statement in our conversation - I didn't say the feature was already in
             # Highdeas", about a heads-up it had spoken verbatim 18 minutes earlier).
-            self._items.append(News(held["message"], held.get("about")))
+            self._items.append(News(held["message"], held.get("about"),
+                                    listed=held.get("listed", True)))
         if self._items:
             self.arrived.set()
 
-    def push(self, message, about=None, composed=False):
+    def push(self, message, about=None, composed=False, listed=True):
         with self._lock:
-            self._items.append(News(message, about, composed))
-            self._keep(message, about, composed)
+            self._items.append(News(message, about, composed, listed))
+            self._keep(message, about, composed, listed)
         self.arrived.set()
 
     def drain(self):
@@ -87,7 +96,7 @@ class Outbox:
         """Held news about a renamed agent is about the same agent - under his name for it now, so
         a roll call reads out what he called it rather than what the app happened to name it."""
         with self._lock:
-            self._items = deque(News(str(item), to, item.composed)
+            self._items = deque(News(str(item), to, item.composed, item.listed)
                                 if getattr(item, "about", None) == about else item
                                 for item in self._items)
             kept = self._spooled()
@@ -162,9 +171,10 @@ class Outbox:
                 break
         self._write(kept)
 
-    def _keep(self, message, about, composed):
+    def _keep(self, message, about, composed, listed=True):
         kept = self._spooled()
-        kept.append({"message": str(message), "about": about, "composed": bool(composed)})
+        kept.append({"message": str(message), "about": about, "composed": bool(composed),
+                     "listed": bool(listed)})
         self._write(kept)
 
     def _spooled(self):

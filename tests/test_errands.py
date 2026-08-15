@@ -50,6 +50,17 @@ def test_a_chore_runs_quietly_and_its_outcome_becomes_an_event():
     assert report == "Moved the log into the archive."
 
 
+def test_the_errand_hand_is_told_it_can_never_ask_him_anything():
+    # Its report is spoken to him and the session then ends, so a question in it can never be
+    # answered: "You're on italki as of this week - which language are you learning there?" was
+    # asked, answered by him to the brain, and then asked AGAIN when the held report was spoken
+    # ("What the fuck I already told you, it's Spanish"). An errand reports; the brain asks.
+    from excephalon.errands import PROMPT
+
+    assert "question" in PROMPT.lower()
+    assert "never" in PROMPT.lower()
+
+
 def test_the_errand_prompt_maps_where_the_apps_own_records_live():
     # Asked to read "the most recently archived agent logs", the errand hand looked in the live
     # folder, found only the one live log there, and answered "there are no archived logs" while
