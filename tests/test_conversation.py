@@ -969,6 +969,49 @@ def test_the_opening_is_said_once_and_never_again():
     assert len([line for line in tts.spoken if "I'm ready" in line]) == 1
 
 
+def test_the_opening_rides_the_single_held_update():
+    # The welcome-back rode the roll call when SEVERAL updates waited, but a boot with exactly ONE
+    # spoke the news alone and left the welcome pending. It surfaced seven minutes later, inviting
+    # him to look at a demo he had already approved ("this message makes no sense. why was this
+    # sent?"). The first line rides the first delivery whatever its shape.
+    outbox = Outbox()
+    outbox.push("robot-icon-ui: the demo is ready - open localhost:8770", about="robot-icon-ui")
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["okay ship it", "goodbye entity"]), FakeBrain(), tts,
+                         outbox=outbox, opening="Back with you. The robot icon work landed.")
+
+    convo.turn()
+    convo.turn()
+
+    said = tts.spoken[0]
+    assert said.startswith("Back with you. The robot icon work landed.")
+    assert "localhost port 8770" in said  # the news, in the same utterance
+    assert len([line for line in tts.spoken if "Back with you" in line]) == 1
+
+
+def test_an_opening_that_missed_its_moment_dies_when_he_speaks():
+    # He was mid-sentence as the app came up, so the boot pass rightly held its first line - and
+    # once he has spoken, that line is no longer a greeting. Spoken at the next lull anyway, the
+    # welcome arrived deep into the conversation ("Excephalon had been with me up until just
+    # before that so 'back with you' makes no sense").
+    class MidSentenceSTT(FakeSTT):
+        talking = True
+
+        def is_mid_utterance(self):
+            return self.talking
+
+    stt = MidSentenceSTT(["what time is it", "goodbye entity"])
+    tts = FakeTTS()
+    convo = Conversation(stt, FakeBrain(), tts, outbox=Outbox(),
+                         opening="Welcome back. Where were we?")
+
+    convo.turn()  # the boot pass holds the greeting: he is mid-sentence, and then he speaks
+    stt.talking = False
+    convo.turn()  # the next lull would have been its old chance - it must not take it
+
+    assert not [line for line in tts.spoken if "Welcome back" in line]
+
+
 def test_unlisted_news_is_simply_said_and_never_joins_the_numbered_list():
     # "Two updates waiting. One, weekly-schedule-builder. Two, errands." - "I thought we're only
     # working on one thing. I don't even know what errands would be." The errand hand is

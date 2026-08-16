@@ -523,7 +523,9 @@ class Conversation:
         if not self._waiting:
             self._announced = ()  # nothing outstanding, so the next single item is simply spoken
             self._update_offered = False
-            return self._say_opening()
+            if not self._they_are_talking():  # never break in mid-sentence, greeting included
+                self._say_opening()
+            return
         if self._they_are_talking():
             return
         # Unlisted news is not an item to choose between - the errand hand is machinery, not an
@@ -602,12 +604,21 @@ class Conversation:
         listed = [held for held in self._waiting if getattr(held, "listed", True)]
         named = bool(name_the_rest and listed)
         said = f"{news}\n\n{roll_call(listed)}" if named else str(news)
+        # The session's first line rides the front of the FIRST delivery whatever its shape -
+        # `_announce` carries it for a list, this for a single item. Left behind here, a boot
+        # with exactly one piece of held news spoke the news alone and the welcome sat pending
+        # for seven minutes, surfacing after he had approved the very demo it invited him to
+        # look at ("this message makes no sense. why was this sent?").
+        opening, self._opening = self._opening, ""
+        if opening:
+            said = f"{opening}\n\n{said}"
         self._console.heads_up(said)
         # Known only when the whole utterance is the brain's own sentence; with a roll call
         # appended, part of what they hear is app-authored and the ledger must carry it.
         if not self._say(said, record=False,
                          known=getattr(news, "composed", False) and said == str(news)):
             self._waiting.insert(place, news)  # never sounded: still owed, back where it stood
+            self._opening = opening            # and the first line is still unsaid
             return ""
         # What has been READ OUT, which is only ever a roll call that actually went out. Recorded
         # after an errand's answer instead, it would mark the agents' list announced and that list
@@ -664,15 +675,18 @@ class Conversation:
     def _announce(self):
         """Read out who is waiting, numbered, so one of them can be named. The session's opening
         line rides on the front of it when there is one, so a restart with news waiting is ONE
-        message rather than a welcome and a menu thirteen seconds apart."""
-        line = self._roll()
-        self._announced = line
+        message rather than a welcome and a menu thirteen seconds apart - one recorded message
+        too, since a separate reply record showed the same welcome twice in the window."""
+        roll = self._roll()
+        line = roll
         opening, self._opening = self._opening, ""
         if opening:
-            self._console.reply(opening)
             line = f"{opening}\n\n{line}"
         self._console.heads_up(line)
-        self._say(line, record=False)
+        if not self._say(line, record=False):
+            self._opening = opening  # never sounded: the first line is still unsaid, still owed
+            return
+        self._announced = roll
 
     def _take_pick(self, heard):
         """They answered the roll call by naming one: say that one, and what is still waiting.
@@ -791,6 +805,14 @@ class Conversation:
         # "ready for your eyes" ungated, seconds after he had APPROVED that very work. Once he has
         # spoken again, whatever he asked for before is ordinary held news and faces the gate.
         self._requested.clear()
+        # The session's first line is a first line or nothing. One that missed its moment - he was
+        # mid-sentence at boot, or the delivery that should have carried it never sounded - is no
+        # longer a greeting once he has spoken: the boot welcome once surfaced seven minutes into
+        # the conversation, inviting him to look at a demo he had already approved ("makes no
+        # sense... Excephalon had been with me up until just before that").
+        if self._opening:
+            self._console.evidence(f"(opening dropped unspoken - he spoke first: {self._opening})")
+            self._opening = ""
         self._last_engaged = self._clock()  # they spoke: present again, whatever the clock said
         if farewell:
             self._speak_reply(self.farewell_reply)

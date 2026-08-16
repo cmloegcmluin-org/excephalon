@@ -91,13 +91,36 @@ MAX_PATH_WORDS = 8  # a path with more spaces than this is not worth probing the
 def link_parts(text, *, exists=os.path.exists):
     """`text` split into what can be opened and what cannot, as [{"text", "link"}].
 
+    Each LINE is judged on its own. Split on spaces alone, a newline stays inside a word, and an
+    address ending a list line arrives welded to the next line's first word -
+    "http://localhost:8770/projects\\n2." - which matches nothing, so the one address the message
+    existed to hand over was drawn as plain text ("it's not a clickable link"). A path never spans
+    a line break, so per-line loses nothing.
+
     The hard case is a space: "C:\\Users\\ada\\Field Notes\\inbox" cannot be told from a
     path followed by another word by looking at the text alone - which is why a single broken link
     is what they saw. So the filesystem is asked. A drive-letter or UNC match is extended across the
     following words to the longest run that actually exists on disk; a run that exists nowhere
     stays the one word it was, exactly as before, and a URL (which can hold no space) is always the
     one word. The page draws only what this returns, so the rule lives here, where it is tested."""
-    words = text.split(" ")
+    parts = []
+    for line in text.split("\n"):
+        if parts:  # the break between lines is the prose's own character, never a link's
+            if parts[-1]["link"]:
+                parts.append({"text": "\n", "link": ""})
+            else:
+                parts[-1]["text"] += "\n"
+        for piece in _line_parts(line, exists):
+            if not piece["link"] and parts and not parts[-1]["link"]:
+                parts[-1]["text"] += piece["text"]
+            else:
+                parts.append(piece)
+    return parts
+
+
+def _line_parts(line, exists):
+    """One newline-free line, split exactly as `link_parts` always split whole texts."""
+    words = line.split(" ")
     parts, plain, index = [], [], 0
     while index < len(words):
         if link_in(words[index]) is None:
