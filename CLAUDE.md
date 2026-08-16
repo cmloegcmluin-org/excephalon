@@ -501,7 +501,11 @@ far; and ANYTHING he asked for skips the gate entirely — a go-ahead answering 
 off the roll call, deliver_update — because the gate exists to stop the app volunteering
 something stale, never to overrule him: it destroyed the update he had just said "Yes." to, two
 seconds later, having read its own "I've got an update on X when you're ready" as delivery (the
-prompt now says outright that mentioning an update is not giving it). A line judged overtaken is
+prompt now says outright that mentioning an update is not giving it). An ask covers the MOMENT it
+was made and no longer: one the app could not serve at once — he was already mid-sentence — stayed
+pending across his next turn and then spoke its stale "ready for your eyes" ungated, seconds after
+he had approved that very work, so his next words clear every pending ask and what is left is
+ordinary held news facing the gate. A line judged overtaken is
 finished with rather than held: it goes to the durable record and its spool copy goes with it.
 `waiting.py` is what happens when several agents finish at once: they are read out numbered and
 held, and it says which one a reply just named — but a short reply carrying a DENIAL ("no",

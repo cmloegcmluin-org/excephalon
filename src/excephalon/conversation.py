@@ -778,6 +778,11 @@ class Conversation:
             self._console.ignored()
             return None
         self._console.heard(heard)  # show what was transcribed before we act on it
+        # An ask covers the moment it was made. One the app could not serve at once - he was
+        # already mid-sentence - stayed pending across his next turn and then delivered its stale
+        # "ready for your eyes" ungated, seconds after he had APPROVED that very work. Once he has
+        # spoken again, whatever he asked for before is ordinary held news and faces the gate.
+        self._requested.clear()
         self._last_engaged = self._clock()  # they spoke: present again, whatever the clock said
         if farewell:
             self._speak_reply(self.farewell_reply)
