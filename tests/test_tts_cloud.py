@@ -1,5 +1,7 @@
+import io
 import json
 import struct
+import urllib.error
 
 import numpy
 import pytest
@@ -66,6 +68,40 @@ def test_the_request_carries_the_key_the_voice_and_the_low_latency_model():
     assert "output_format=pcm_24000" in request.full_url  # no decoding, no extra dependency
     assert request.headers["Xi-api-key"] == "sk-test"
     assert json.loads(request.data) == {"text": "Hey.", "model_id": "eleven_flash_v2_5"}
+
+
+class Refuses:
+    """An HTTPError, whose str() is the status line and whose BODY is the actionable half."""
+
+    def __init__(self, code, detail):
+        self._fault = urllib.error.HTTPError(
+            "https://api.elevenlabs.io/v1/text-to-speech/v/stream", code, "Payment Required", {},
+            io.BytesIO(json.dumps({"detail": detail}).encode("utf-8")))
+
+    def __call__(self, request, timeout=None):
+        raise self._fault
+
+
+def test_a_refusal_is_reported_in_the_apis_own_words_not_its_status_line():
+    # "HTTP Error 402: Payment Required" tells him nothing he can act on; the body says exactly
+    # what is wrong and what to do about it, and throwing that away cost him a round-trip asking.
+    engine = ElevenLabsEngine("sk-test", "voice-id", open_url=Refuses(402, {
+        "message": "Free users cannot use library voices via the API. "
+                   "Please upgrade your subscription to use this voice."}))
+    said = []
+
+    list(Failover(engine, FakeLocal(), announce=said.append).say("Hey.")[0])
+
+    assert "Free users cannot use library voices" in said[0]
+
+
+def test_a_refusal_with_no_words_of_its_own_still_names_the_status():
+    engine = ElevenLabsEngine("sk-test", "voice-id", open_url=Refuses(500, {}))
+    said = []
+
+    list(Failover(engine, FakeLocal(), announce=said.append).say("Hey.")[0])
+
+    assert "500" in said[0]
 
 
 class FakeLocal:
@@ -268,6 +304,47 @@ def test_a_voice_the_account_does_not_have_names_the_ones_it_does():
     assert "Rachel" in str(fault.value) and "Adam" in str(fault.value)
 
 
+class FakeAccount:
+    """Answers the voice list, and whatever was asked of it for synthesis."""
+
+    def __init__(self, voices, speaks=True):
+        self.asked = []
+        self._voices = voices
+        self._speaks = speaks
+
+    def __call__(self, request, timeout=None):
+        self.asked.append(request.full_url)
+        if "/v2/voices" in request.full_url:
+            return FakeResponse([json.dumps({"voices": self._voices}).encode("utf-8")])
+        if not self._speaks:
+            raise Refuses(402, {"message": "Free users cannot use library voices via the API. "
+                                           "Please upgrade your subscription to use this voice."}
+                          )._fault
+        return FakeResponse([pcm(0, 16384)])
+
+
+def test_a_voice_the_plan_cannot_actually_SPEAK_is_found_at_startup():
+    # Listing the voices proves the key, and does NOT prove this voice: a library voice sits in
+    # the list of a free account and then refuses the moment it is spoken. He met that as a
+    # working launch followed by a voice that wasn't the one he chose, and had to come and ask.
+    # One token synthesized here - the same warm-up the local voice already does - settles it.
+    http = FakeAccount([{"voice_id": "a1", "name": "Mark"}], speaks=False)
+
+    with pytest.raises(CloudVoiceError) as fault:
+        connect({"key": "sk-test", "voice": "Mark"}, open_url=http)
+
+    assert "cannot use library voices" in str(fault.value)
+
+
+def test_a_voice_that_speaks_is_returned_ready_and_warm():
+    http = FakeAccount([{"voice_id": "a1", "name": "Mark"}])
+
+    engine = connect({"key": "sk-test", "voice": "Mark"}, open_url=http)
+
+    assert engine._voice_id == "a1"
+    assert any("text-to-speech" in url for url in http.asked)  # it was actually spoken with
+
+
 def test_a_key_that_does_not_work_is_found_at_startup_not_at_the_first_reply():
     # The same call `check_services` makes of every service: speak to it before calling it
     # connected. A key that has expired otherwise reads as a working app until he asks it
@@ -363,6 +440,19 @@ def test_the_setup_door_lists_his_voices_and_writes_the_one_he_picks(tmp_path):
 
     assert settings_in(tmp_path) == {"key": "sk-test", "voice": "Adam"}
     assert "Rachel" in door.transcript() and "Adam" in door.transcript()
+
+
+def test_the_setup_door_refuses_a_voice_the_plan_cannot_speak_and_says_why(tmp_path):
+    # The list shows every voice on the account, and a free plan cannot SPEAK the library ones.
+    # Caught here, he picks another; written anyway, he finds out after a restart, in a voice
+    # that isn't the one he chose.
+    door = Conversation("sk-test", "1")
+
+    assert setup(tmp_path, ask=door.ask, say=door.said.append,
+                 open_url=FakeAccount([{"voice_id": "a1", "name": "Mark"}], speaks=False)) is False
+
+    assert settings_in(tmp_path) is None
+    assert "cannot use library voices" in door.transcript()
 
 
 def test_the_setup_door_takes_a_name_as_readily_as_a_number(tmp_path):
