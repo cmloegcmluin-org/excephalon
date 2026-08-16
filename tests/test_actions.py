@@ -2,7 +2,28 @@ import asyncio
 import os.path
 from pathlib import Path
 
-from excephalon.actions import _resolve, fleet_actions
+from excephalon.actions import _resolve, fleet_actions, take_care_spec
+
+
+def test_take_care_spec_makes_an_agent_from_the_task_words():
+    # A Projects-tab robot clicked: the task's own words are the task, the enhancement it ticks off,
+    # and the seed of the agent's name; the card's project rides along so the tick lands right.
+    spec = take_care_spec("Highdeas", "smart grouping of ideas")
+    assert spec == {"name": "smart-grouping-of-ideas", "task": "smart grouping of ideas",
+                    "enhancement": "smart grouping of ideas", "project": "Highdeas"}
+
+
+def test_take_care_spec_maps_excephalons_own_card_to_the_enhancements_roadmap():
+    # Excephalon's card is the Enhancements roadmap, not a "## Project:" section, so the desk names
+    # it by project=None - the same None its own tasks tick against.
+    for own in ("Excephalon", "entity", "yourself"):
+        assert take_care_spec(own, "live captions")["project"] is None
+
+
+def test_take_care_spec_has_nothing_to_start_for_an_empty_task():
+    # An empty, not-yet-saved row is nothing to put an agent on.
+    assert take_care_spec("Highdeas", "   ") is None
+    assert take_care_spec("Highdeas", "") is None
 
 
 class FakeDesk:

@@ -1305,6 +1305,44 @@ def test_projects_js_wires_rename_reorder_and_edit_on_new():
     assert "dragstart" in js and "editing" in js  # drag to reorder; focus the freshly-made card
 
 
+def test_clicking_the_robot_starts_an_agent_on_that_task_and_names_it_back():
+    # The gray robot starts an agent then and there - the deterministic half of "please take care of
+    # this task", with no brain in the loop to decide. The click posts the task to /task/take-care,
+    # the handler starts the agent, and its name comes back so the tab can turn the task green at once.
+    seen = {}
+
+    def on_take_care(project, text):
+        seen["project"], seen["text"] = project, text
+        return "captions-agent"
+
+    client = create_app(_model(), on_submit=lambda t: None,
+                        on_take_care=on_take_care).test_client()
+    answer = client.post("/task/take-care",
+                         data={"project": "Excephalon", "text": "live captions in the window"})
+
+    assert answer.status_code == 200
+    assert answer.get_json() == {"agent": "captions-agent"}   # named back, for the green link
+    assert seen == {"project": "Excephalon", "text": "live captions in the window"}
+
+
+def test_take_care_without_a_handler_wired_is_a_harmless_no_op():
+    # A checkout with no fleet behind it (the plain web app, a test) answers cleanly rather than
+    # failing: no agent started, nothing to turn green.
+    answer = _client().post("/task/take-care", data={"project": "X", "text": "y"})
+    assert answer.status_code == 200
+    assert answer.get_json() == {"agent": None}
+
+
+def test_projects_js_starts_an_agent_and_turns_the_task_green_when_the_robot_is_clicked():
+    # The click posts to /task/take-care and, on the name it gets back, turns that task's gray robot
+    # into the green working link - the task goes green the moment its agent exists.
+    js = _client().get("/static/projects.js").get_data(as_text=True)
+    assert "agent-start" in js                        # the gray robot's click is what is wired
+    assert "/task/take-care" in js                    # a direct start, not a message to the brain
+    assert "agent-link working" in js                 # and it turns the task green with the new agent
+    assert "data-project" in js or "dataset.project" in js   # the task's project rides with the start
+
+
 def test_the_excephalon_card_carries_no_subtitle_like_the_project_cards(tmp_path):
     # "Remove any special styling from the Excephalon card - it should look the same as the other
     # project cards." Its subtitle note was the only difference; without it, every card is the same.
@@ -1334,9 +1372,9 @@ def test_a_long_project_name_truncates_in_the_sidebar():
     assert "flex: 1 1 0" in rule and "min-width: 0" in rule
 
 
-def test_a_task_with_an_agent_on_it_shows_an_indicator_linking_to_its_log(tmp_path):
-    # "When an agent is assigned to a task, show an indicator to the left of the checkbox... clicking
-    # the indicator should link to that agent's log in the Agents tab." The tie is the agent's
+def test_a_task_with_an_agent_on_it_shows_a_glowing_indicator_linking_to_its_log(tmp_path):
+    # An agent on a task: the robot is the green, glowing `working` indicator, and clicking it still
+    # links to that agent's log in the Agents tab to see what it is doing. The tie is the agent's
     # recorded enhancement, matched to the item whose words carry it.
     profile = tmp_path / "profile.md"
     profile.write_text("## Enhancements\n- [ ] #3 warn about credits\n- [ ] #4 live captions\n",
@@ -1349,13 +1387,16 @@ def test_a_task_with_an_agent_on_it_shows_an_indicator_linking_to_its_log(tmp_pa
     page = client.get("/projects").get_data(as_text=True)
     row = page.split('id="task-excephalon-3"')[1].split("</li>")[0]
     assert 'href="/agents#agent-credits-warn"' in row       # one click to that agent's log
-    assert 'class="agent-link"' in row
+    assert 'class="agent-link working"' in row              # green, glowing: an agent is on it
+    assert 'class="agent-start"' not in row                 # a working task is not a start button
     assert 'id="task-excephalon-4"' not in page             # only the assigned task gets an anchor
 
 
-def test_every_checklist_row_reserves_the_indicator_gutter(tmp_path):
-    # "Shift all checkboxes over to make room for this indicator." The gutter is reserved on every
-    # row, agent or not, so the boxes stay in one column instead of jumping when an agent appears.
+def test_every_checklist_row_shows_the_robot_and_reserves_its_gutter(tmp_path):
+    # The robot is always there, every task: an agent on it is the green link to its log; no agent
+    # is a gray button that starts one. Either way the same fixed-width gutter leads the row, so the
+    # boxes stay in one column instead of jumping when an agent appears ("shift all checkboxes over
+    # to make room for this indicator").
     profile = tmp_path / "profile.md"
     profile.write_text("## Enhancements\n- [ ] #3 warn about credits\n- [ ] #4 live captions\n",
                        encoding="utf-8")
@@ -1365,12 +1406,45 @@ def test_every_checklist_row_reserves_the_indicator_gutter(tmp_path):
     client = _client(profile_path=profile, agent_state_path=state)
 
     page = client.get("/projects").get_data(as_text=True)
-    # #3 has the link; #4, with no agent, holds an empty slot of the same width in its place.
-    assert page.count('class="agent-link"') == 1
-    assert page.count('class="agent-slot"') == 1
+    # #3 has an agent, so its robot is the link; #4 has none, so its robot is the start button. The
+    # empty spacer is gone - every task carries a real, clickable robot now.
+    assert page.count('class="agent-link working"') == 1
+    assert page.count('class="agent-start"') == 1
+    assert 'class="agent-slot"' not in page
+    # The robot glyph itself rides in both - always visible, whether an agent is on the task or not.
+    assert page.count('class="agent-icon"') == 2
+    # The no-agent robot is a button (an action - start an agent), not a link. #4 has no agent, so
+    # it carries no anchor id; it is found by its own data-id.
+    no_agent = page.split('data-id="4"')[1].split("</li>")[0]
+    assert '<button type="button" class="agent-start"' in no_agent
     css = client.get("/static/app.css").get_data(as_text=True)
-    gutter = _rule_for(css, ".checklist .agent-slot, .checklist .agent-link")
+    gutter = _rule_for(css, ".checklist .agent-start, .checklist .agent-link")
     assert "width" in gutter and "flex: none" in gutter    # a fixed column the boxes clear
+
+
+def test_a_card_carries_its_project_name_for_the_take_care_click(tmp_path):
+    # Clicking a task's gray robot tells Excephalon which project's task it is; the card names itself
+    # in data-project so the click can say "take care of #N in <project>" without guessing it from a
+    # slugged id. Excephalon's own card names itself too, so its roadmap tasks read the same way.
+    profile = tmp_path / "profile.md"
+    profile.write_text("## Enhancements he wants (roadmap)\n- [ ] #1 voice\n\n"
+                       "## Project: RTT app\n- [ ] #1 tuning\n", encoding="utf-8")
+    page = _client(profile_path=profile).get("/projects").get_data(as_text=True)
+
+    assert 'id="card-excephalon"' in page and 'data-project="Excephalon"' in page
+    assert 'id="card-rtt-app"' in page and 'data-project="RTT app"' in page
+
+
+def test_the_working_robot_glows_green_and_both_states_go_white_on_hover():
+    # The working robot glows green, and the white hover highlight must read on the icon in both
+    # states - over the gray of an idle task and the green of a working one. So the working state
+    # takes the accent and a matching glow; hover lifts either color to white.
+    css = _client().get("/static/app.css").get_data(as_text=True)
+
+    working = _rule_for(css, ".checklist .agent-link.working")
+    assert "var(--accent)" in working and "drop-shadow" in working   # green, and glowing
+    hover = _rule_for(css, ".checklist .agent-start:hover, .checklist .agent-link:hover")
+    assert "#fff" in hover                                            # white over gray and green both
 
 
 def test_an_agents_log_links_back_to_the_task_it_is_working_on(tmp_path):
@@ -1407,6 +1481,16 @@ def test_an_agent_on_no_task_shows_no_back_link(tmp_path):
 
     page = client.get("/agents").get_data(as_text=True)
     assert 'class="on-task"' not in page
+
+
+def test_a_freshly_made_row_starts_with_the_grey_robot_not_a_cloned_green_one():
+    # Enter makes the next row by cloning the one it was pressed in. Pressed in a task an agent is on,
+    # the clone would carry that agent's green link onto a brand-new, agentless row - a lie about what
+    # is running until the next draw. freshRow resets the gutter to the gray start button, the
+    # no-agent shape, so a new row is always one you can start an agent on.
+    js = _client().get("/static/writing.js").get_data(as_text=True)
+    assert "agent-link" in js and "agent-start" in js    # freshRow deals with both gutter shapes
+    assert 'createElement("button")' in js               # it rebuilds the gray start button
 
 
 def test_both_tabs_flash_the_row_a_cross_link_lands_on():

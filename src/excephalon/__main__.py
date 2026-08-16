@@ -15,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 
 from excephalon import machine
-from excephalon.actions import fleet_actions
+from excephalon.actions import fleet_actions, take_care_spec
 from excephalon.agent_desk import AgentDesk
 from excephalon.brain_sdk import DEFAULT_PERSONA, SdkBrain
 from excephalon.sdk_session import open_sign_in
@@ -65,7 +65,7 @@ from excephalon.tts_cloud import CloudVoiceError, Failover, connect, settings_in
 from excephalon.tts_neural import KokoroEngine, ensure_voice, voice_choice
 from excephalon.tts_system import NullTTS, SystemTTS
 from excephalon.voice import Speaker, play_stream
-from excephalon.worktrees import head_commit
+from excephalon.worktrees import head_commit, prepare_worktree_for
 
 REPO = Path(__file__).resolve().parents[2]
 RUNTIME_DIR = REPO / "runtime"
@@ -497,6 +497,24 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
         # His name for an agent, from the page's own heading - the desk owns the key, the log and
         # the record, so the window asks it rather than moving files behind its back.
         hooks["rename_agent"] = desk.rename
+
+        def _take_care(project, task_text):
+            """A Projects-tab robot clicked: start an agent on that task right now - the
+            deterministic half of "please take care of this task", the same work start_agent does
+            when the brain is told to, with no brain in the loop to decide. A fresh worktree per
+            task, cut from current origin/main; the agent's name goes back so the page turns that
+            task green at once."""
+            spec = take_care_spec(project, task_text)
+            if spec is None:
+                return None
+            path = REPO / ".claude" / "worktrees" / spec["name"]
+            if not path.exists():  # new work means a new worktree, cut from current origin/main
+                prepare_worktree_for(str(path))
+            desk.start(spec["name"], str(path), spec["task"],
+                       enhancement=spec["enhancement"], project=spec["project"])
+            return spec["name"]
+
+        hooks["take_care"] = _take_care
     # The other apps he has, by their folder names - the same scan that teaches the ear his
     # project names. file_improvement refuses a feature request naming one of them: the
     # Enhancements list is for changes to Excephalon itself, and a request for another app
@@ -817,6 +835,11 @@ def main(argv=None):
             spawn(os.getpid(), REPO)
             control.restart()
 
+    def _take_care(project, task_text):
+        # The desk lives in the session; the page reaches it through the same hooks seam a rename
+        # takes. Before the session is up, a click is a harmless no-op.
+        return hooks.get("take_care", lambda *_: None)(project, task_text)
+
     app = create_app(
         mirror.model, mirror=mirror,
         on_submit=lambda text: mic.get("submit", lambda _: None)(text),
@@ -849,6 +872,10 @@ def main(argv=None):
         # His Config edits take effect NOW, not at the next launch: new translations are swapped
         # into the running transcriber the moment they save.
         on_translations_saved=lambda own: hooks.get("retune", lambda **_: None)(translations=own),
+        # A task's robot, clicked, starts an agent on it straight away - the deterministic half of
+        # "please take care of this task", so a click and telling Excephalon to handle it come to
+        # the same thing. The name comes back and the tab turns that task green.
+        on_take_care=_take_care,
     )
     # The modifier beside the spacebar + Enter submits the draft. On Windows that is Win+Enter,
     # which reaches no window on that machine, so it arrives by keyboard hook instead - and only

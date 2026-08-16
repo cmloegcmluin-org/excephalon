@@ -99,13 +99,21 @@ body.page .topbar, body.config .topbar {
 .checklist li { display: flex; gap: 9px; align-items: baseline; padding: 2px 0; }
 .checklist input { accent-color: var(--accent); width: 15px; height: 15px; margin: 0;
                    flex: none; cursor: pointer; }
-/* The agent gutter to the left of every box - a fixed column so the boxes line up whether or not
-   a task has an agent on it. Empty it is just the spacer; filled it is the robot, a link to that
-   agent's log that lights to the accent on hover, the way the filing stamp beside the words does. */
-.checklist .agent-slot, .checklist .agent-link { flex: none; width: 15px; height: 15px; }
-.checklist .agent-link { display: inline-flex; align-items: center; justify-content: center;
+/* The robot gutter to the left of every box - a fixed column so the boxes line up whether or not
+   a task has an agent on it. It is always a robot now: gray and a button where no agent is on the
+   task (a click starts one), green and glowing where one is (a link to that agent's log). Both
+   light white on hover, so the pointer reads the same over either color. */
+.checklist .agent-start, .checklist .agent-link { flex: none; width: 15px; height: 15px;
+                         display: inline-flex; align-items: center; justify-content: center;
                          color: var(--dim); align-self: center; }
-.checklist .agent-link:hover { color: var(--accent); }
+/* The start button is an action, not a control to style: strip the browser's chrome so only the
+   robot shows, and answer the pointer. */
+.checklist .agent-start { padding: 0; border: none; background: none; cursor: pointer; }
+/* An agent is on this task: the robot glows the accent green, so a working task is legible at a
+   glance down the list. */
+.checklist .agent-link.working { color: var(--accent);
+                                 filter: drop-shadow(0 0 3px rgba(127, 255, 0, .55)); }
+.checklist .agent-start:hover, .checklist .agent-link:hover { color: #fff; }
 .checklist .agent-icon { width: 15px; height: 15px; display: block; }
 /* The other half of that link, on the Agents tab: a quiet line under an agent's heading pointing
    back to the task it is on, so the two tabs reach each other both ways. */

@@ -170,6 +170,21 @@ function freshRow(like) {
   // A new row is not filed - drop the cloned stamp and its link, so it saves as plain words.
   row.removeAttribute("data-filed");
   row.querySelector(".filed")?.remove();
+  // A fresh row is on no agent, whatever the row it was cloned from was: its gutter is the gray
+  // "start an agent" button, not the green link an agent-task row carries. Enter pressed in such a
+  // task would otherwise clone that link onto the new, agentless row - a lie about what is running
+  // until the next draw. The robot glyph is reused, never rebuilt; only its wrapper changes.
+  const link = row.querySelector(".agent-link");
+  if (link) {
+    const start = document.createElement("button");
+    start.type = "button";
+    start.className = "agent-start";
+    // The canonical tooltip, read from a start button the server already rendered rather than
+    // duplicated here; harmlessly empty in the rare card with no no-agent task to copy from.
+    start.title = document.querySelector(".agent-start")?.title || "";
+    while (link.firstChild) start.append(link.firstChild);
+    link.replaceWith(start);
+  }
   wordsOf(row).textContent = "";
   const box = row.querySelector("input");
   if (!box) return row;  // a bullet row: the dot came along in the clone, and that is all of it
