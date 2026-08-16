@@ -49,6 +49,13 @@ def test_no_brain_at_all_is_not_a_gate():
     assert overtaken(None, "line") is False
 
 
+def test_the_prompt_says_an_offer_is_not_a_delivery():
+    # It killed the update he had just said "Yes." to, because it had seen itself say "I've got
+    # an update on highdeas-scrubber-fix when you're ready" and read that as having given it.
+    assert "not having given it" in GATE_PROMPT
+    assert "weighing it up" in GATE_PROMPT  # and any hesitation resolves toward saying it
+
+
 def test_the_prompt_forbids_rewording_it():
     # The one thing this must never do is answer with a better version of the line. The app speaks
     # held news word for word precisely because the brain retelling it in its own words put two

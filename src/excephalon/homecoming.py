@@ -49,6 +49,21 @@ def record_boot(path, commit, at):
         pass  # a lost record costs the next welcome-back its detail, never the launch
 
 
+def last_seen(transcripts):
+    """When the last process was last THERE for him: the newest transcript's last write.
+
+    How long he was away is that moment to this boot, never boot to boot - measured boot to boot
+    it is the LIFETIME of the session he just spent talking to it, and a restart-to-upgrade after
+    a fifty-minute conversation came back with "you were out about 49 minutes" (he was out for
+    seconds). Read off the file rather than written at shutdown, because a process that is killed
+    or crashes writes nothing on its way out and is exactly when this matters."""
+    directory = Path(transcripts)
+    try:
+        return max((record.stat().st_mtime for record in directory.glob("*.log")), default=0.0)
+    except OSError:
+        return 0.0
+
+
 def changes_since(repo, commit, run=None):
     """The subjects of the commits that landed since `commit` - what changed while it was down.
 

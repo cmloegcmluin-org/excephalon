@@ -94,6 +94,27 @@ def test_with_no_thread_at_all_there_is_nothing_to_come_back_to():
     assert homecoming_note(turns=[], changes=["something landed"], away=95.0) == ""
 
 
+def test_how_long_he_was_away_is_measured_from_when_it_last_spoke_not_from_when_it_started(tmp_path):
+    # "it claims I was out for 49 minutes, but that's not true. I had just sent it a message a few
+    # minutes ago and then restarted to upgrade." The gap was measured boot-to-boot, which is the
+    # LIFETIME of the session he spent talking to it, not the time he was without it. What the
+    # last process last wrote is when it was last there for him.
+    from excephalon.homecoming import last_seen
+
+    transcripts = tmp_path / "transcripts"
+    transcripts.mkdir()
+    older, newest = transcripts / "session-1.log", transcripts / "session-2.log"
+    older.write_text("old\n", encoding="utf-8")
+    newest.write_text("new\n", encoding="utf-8")
+    import os
+
+    os.utime(older, (1000.0, 1000.0))
+    os.utime(newest, (5000.0, 5000.0))
+
+    assert last_seen(transcripts) == 5000.0
+    assert last_seen(tmp_path / "nowhere") == 0.0  # a first-ever launch has nothing to measure
+
+
 def test_a_long_absence_is_not_a_restart_mid_conversation():
     # Coming back the next day is a fresh start, whatever the transcript still holds; "sorry you
     # weren't able to communicate with me for a minute" would be nonsense about last night.
