@@ -1422,6 +1422,21 @@ def test_every_checklist_row_shows_the_robot_and_reserves_its_gutter(tmp_path):
     assert "width" in gutter and "flex: none" in gutter    # a fixed column the boxes clear
 
 
+def test_the_robot_rides_the_top_of_a_multiline_task_with_the_box_and_number():
+    # "when a task is multiline the robot icon ... is vertically centered, but the checkbox and
+    # task number are not. the robot should be at the top just like the other two items." The row
+    # aligns its items to the first line's baseline, and the checkbox and #id ride that. The robot
+    # used to force align-self: center, so on a tall multiline row it floated to the middle while
+    # the other two stayed at the top; without that override it rides the same baseline as them.
+    css = _client().get("/static/app.css").get_data(as_text=True)
+
+    row = _rule_for(css, ".checklist li")
+    assert "align-items: baseline" in row  # the box and #id ride this; the robot must too
+
+    gutter = _rule_for(css, ".checklist .agent-start, .checklist .agent-link")
+    assert "align-self: center" not in gutter  # no longer floats to the middle of a tall row
+
+
 def test_a_card_carries_its_project_name_for_the_take_care_click(tmp_path):
     # Clicking a task's gray robot tells Excephalon which project's task it is; the card names itself
     # in data-project so the click can say "take care of #N in <project>" without guessing it from a
