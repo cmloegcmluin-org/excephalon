@@ -79,6 +79,16 @@ def _ago(seconds):
     return f"{round(seconds / 86400)} days ago"
 
 
+# Words that carry no identity when names are matched loosely: shared by half the fleet, they
+# would make "the agent" match everything.
+_NAME_NOISE = frozenset(("the", "and", "for", "its", "with", "that", "this", "agent", "one"))
+
+
+def _name_tokens(name):
+    return {piece for piece in re.split(r"[^a-z0-9]+", str(name).lower())
+            if len(piece) >= 3 and piece not in _NAME_NOISE}
+
+
 # Commands that ship work OUT to the shared remote - the point past which it is no longer just this
 # agent's private branch. An agent must not run one until the user has SEEN the work and approved
 # it. This is the code half of the review loop: the persona is only ASKED to wait for a verdict,
@@ -303,6 +313,7 @@ class AgentDesk:
         False when there is no such agent, when the new name is already taken, or when it is not
         a name a file can carry - a rename that half-lands would leave a tab pointing at nothing.
         """
+        name = self.resolve(name) or name
         wanted = safe_name(to)
         if not wanted:
             return False
@@ -438,9 +449,52 @@ class AgentDesk:
         """What a fresh agent would be started on right now."""
         return describe(self._model, self._effort)
 
+    def resolve(self, name):
+        """The agent this name MEANS, or None: his words, a tool's retyping, or a truncation,
+        resolved against who is actually here - and never a guess between two candidates.
+
+        The desk names agents by truncating his words to a filename, then hands that name to
+        the brain and the foreman - who retype it. One retyping missed, the foreman answered
+        "the agent isn't reachable at the desk under the name I was given", and its failure
+        report reached the user as a heads-up about machinery ("it can't find the agent... it
+        should be smart enough to just look at open/recent agents or ones with names that are
+        similar. this is bullshit I shouldn't be pestered about"). Exact first; then the name
+        as `safe_name` writes one, prefix in either direction, which is what a truncation is;
+        then shared words, taken only when exactly one candidate wins."""
+        wanted = str(name or "").strip()
+        with self._lock:
+            held = list(self._desked)
+        if self._log_dir is not None and self._log_dir.exists():
+            # Tabs still open without an agent behind them answer to their names too - the
+            # window shows them, so he and the tools speak of them.
+            held += [path.stem for path in self._log_dir.glob("*.log") if path.stem not in held]
+        if not wanted or not held:
+            return None
+        if wanted in held:
+            return wanted
+        folded = wanted.lower()
+        matched = [name for name in held if name.lower() == folded]
+        if len(matched) == 1:
+            return matched[0]
+        tidy = safe_name(wanted).lower()
+        if tidy:
+            matched = [name for name in held
+                       if name.lower().startswith(tidy) or tidy.startswith(name.lower())]
+            if len(matched) == 1:
+                return matched[0]
+        words = _name_tokens(wanted)
+        if words:
+            shared = {name: len(words & _name_tokens(name)) for name in held}
+            best = max(shared.values())
+            matched = [name for name, count in shared.items() if count == best and count]
+            if len(matched) == 1:
+                return matched[0]
+        return None
+
     def send(self, name, message):
         """Say something more to an agent already at the desk. False if there's no such agent -
         the caller must not be told a message was delivered when it wasn't."""
+        name = self.resolve(name) or name
         with self._lock:
             if name not in self._desked:
                 return False
@@ -452,6 +506,7 @@ class AgentDesk:
         words to the agent supersede whatever it was waiting to say). NOT part of `send`, because
         the foreman also sends: a technical prod settles a snag, not the user's business, and must
         never eat news still owed to them."""
+        name = self.resolve(name) or name
         drop = getattr(self._outbox, "drop", None)
         if drop is not None:
             drop(name)
@@ -461,6 +516,7 @@ class AgentDesk:
         news to hand over. The brain calls this instead of retelling a held update in its own
         words: retold, the app then delivered its held copy too, and the user heard two versions
         of the same news 13 seconds apart."""
+        name = self.resolve(name) or name
         held = getattr(self._outbox, "owed_about", None)
         request = getattr(self._outbox, "request", None)
         if held is None or request is None or name not in held():
@@ -479,6 +535,7 @@ class AgentDesk:
         Refused for an agent mid-turn: the steps come from its report, so marking before it has
         reported would present a thing that does not exist yet. Raises DeliveryError with the
         reason - the caller owes the brain that sentence, not a silent no."""
+        name = self.resolve(name) or name
         with self._lock:
             entry = self._desked.get(name)
             if entry is None:
@@ -499,6 +556,7 @@ class AgentDesk:
         even accepted it; it was never presented to me to be validated." A rejection stands either
         way - he often judges from his own looking - and it drops the now-stale walkthrough, since
         his feedback has moved past it."""
+        name = self.resolve(name) or name
         held = getattr(self._outbox, "owed_about", None)
         owed = held() if held is not None else set()
         with self._lock:
@@ -519,12 +577,14 @@ class AgentDesk:
 
     def delivery_stage(self, name):
         """Where `name`'s work stands - what the narrator asks before wording a finished turn."""
+        name = self.resolve(name) or name
         with self._lock:
             entry = self._desked.get(name)
             return entry.delivery.stage if entry is not None else None
 
     def task_of(self, name):
         """What `name` was put on - the first thing a senior read of its situation needs."""
+        name = self.resolve(name) or name
         with self._lock:
             entry = self._desked.get(name)
             return entry.task if entry is not None else None
@@ -533,6 +593,7 @@ class AgentDesk:
         """The tail of an agent's exchange log - the situation as it actually unfolded, for the
         foreman's senior read. The tail and not the whole file, because a day-long exchange would
         drown the situation it ends on. Empty when there is nothing to read."""
+        name = self.resolve(name) or name
         if self._log_dir is None:
             return ""
         try:
@@ -669,6 +730,7 @@ class AgentDesk:
         restart) is just its leftover log, and the move alone closes it. A worktree that refuses
         removal (dirty, locked) is left for a maintenance sweep - the wrap-up itself never fails
         over it. Only a cleanly finished agent ticks its item: a DIED one never marks its ask done."""
+        name = self.resolve(name) or name
         held = getattr(self._outbox, "owed_about", None)
         owed = held() if held is not None else set()
         with self._lock:
