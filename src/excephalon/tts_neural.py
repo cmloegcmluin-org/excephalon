@@ -69,7 +69,7 @@ def ensure_voice(directory, *, fetch=_download, announce=lambda line: None):
 
 
 class KokoroEngine:
-    """Synthesis: text in, (samples, samplerate) out, in one configured voice.
+    """Synthesis: text in, (chunks, samplerate) out, in one configured voice.
 
     The model is opened on first use, not at construction - construction happens on the startup
     path, and loading ~300MB there would push the window's first paint behind it."""
@@ -83,9 +83,13 @@ class KokoroEngine:
         self._kokoro = None
 
     def say(self, text):
+        """The line as ONE piece: synthesis here is local and faster than speech, so there is
+        nothing to be gained by handing it over in installments the way a cloud voice must."""
         if self._kokoro is None:
             self._kokoro = self._factory(*self._paths)
-        return self._kokoro.create(text, voice=self._voice, speed=self._speed, lang="en-us")
+        samples, samplerate = self._kokoro.create(text, voice=self._voice, speed=self._speed,
+                                                  lang="en-us")
+        return [samples], samplerate
 
 
 def _real_kokoro(model_path, voices_path):

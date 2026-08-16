@@ -11,6 +11,8 @@ import queue
 import re
 import threading
 
+import numpy
+
 # The seam a spoken sentence ends on: closing punctuation followed by whitespace (or a newline,
 # which ends a line of a list the same way). A period right after a digit is an enumerator
 # ("1. Open the console") - the number belongs to its step, so it is no seam. Abbreviations
@@ -47,8 +49,11 @@ _END = object()  # closes a Reply's queue; never spoken
 class Speaker:
     """The voice: one engine, one way audio goes out, for one-shot lines and streamed replies alike.
 
-    `engine.say(text) -> (samples, samplerate)` synthesizes; `play(samples, samplerate, interrupt)`
-    makes it audible and returns early when the interrupt fires. Both are injected, so every
+    `engine.say(text) -> (chunks, samplerate)` synthesizes, where chunks is an ITERABLE of sample
+    pieces rather than one clip; `play(chunks, samplerate, interrupt)` makes them audible as they
+    arrive and returns early when the interrupt fires. A local engine that has the whole line at
+    once yields a single piece and loses nothing; a cloud engine yields the line as it is
+    generated, so the first sound is not held behind the last byte. Both are injected, so every
     behavior here is tested without an audio device."""
 
     def __init__(self, engine, *, play):
@@ -60,8 +65,8 @@ class Speaker:
         said = str(text).strip()
         if not said or _fired(interrupt):
             return
-        samples, samplerate = self._engine.say(said)
-        self._play(samples, samplerate, interrupt=interrupt)
+        chunks, samplerate = self._engine.say(said)
+        self._play(chunks, samplerate, interrupt=interrupt)
 
     def stream(self, *, interrupt=None, spoken_form=None):
         """A reply about to arrive as text deltas: speak it sentence by sentence as it forms.
@@ -113,11 +118,11 @@ class Reply:
                     return
                 if _fired(self._interrupt):
                     continue  # cut off: drain the rest unspoken, so done() comes straight back
-                samples, samplerate = self._engine.say(self._spoken_form(sentence))
+                chunks, samplerate = self._engine.say(self._spoken_form(sentence))
                 if _fired(self._interrupt):
                     continue
                 self.sounding = True
-                self._play(samples, samplerate, interrupt=self._interrupt)
+                self._play(chunks, samplerate, interrupt=self._interrupt)
                 self._spoken.append(sentence)  # heard - at least its start, if the cut came mid-word
         finally:
             self.sounding = False  # however the reply ends, the air is clear once the pump is
@@ -133,15 +138,49 @@ def _sounddevice_stream(samplerate):
     return sounddevice.OutputStream(samplerate=samplerate, channels=1, dtype="float32")
 
 
-def play_samples(samples, samplerate, *, interrupt=None, open_stream=_sounddevice_stream,
-                 chunk_seconds=0.1):
-    """Make a synthesized clip audible, in pieces small enough that a cut-off feels instant.
+# How much sound is banked before the first write. A local engine hands over the whole line at
+# once and clears this on its first piece, so it costs nothing there; a cloud engine's pieces
+# arrive over a network, and writing the first of them the instant it lands leaves the device
+# with nothing queued behind it - any hesitation upstream is then heard as a gap mid-word. A
+# fifth of a second is a cushion the ear does not notice being given.
+PREBUFFER_SECONDS = 0.2
 
-    The interrupt is checked between writes, so a piece is the longest a reply can keep sounding
+
+def play_stream(chunks, samplerate, *, interrupt=None, open_stream=_sounddevice_stream,
+                chunk_seconds=0.1, prebuffer_seconds=PREBUFFER_SECONDS):
+    """Make synthesized audio audible as its pieces arrive, in writes small enough to cut short.
+
+    The interrupt is checked between writes, so a write is the longest a reply can keep sounding
     after they say stop - a tenth of a second, not the rest of the sentence."""
     step = max(1, int(samplerate * chunk_seconds))
+    cushion = int(samplerate * prebuffer_seconds)
     with open_stream(samplerate) as stream:
-        for start in range(0, len(samples), step):
+        banked, banked_length, playing = [], 0, False
+        for piece in chunks:
             if _fired(interrupt):
                 return
-            stream.write(samples[start:start + step])
+            banked.append(piece)
+            banked_length += len(piece)
+            if banked_length < (step if playing else cushion):
+                continue  # too little to be worth a write; let it gather
+            playing = True
+            if not _write(stream, _joined(banked), step, interrupt):
+                return
+            banked, banked_length = [], 0
+        if banked:
+            _write(stream, _joined(banked), step, interrupt)
+
+
+def _joined(pieces):
+    """One array of the banked pieces - and the piece itself when there is only one of them,
+    which is every utterance of a local engine and must not cost a copy of the whole clip."""
+    return pieces[0] if len(pieces) == 1 else numpy.concatenate(pieces)
+
+
+def _write(stream, samples, step, interrupt):
+    """Write one span of samples; False once the interrupt has cut it short."""
+    for start in range(0, len(samples), step):
+        if _fired(interrupt):
+            return False
+        stream.write(samples[start:start + step])
+    return True
