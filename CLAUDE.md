@@ -446,6 +446,19 @@ never presented to me to be validated"). A rejection stands either way — he of
 own looking — and drops the now-stale walkthrough; `steps.py` decides
 what a streamed message becomes there — the agent's words as messages, and its commands, diffs and
 output as the machinery under them, capped at both ends with what was dropped counted in place.
+`coherence.py` is the gate every STORED line passes before it is spoken. Anything queued was
+composed at one moment and said at another, and the queue carries no notion of what happened in
+between — so a recorded question was played back four minutes after he had answered it, and each
+previous fix named one more route by which a stale recording could reach him (retire, tell_agent,
+superseded, drained-in-hand, errands): six patches about paths, none about the disease, which he
+named as "a thin skin around a bunch of stupid little idiots who don't talk to each other". The
+one part that knows the conversation is the brain, because it has been having it, so the check is
+one question TO the brain carrying the exact words: SAY or SKIP, never a rewrite — the app speaks
+stored news word for word on purpose. Every uncertainty falls toward saying it (no brain, a wedged
+brain, an unclear answer all open the gate), because news never spoken is the graver failure by
+far; and an update he has just asked for by name (deliver_update) skips the gate entirely, or the
+brain could talk itself out of the thing it was told to hand over. A line judged overtaken is
+finished with rather than held: it goes to the durable record and its spool copy goes with it.
 `waiting.py` is what happens when several agents finish at once: they are read out numbered and
 held, and it says which one a reply just named — but a short reply carrying a DENIAL ("no",
 "not") is never a pick, because picking is affirmative and the sentence that got read as one was

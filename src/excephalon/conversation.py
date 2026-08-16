@@ -5,6 +5,7 @@ import threading
 import time
 from dataclasses import dataclass
 
+from excephalon.coherence import overtaken
 from excephalon.console import Console
 from excephalon.links import as_spoken
 from excephalon.phrases import canonical as _canonical
@@ -533,7 +534,7 @@ class Conversation:
             # copy word for word the moment the reply ends - one teller, the exact words, instead
             # of two versions of the same news 13 seconds apart.
             self._requested.discard(getattr(self._waiting[place], "about", None))
-            self._speak_held(place)
+            self._speak_held(place, gate=False)  # he asked for this one, by name, just now
             return
         if self._dormant():
             # They are off doing something else; news breaking in "out of nowhere" is a jolt.
@@ -558,12 +559,7 @@ class Conversation:
         if len(self._waiting) > 1:
             self._announce()
             return
-        news = self._waiting.pop()
-        self._console.heads_up(news)  # shown in full, and spoken the same
-        # Brain-composed news is the brain's own sentence: spoken as known, so the unwritten-lines
-        # ledger never reads its own words back to it as someone else's.
-        self._say(news, record=False, known=getattr(news, "composed", False))
-        self._delivered(news)
+        self._speak_held(0)  # the one item left: said as itself, through the one delivery path
 
     def _delivered(self, news):
         """Tell the outbox this news actually reached the user, so its durable copy is done.
@@ -573,14 +569,28 @@ class Conversation:
         if spoken is not None:
             spoken(news)
 
-    def _speak_held(self, place, name_the_rest=True):
+    def _speak_held(self, place, name_the_rest=True, gate=True):
         """Speak the held update at `place` word for word, then name any others still waiting -
         the one shape a held update ever reaches him in, whoever set it in motion (his pick, his
         go-ahead, or the brain handing it over with deliver_update).
 
         `name_the_rest=False` for news that is not an item on his list: an errand's result is
         something to say, and hanging a roll call off it turns the machinery he should never see
-        into the thing he is answering about."""
+        into the thing he is answering about.
+
+        Every stored line passes the coherence gate first (see `coherence`): it was composed at
+        one moment and is being spoken at another, and the queue cannot know what happened in
+        between - which is how a recorded question came back four minutes after he answered it.
+        A line the brain says has been overtaken is finished with, not held: it goes to the
+        durable record so the next diagnosis can see it, and its spool copy goes with it.
+        `gate=False` for an update he has just asked for by name - gating that would let the
+        brain talk itself out of the very thing it was told to hand over."""
+        if gate and overtaken(self._brain, str(self._waiting[place])):
+            news = self._waiting.pop(place)
+            self._console.evidence(f"(overtaken, never spoken, for "
+                                   f"{getattr(news, 'about', None) or 'no agent'}: {news})")
+            self._superseded(news)
+            return ""
         news = self._waiting.pop(place)
         listed = [held for held in self._waiting if getattr(held, "listed", True)]
         named = bool(name_the_rest and listed)
