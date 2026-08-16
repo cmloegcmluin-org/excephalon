@@ -251,3 +251,52 @@ def test_an_unfit_greeting_falls_back_to_the_stock_line():
             return "Back with you. Let me finish reading what actually landed."
 
     assert _greeting(Promiser(), 0.0, {}, note="[pick it up]") == STOCK_GREETING
+
+
+def test_standing_work_makes_a_long_gap_no_fresh_start():
+    # An agent was mid-task across a ninety-minute gap that ended in a wedge-forced close, and
+    # the boot said "I'm ready. What can I do for you?" - "Excephalon gave me the generic
+    # greeting just now even though it had some work in progress." The fresh-start outs are
+    # about the conversation; standing work outlives the conversation.
+    from excephalon.homecoming import homecoming_note
+
+    fleet = "multiline-icon-fix: working - task: the robot icon on multiline tasks - in work"
+    note = homecoming_note(
+        turns=[("restart it", "On it.")], changes=[], away=60 * 96,
+        fleet=fleet, busy=True)
+
+    assert note != ""
+    assert "multiline-icon-fix" in note
+    assert "still standing" in note
+    assert "do not pick it back up" in note  # the stale exchange is not a thread to resume
+    assert "restart it" not in note  # and it is left out of the note entirely
+
+
+def test_standing_work_survives_even_a_goodbye_ended_session():
+    from excephalon.homecoming import homecoming_note
+
+    note = homecoming_note(
+        turns=[("goodbye excephalon", "Be seeing you.")], changes=[], away=95.0,
+        fleet="fixer: working - in work", busy=True)
+
+    assert note != ""
+    assert "still standing" in note
+
+
+def test_without_standing_work_the_fresh_start_outs_still_hold():
+    from excephalon.homecoming import homecoming_note
+
+    assert homecoming_note(turns=[], changes=[], away=95.0, busy=False) == ""
+    assert homecoming_note(turns=[("hi", "Hello.")], changes=[], away=60 * 60 * 9,
+                           busy=False) == ""
+
+
+def test_a_genuine_resume_still_carries_the_broken_off_exchange():
+    from excephalon.homecoming import homecoming_note
+
+    note = homecoming_note(
+        turns=[("what about the scrubber?", "It's ready for your eyes.")],
+        changes=[], away=95.0, fleet="scrubber-fix: idle - in review", busy=True)
+
+    assert "what about the scrubber?" in note
+    assert "pick the conversation back up" in note
