@@ -5,7 +5,7 @@ import numpy
 import pytest
 
 from excephalon.tts_cloud import (
-    SAMPLE_RATE, CloudVoiceError, ElevenLabsEngine, Failover, connect, settings_in,
+    SAMPLE_RATE, CloudVoiceError, ElevenLabsEngine, Failover, connect, settings_in, setup,
 )
 from excephalon.tts_neural import KokoroEngine
 from excephalon.voice import Speaker, play_stream
@@ -335,3 +335,62 @@ class _FakeKokoro:
 
     def create(self, text, voice, speed, lang):
         return numpy.array([0.25, -0.25], dtype="float32"), SAMPLE_RATE
+
+
+class Conversation:
+    """The door's side of a double-click: what it printed, and what he typed back."""
+
+    def __init__(self, *answers):
+        self.said = []
+        self._answers = list(answers)
+
+    def ask(self, prompt):
+        self.said.append(prompt)
+        return self._answers.pop(0)
+
+    def transcript(self):
+        return "\n".join(self.said)
+
+
+def test_the_setup_door_lists_his_voices_and_writes_the_one_he_picks(tmp_path):
+    # He picks a voice by LISTENING to it on their site, then has to tell this app which one. A
+    # numbered list of the voices his account actually has is the whole of that conversation -
+    # the alternative is hand-writing JSON around a twenty-character id.
+    http = FakeVoices([{"voice_id": "a1", "name": "Rachel"}, {"voice_id": "a2", "name": "Adam"}])
+    door = Conversation("sk-test", "2")
+
+    assert setup(tmp_path, ask=door.ask, say=door.said.append, open_url=http) is True
+
+    assert settings_in(tmp_path) == {"key": "sk-test", "voice": "Adam"}
+    assert "Rachel" in door.transcript() and "Adam" in door.transcript()
+
+
+def test_the_setup_door_takes_a_name_as_readily_as_a_number(tmp_path):
+    http = FakeVoices([{"voice_id": "a1", "name": "Rachel"}, {"voice_id": "a2", "name": "Adam"}])
+    door = Conversation("sk-test", "rachel")
+
+    setup(tmp_path, ask=door.ask, say=door.said.append, open_url=http)
+
+    assert settings_in(tmp_path)["voice"] == "Rachel"
+
+
+def test_a_key_the_account_rejects_is_said_at_the_door_and_changes_nothing(tmp_path):
+    # Finding out at the door beats finding out at the next launch, when the only symptom is a
+    # voice that isn't the one he chose.
+    http = FakeVoices([], status=OSError("HTTP Error 401: Unauthorized"))
+    door = Conversation("sk-wrong")
+
+    assert setup(tmp_path, ask=door.ask, say=door.said.append, open_url=http) is False
+
+    assert settings_in(tmp_path) is None
+    assert "401" in door.transcript()
+
+
+def test_the_setup_door_leaves_an_existing_choice_alone_when_he_answers_nothing(tmp_path):
+    # A door opened by accident, or to look, must not be a way to lose the voice he set up.
+    (tmp_path / "cloud.json").write_text('{"key": "sk-old", "voice": "Adam"}', encoding="utf-8")
+    door = Conversation("")
+
+    assert setup(tmp_path, ask=door.ask, say=door.said.append, open_url=FakeVoices([])) is False
+
+    assert settings_in(tmp_path) == {"key": "sk-old", "voice": "Adam"}

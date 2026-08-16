@@ -239,9 +239,34 @@ and every failure falls back to the stock line, because a greeting is not worth 
 delivery of agent news at a lull; it puts the desk's fleet briefing in front of the brain every
 turn and streams the reply into the voice as it is written. `voice.py` is how a streamed reply
 becomes audible — sentences cut the moment they end, synthesized and played while the next forms,
-one stop draining everything — and `tts_neural.py` is the Kokoro engine behind it plus the
+one stop draining everything — and an engine hands its line over as PIECES rather than one
+finished clip, so a voice that generates over a network is not held back until its last byte;
+`play_stream` banks a fifth of a second before the first write, because writing the instant the
+first bytes land leaves the device with nothing queued and any hesitation upstream is heard as a
+gap mid-word. `tts_neural.py` is the Kokoro engine behind it plus the
 one-time model fetch into `runtime/tts/`, with the System.Speech robot voice serving until the
-model is in. `actions.py` is everything the brain can DO: sixteen typed in-process tools wired to
+model is in; local synthesis is faster than speech, so its line is one piece and costs no copy.
+`tts_cloud.py` is ElevenLabs in the same seam — `pcm_24000`, which is signed 16-bit at the rate
+Kokoro already speaks at, so the samples reach the sound device with no decoder and no dependency
+for one, on the Flash model because this voice interrupts and is interrupted and one that sounds
+fractionally better a second later is the wrong trade. The network is the part of it allowed to
+fail and is never allowed to be why he hears nothing: `Failover` decides at the FIRST piece of
+every sentence, which is the last moment the choice is free, and hands a sentence the cloud
+cannot deliver to Kokoro instead. A connection dying MID-sentence ends that sentence and no more
+— the fault is caught inside the module rather than let out into the pump that speaks every
+reply (a helper killing its host, which this project has sat through once), and the tail is never
+re-spoken, because the local voice would start the sentence over and he would hear its first half
+twice. The change of voice is SAID, once a session, exactly as the neural voice's own fallback is,
+and after three failures running the local voice simply takes over — each attempt costs the
+network timeout before any sound comes out, so against a dead key that pause would otherwise sit
+in front of every sentence all session. The key is spoken to at startup rather than merely read
+(`connect` lists the account's voices, which proves it AND resolves the name he wrote to the id
+the API wants), and `Connect ElevenLabs.bat` — with the .command beside it, because a door built
+for one desk is no door on the other — is how `runtime/tts/cloud.json` gets written: only voices
+ADDED to the account can be spoken in, and which those are is not a thing he can answer from a
+file. A checkout with no cloud.json is the ordinary case and is announced as nothing at all. The
+cloud voice requires the local one behind it: on a machine that cannot have Kokoro there is no
+fallback, and silence is the one thing this may never cost him. `actions.py` is everything the brain can DO: sixteen typed in-process tools wired to
 the desk — among them update_persona, drop_instruction, remember and forget_memory, its levers over
 its own standing instructions (`runtime/persona.md`) and memory in BOTH directions, because a card
 he can edit and it cannot ends with it handing him the chore ("I don't have a way to remove
