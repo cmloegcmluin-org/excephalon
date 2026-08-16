@@ -89,7 +89,12 @@ STANDING_NOTICE = (
 )
 
 BRIEFING_NOTICE = (
-    "[Fleet briefing, from the app - the live state of your agents as of this turn:\n{briefing}]\n\n"
+    "[Fleet briefing, from the app - the live state of your agents as of this turn. Where a "
+    "piece of work stands comes from HERE, never from your memory of the conversation: work "
+    "this briefing calls DELIVERED is finished - never re-offer it for review or approval; "
+    "work it does not call delivered is never called shipped or done; an item on his lists "
+    "with no agent on it is not started yet. When your memory and this briefing disagree, "
+    "the briefing is what is true:\n{briefing}]\n\n"
 )
 
 # Conduct that rode only in the persona and lost to habit by mid-session - each line below was

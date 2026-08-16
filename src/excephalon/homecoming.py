@@ -16,9 +16,41 @@ stock greeting again wearing more of them.
 import json
 from pathlib import Path
 
+from excephalon.delivery import IN_REVIEW
 from excephalon.phrases import canonical
 
 STOCK_GREETING = "I'm ready. What can I do for you?"
+
+# What a greeting must never be. A promise of an action is the brain narrating its own future -
+# "Back with you... Let me finish reading what actually landed with the drag play cursor fix so
+# you know exactly what you're approving" opened a session by resurrecting a dead errand about
+# the wrong work, and he had to answer "Dude, what the fuck? No. It's already been shipped."
+# An invitation to approve or review is a stage claim, legal only while some thread really is
+# in review. Both checks are tiny and fail toward the stock line, which is never wrong - only
+# plain.
+_PROMISES = ("let me ", "i'm going to ", "i am going to ", "give me a moment", "give me a sec",
+             "i'll finish", "i'll read", "i'll check", "i'll look", "i'll go ", "i'll get")
+_REVIEW_CLAIMS = ("approv", "review", "verdict", "ready for your eyes", "ready for you to look",
+                  "take a look", "waiting on your", "waiting for your")
+
+
+def unfit(greeting, fleet=""):
+    """Why this composed greeting may not be spoken, or None when it may.
+
+    The greeting is one model-written sentence with no conversation behind it yet, so the two
+    failure shapes it keeps finding are both checkable: promising work instead of greeting, and
+    inviting a verdict when nothing is in review. The stage phrase is delivery.IN_REVIEW, the
+    same constant the briefing renders - matched anywhere in the fleet text, so the check and
+    the record cannot drift apart."""
+    lowered = greeting.lower()
+    promise = next((phrase for phrase in _PROMISES if phrase in lowered), None)
+    if promise:
+        return f"promises an action ('{promise.strip()}…') instead of greeting"
+    if IN_REVIEW not in fleet.lower():
+        claim = next((phrase for phrase in _REVIEW_CLAIMS if phrase in lowered), None)
+        if claim:
+            return f"invites approval ('{claim}…') while nothing is in review"
+    return None
 
 # Past this, coming back is a fresh start rather than a restart mid-conversation - whatever the
 # transcript still holds. "Sorry you weren't able to communicate with me for a minute" is a
@@ -86,14 +118,17 @@ def changes_since(repo, commit, run=None):
     return [line.strip() for line in (done.stdout or "").splitlines() if line.strip()]
 
 
-def homecoming_note(turns, changes, away, waiting=()):
+def homecoming_note(turns, changes, away, waiting=(), fleet=""):
     """The note that asks the brain for a welcome-back, or "" when a fresh start is the truth.
 
     Empty for the three cases where picking a thread up would be wrong: no thread at all, a
     thread he closed himself with a goodbye, and a gap long enough that this is a new day rather
     than a restart. Otherwise it carries everything the answer needs IN the note - the exchange
-    it broke off on, what landed while it was down, how long he was without it - rather than
-    trusting the session's seed to still hold the last turn."""
+    it broke off on, what landed while it was down, how long he was without it, and where every
+    piece of work STANDS (`fleet`, the desk's own briefing) - rather than trusting the session's
+    seed to still hold the last turn. The fleet section exists because the greeting used to know
+    only the transcript's prose, and from prose alone it denied that anything had landed and
+    reopened an approval that was finished, in one sentence."""
     if not turns or away > RESUMABLE_GAP:
         return ""
     last_said, last_reply = turns[-1]
@@ -106,7 +141,15 @@ def homecoming_note(turns, changes, away, waiting=()):
               "difference he could ever notice - if that is what these are, there is nothing to "
               "tell him about it, and you say nothing rather than inventing a meaning for him. "
               "He met one of these as \"a voice safety layer caught some things before they "
-              "reached you... you're still driving\", and asked what on earth it meant.")
+              "reached you... you're still driving\", and asked what on earth it meant. But work "
+              "the briefing below says was DELIVERED is the opposite of internal: that is his "
+              "own ask landing, exactly what he restarted to have.")
+    standing = ""
+    if fleet:
+        standing = ("\n\nWhere his work stands, from the app's own records - the one truth, "
+                    f"which your greeting must not contradict:\n{fleet}\nWork marked DELIVERED "
+                    "is finished: never re-offer it for review or approval, and never deny it "
+                    "landed. Work not marked delivered is never called shipped.")
     owed = ""
     if waiting:
         owed = (f"\n\nThere are already {len(waiting)} update(s) waiting to be spoken to him, and "
@@ -118,10 +161,13 @@ def homecoming_note(turns, changes, away, waiting=()):
         "[App note, not from him: you have just restarted and this is your FIRST line of the "
         f"session - he is looking at the window now. He was without you for about {away / 60:.0f} "
         f"minute(s). {landed}"
-        f"{owed}\n\n"
+        f"{standing}{owed}\n\n"
         f"The exchange you broke off on - he said: {last_said}\nYou answered: {last_reply}\n\n"
         "Greet him in one short spoken paragraph: welcome him back, briefly acknowledge the gap "
         "if he lost real time, say in one plain clause what changed ONLY if it is something he "
-        "would notice, and then pick the conversation back up. Do not ask what you can do for "
-        "him - you already know what you were doing.]"
+        "would notice, and then pick the conversation back up. A greeting says where things "
+        "stand and hands him the floor: never promise an action of your own ('let me finish "
+        "reading…' opened a session and made no sense to him), and never invite him to approve "
+        "or review anything unless the records above say it is in review. Do not ask what you "
+        "can do for him - you already know what you were doing.]"
     )

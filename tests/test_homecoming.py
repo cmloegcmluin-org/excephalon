@@ -192,3 +192,62 @@ def test_a_brain_that_cannot_answer_still_leaves_him_greeted():
 
     assert _greeting(Broken(), 0.0, {}, note="[pick it up]") == STOCK_GREETING
     assert _greeting(Silent(), 0.0, {}, note="[pick it up]") == STOCK_GREETING
+
+
+def test_the_note_carries_where_every_work_thread_stands():
+    # The greeting knew only the transcript's prose, and from prose it denied anything had landed
+    # and reopened a finished approval in one sentence: "nothing's changed that you'd notice. Let
+    # me finish reading what actually landed with the drag play cursor fix so you know exactly
+    # what you're approving" - about work already shipped. The desk's own record rides the note.
+    from excephalon.homecoming import homecoming_note
+
+    note = homecoming_note(
+        turns=[("what about the scrubber?", "It's ready for your eyes.")],
+        changes=[], away=95.0,
+        fleet="robot-icon-ui: DELIVERED just now - was on: the robot icons")
+
+    assert "robot-icon-ui: DELIVERED just now" in note
+    assert "must not contradict" in note
+    assert "never re-offer it for review" in note
+
+
+def test_a_greeting_that_promises_work_is_unfit():
+    # "Let me finish reading what actually landed..." opened a session by resurrecting a dead
+    # errand; he answered "Dude, what the fuck? No. It's already been shipped." A greeting says
+    # where things stand and hands him the floor - it never narrates the brain's next action.
+    from excephalon.homecoming import unfit
+
+    assert unfit("Back with you. Let me finish reading what landed with the drag play "
+                 "cursor fix so you know exactly what you're approving.")
+    assert unfit("Welcome back - I'm going to check what the agents did.")
+
+
+def test_a_greeting_inviting_approval_is_unfit_unless_something_is_in_review():
+    from excephalon.homecoming import unfit
+
+    empty_desk = "No agents running."
+    reviewing = "fixer: idle - task: a task - in review - presented, awaiting his verdict"
+
+    assert unfit("Back with you - the demo is ready for your eyes to approve.", empty_desk)
+    assert unfit("Welcome back. Take a look at the robot icon demo.", empty_desk)
+    assert unfit("The fix is waiting on your approval.", reviewing) is None
+    assert unfit("Welcome back. The scrubber fix is still waiting on your verdict.",
+                 reviewing) is None
+
+
+def test_an_ordinary_welcome_back_is_fit_to_speak():
+    from excephalon.homecoming import unfit
+
+    assert unfit("Welcome back - you were only gone a couple of minutes. The robot icon "
+                 "work landed while you were out; we were talking about your schedule.",
+                 "No agents running.") is None
+
+
+def test_an_unfit_greeting_falls_back_to_the_stock_line():
+    from excephalon.__main__ import _greeting
+
+    class Promiser:
+        def respond(self, message):
+            return "Back with you. Let me finish reading what actually landed."
+
+    assert _greeting(Promiser(), 0.0, {}, note="[pick it up]") == STOCK_GREETING

@@ -59,6 +59,7 @@ from excephalon.homecoming import (
     last_boot,
     last_seen,
     record_boot,
+    unfit,
 )
 from excephalon.transcript import MessageLog, Transcript, recent_turns
 from excephalon.tts_cloud import CloudVoiceError, Failover, connect, settings_in
@@ -276,15 +277,19 @@ def _open_ears(announce):
 _SERVICE_FAULTS = {}
 
 
-def _greeting(brain, booted_at, previous_boot, was_seen=0.0, waiting=(), note=None):
+def _greeting(brain, booted_at, previous_boot, was_seen=0.0, waiting=(), note=None, fleet=""):
     """The first line of the session: a welcome back mid-conversation, or the stock greeting.
 
     "It shouldn't always say 'I'm ready. What can I do for you?' That should only be the default
     if we weren't in the middle of something when I restarted." A restart is his only way to pick
     up a fix, so most of them happen mid-thread - and the stock line greets him as a stranger
     about a conversation minutes old, with his own unanswered question still on the screen behind
-    it. The brain does the wording; anything that goes wrong falls back to the stock line, because
-    a greeting is not worth a launch."""
+    it. The brain does the wording, briefed with where every piece of work stands (`fleet`);
+    anything that goes wrong falls back to the stock line, because a greeting is not worth a
+    launch - and so does a greeting `unfit` refuses, which is a wrong sentence rather than a
+    failure: the brain opened a session promising to "finish reading what actually landed with
+    the drag play cursor fix so you know exactly what you're approving", about work already
+    shipped, and he had to answer "Dude, what the fuck? No."."""
     if note is None:
         note = homecoming_note(
             turns=recent_turns(TRANSCRIPTS, keep=1),
@@ -292,14 +297,17 @@ def _greeting(brain, booted_at, previous_boot, was_seen=0.0, waiting=(), note=No
             # How long he was WITHOUT it: from the last thing the old process wrote, not from
             # when that process started - which is the length of the conversation he just had.
             away=max(0.0, booted_at - max(was_seen, float(previous_boot.get("at") or booted_at))),
-            waiting=waiting)
+            waiting=waiting, fleet=fleet)
     if not note:
         return STOCK_GREETING
     try:
         said = brain.respond(note)
     except Exception:
         return STOCK_GREETING
-    return said.strip() or STOCK_GREETING
+    said = said.strip()
+    if not said or unfit(said, fleet):
+        return STOCK_GREETING
+    return said
 
 
 def _google_faults(services):
@@ -460,6 +468,9 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     # does can block on agent work, and nothing it says doubles as a control channel.
     desk = AgentDesk(outbox, roster_path=ACTIVE_AGENTS, log_dir=AGENT_LOGS, monitor=quiet_monitor,
                      events=agent_events, state_path=AGENT_STATE,
+                     # The durable record of how each wrapped agent ended - "delivered" as a fact
+                     # on file, so a briefing can say it instead of the brain re-inventing it.
+                     wrapped_path=RUNTIME_DIR / "wrapped.json",
                      # The machine-wide engineering law, split out of the user's personal config
                      # so working agents can be pointed at exactly it. Home-relative, so nothing
                      # personal enters the source and a machine without the split just skips it.
@@ -651,7 +662,10 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     # the waiting list on the back of it when there is one.
     greeting = ("" if text_mode or muted
                 else _greeting(brain, booted_at, previous_boot, was_seen,
-                               waiting=sorted(name for name in outbox.owed_about() if name)))
+                               waiting=sorted(name for name in outbox.owed_about() if name),
+                               # Where every piece of work stands, so the welcome can never
+                               # contradict the record it greets him over.
+                               fleet=desk.digest()))
 
     def converse():
         try:

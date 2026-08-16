@@ -248,7 +248,15 @@ and a first line that misses its moment dies the instant he speaks, because it i
 nothing. What landed is offered
 to him only if he could NOTICE it: the same note warns that most commits are internal machinery,
 after the brain turned two of them into "a voice safety layer caught some things before they
-reached you... you're still driving", which meant nothing to him.
+reached you... you're still driving", which meant nothing to him — but work the desk's briefing
+marks DELIVERED is the opposite of internal, his own ask landing. That briefing rides the note
+(`fleet`), because composed from the transcript's prose alone the greeting denied anything had
+landed and reopened a finished approval in one sentence — "nothing's changed that you'd notice.
+Let me finish reading what actually landed with the drag play cursor fix so you know exactly
+what you're approving", about work already shipped, answered "Dude, what the fuck? No." And the
+composed line passes `unfit` before it is spoken: a greeting that promises an action of the
+brain's own, or invites approval while the briefing has nothing in review, is a wrong sentence
+rather than a failure, and the stock line takes its place.
 `conversation.py` is the loop (listen → think → speak) and owns turn-taking, barge-in, and the
 delivery of agent news at a lull; it puts the desk's fleet briefing in front of the brain every
 turn and streams the reply into the voice as it is written. `voice.py` is how a streamed reply
@@ -456,8 +464,14 @@ behind them, because the window draws a tab per log file and a brain briefed fro
 once could not see the tab the user was pointing at; it names the recently wrapped agents too,
 logs in the archive, because asked about one by the very name it had been using all day the brain
 could not see that the agent had ever existed ("it couldn't figure out which agent I was talking
-about"); and it claims "presented, awaiting their
-verdict" only once nothing about that agent is still waiting to be spoken (`Outbox.owed_about`,
+about") — and names each WITH how it ended and how long ago (`runtime/wrapped.json`, written by
+`retire`), because the archive alone keeps bare names and a bare name's ending got re-invented:
+minutes after robot-icon-ui landed and wrapped up, the brain told him it was "done now; ready for
+you to look at". The digest opens with the ladder every thread climbs — his own words, unstarted →
+in work → in review → in revision → landing → DELIVERED (`delivery.LADDER`) — and claims itself
+the one truth about stage, which the per-turn briefing and the homecoming note both bind the
+brain to; and it claims a work in review
+only once nothing about that agent is still waiting to be spoken (`Outbox.owed_about`,
 the spool's view of the whole debt): `mark_ready` fires when the walkthrough is COMPOSED, that
 walkthrough then sat in hand for over an hour, and the brain briefed across the gap told him "I
 presented it earlier... no new update since then" about steps he had never heard ("That's false.
@@ -488,7 +502,10 @@ pointer to the machine-wide engineering law file when one exists (`law_path`, ho
 and reply-format hook break a coding agent. `delivery.py` is the review loop as code — building →
 presented-with-steps → landing, a verdict impossible on work never presented, approval dispatching
 the landing and rejection the feedback mechanically, so the loop's order is a rule rather than a
-persona habit — and since the walkthrough itself can wait unspoken, `desk.verdict` refuses any
+persona habit. Every stage always has a briefing phrase (`describe`), because being-built used to
+earn no words and a stage the briefing never stated was one the brain invented; rejections are
+counted so "in revision" reads apart from first drafting, which is a distinction he named himself
+— and since the walkthrough itself can wait unspoken, `desk.verdict` refuses any
 APPROVAL while it does: an ambiguous "yes" was once recorded as approval of steps that had never
 been spoken, and the work merged without his eyes ever on it ("I never even accepted it; it was
 never presented to me to be validated"). A rejection stands either way — he often judges from his
