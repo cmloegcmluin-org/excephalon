@@ -107,10 +107,14 @@ PROMPTS = {
         "steps - where to click and what to watch happen. Never relay internals - no commit "
         "hashes, no test counts, no branch names, no file lists.]"
     ),
+    # Reached only past the desk's own silent-restart allowance (DEATH_LIMIT): a single crash
+    # is handled without a word - "I should never need to know that anything died" - so by the
+    # time this fires, the task has killed its agent repeatedly and is genuinely stuck.
     "died": (
-        "[Agent event, from the app - not the user speaking. Your agent {agent} DIED mid-task: "
-        "{report}\n\nTell the user plainly in one short sentence that it died and what you "
-        "propose - their work is not moving until they decide.]"
+        "[Agent event, from the app - not the user speaking. Your agent {agent} has now crashed "
+        "repeatedly - the app restarted it silently each time, and it died again: {report}\n\n"
+        "This task is stuck. Tell the user plainly in one short sentence that this piece of work "
+        "keeps failing and what you propose - their work is not moving until they decide.]"
     ),
     "wrote": (
         "[Agent event, from the app - not the user speaking. Your agent {agent} wrote this to "

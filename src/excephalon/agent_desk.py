@@ -135,6 +135,19 @@ CONTINUE_AFTER_RESTART = (
     "report where things stand."
 )
 
+# How many silent restarts a crashing agent gets before its deaths become the user's business.
+# One crash is infrastructure - a server error, a dropped connection - and he has ruled on it:
+# told an agent had "hit a server error and died - should I restart it?", he answered "Yes, of
+# course... your job is to insulate me from this kind of Pointless delay." But a THIRD death in
+# a row is not weather, it is a task that keeps killing its agent, and silently feeding it new
+# sessions forever would hide work that is genuinely stuck.
+DEATH_LIMIT = 2
+
+RESUME_AFTER_CRASH = (
+    "Your previous session crashed mid-task and has been resumed. Pick up exactly where you "
+    "left off and finish; if you had in fact finished, report where things stand."
+)
+
 # A revived agent recorded mid-landing owes exactly one thing: the outcome. Left "idle" in
 # peace, one sat on a merge that had landed within a minute while its tab stayed open all day.
 RESUME_LANDING = (
@@ -199,6 +212,11 @@ class _Desked:
         self.state = "starting"
         self.last_heard = None  # when it last said anything at all, step or reply
         self.last_word = None  # the last thing it said back, trimmed for the roster
+        # Crashes in a row on the CURRENT effort, reset by any clean turn. Counted so the desk
+        # can restart a crashed session silently a bounded number of times - the user has ruled
+        # that deaths are machinery, not news - without a task that keeps killing its agents
+        # churning new sessions forever.
+        self.deaths = 0
         # The session id this agent was REVIVED on. A freshly resumed agent reports no id of its
         # own until it first answers, and persisting that None over the recorded id orphaned a
         # whole fleet: the next restart found nulls, skipped every revival, and the user was told
@@ -367,6 +385,9 @@ class AgentDesk:
                                  project=entry.get("project"))
                 desked.recorded_session = session  # what the next persist writes until it speaks
                 desked.state = "idle"
+                # A crash streak survives the app's own restart, or a task that kills its agents
+                # would get a fresh silent allowance every boot.
+                desked.deaths = entry.get("deaths") or 0
                 self._desked[name] = desked
             revived.append(name)
             if entry.get("delivery") == "landing":
@@ -542,6 +563,11 @@ class AgentDesk:
                 + f" - task: {_one_line(entry.task)}"
                 + (f" - {self._delivery_truth(name, entry, owed)}"
                    if self._delivery_truth(name, entry, owed) else "")
+                # A quiet fact, held for "what's taking so long?" - never volunteered: he has
+                # ruled that crashes and restarts are machinery, and the answer to work in
+                # progress is "still working on it".
+                + (f" - (crashed and was restarted, {entry.deaths}x - mention only if he asks "
+                   "why it is slow)" if entry.deaths else "")
                 + (f" - last said: {_one_line(entry.last_word)}" if entry.last_word else "")
                 for name, entry in self._desked.items()
             ]
@@ -779,12 +805,21 @@ class AgentDesk:
             # Everything the agent streams back goes to the log as it happens, so their tab shows
             # the agent working rather than an empty file that reads exactly like a dead one.
             reply = entry.agent.work(message, on_message=lambda msg: self._heard(name, msg))
-        except Exception as exc:  # a dead agent is news, not something to swallow
+        except Exception as exc:
+            # A crash is infrastructure, not his news: "I should never need to know that
+            # anything died. It's not relevant to me" - asked whether to restart a dead agent,
+            # he answered "Yes, of course... your job is to insulate me from this kind of
+            # Pointless delay." So the desk restarts it itself, silently, up to DEATH_LIMIT
+            # times; only a task that keeps killing its agents becomes something to say.
             self._log(entry, f"(died: {exc})", prefix=AGENT_SAID)
+            if self._restart_dead(name, entry, message):
+                return
             self._set_state(name, "failed")
             self._finished(name)  # already announced as dead; don't also announce it as quiet later
             self._events("died", name, str(exc))
             return
+        with self._lock:
+            entry.deaths = 0  # a clean turn: earlier crashes were weather, not a pattern
         self._set_state(name, "idle", last_word=reply)
         if entry.delivery.stage != "landing":
             # A landing agent still owes a merge report, so its silence clock keeps running - the
@@ -792,6 +827,35 @@ class AgentDesk:
             # is what finally stops it.
             self._finished(name)
         self._events("finished", name, reply)
+
+    def _restart_dead(self, name, entry, message):
+        """Give a crashed agent a fresh session on its own history and tell it to pick back up -
+        True when the restart is in motion, False when its deaths have hit the limit and the
+        crash is now genuinely the user's business. The resumed session remembers everything the
+        dead one knew (same CLI session id), so nothing of the task is lost with the process; an
+        agent that crashed before it ever spoke has no history to resume, and is simply handed
+        the message it died on, from the top."""
+        with self._lock:
+            if self._desked.get(name) is not entry:
+                return True  # retired or renamed out from under the crash; nothing to report
+            entry.deaths += 1
+            if entry.deaths > DEATH_LIMIT:
+                return False
+            session = (getattr(entry.agent, "session_id", None) or entry.recorded_session
+                       or newest_session_for(entry.cwd))
+            old = entry.agent
+            entry.agent = self._factory(name, entry.cwd, self._decide,
+                                        model=entry.model, effort=entry.effort, resume=session)
+            entry.recorded_session = session
+        try:
+            old.close()
+        except Exception:
+            pass  # the session is already dead; the restart carries on
+        self._log(entry, f"(restarted on a fresh session after the crash - attempt "
+                         f"{entry.deaths} of {DEATH_LIMIT})", prefix=AGENT_SAID)
+        self._persist()
+        self._dispatch(name, RESUME_AFTER_CRASH if session else message)
+        return True
 
     def _plain_notices(self, kind, agent, report):
         """The undirected default: what the desk always said, straight to the outbox. A notice,
@@ -853,7 +917,7 @@ class AgentDesk:
                  "session_id": getattr(entry.agent, "session_id", None) or entry.recorded_session,
                  "state": entry.state, "model": entry.model, "effort": entry.effort,
                  "delivery": entry.delivery.stage, "steps": entry.delivery.steps,
-                 "rejections": entry.delivery.rejections,
+                 "rejections": entry.delivery.rejections, "deaths": entry.deaths,
                  "enhancement": entry.enhancement,
                  "project": entry.project}
                 for name, entry in self._desked.items()
