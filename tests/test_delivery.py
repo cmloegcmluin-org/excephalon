@@ -76,12 +76,30 @@ def test_work_already_landing_takes_no_second_verdict():
         work.verdict(approved=False)
 
 
-def test_the_briefing_phrase_says_what_the_user_is_waiting_on():
+def test_every_stage_answers_where_the_work_stands():
+    # Being built used to earn no phrase at all, and a stage the briefing never stated was one
+    # the brain invented - it re-opened approval on delivered work and called unlanded work
+    # shipped in one evening. Every rung now has words, in the user's own ladder.
     work = Delivery()
-    assert work.describe() is None  # plain being-built is the normal case; no noise for it
+    assert work.describe() == "in work - being built, not yet presented for his eyes"
 
     work.present("steps")
-    assert work.describe() == "presented, awaiting their verdict"
+    assert work.describe() == "in review - presented, awaiting his verdict"
 
     work.verdict(approved=True)
-    assert work.describe() == "approved, landing it"
+    assert work.describe() == "landing - approved, being merged now"
+
+
+def test_rejected_work_reads_as_revision_not_first_drafting():
+    # "still in initial work, review, revision work..." - his ladder tells the two apart, so the
+    # briefing must too: an agent redoing rejected work is not where an untouched one is.
+    work = Delivery()
+    work.present("steps")
+    work.verdict(approved=False)
+
+    assert work.describe() == ("in revision - he sent it back with notes; presenting again "
+                               "when ready")
+
+    work.present("fixed steps")
+    work.verdict(approved=True)
+    assert work.describe() == "landing - approved, being merged now"

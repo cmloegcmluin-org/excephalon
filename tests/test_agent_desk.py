@@ -418,7 +418,9 @@ def test_the_digest_briefs_a_brain_on_the_fleet_without_a_file_read():
 def test_the_digest_with_nothing_running_says_so():
     desk, _, _ = _desk()
 
-    assert desk.digest() == "No agents running."
+    assert "No agents running." in desk.digest()
+    # And the ladder rides every briefing, so a stage word is never left to interpretation.
+    assert "unstarted" in desk.digest() and "DELIVERED" in desk.digest()
 
 
 def test_with_an_events_sink_the_desk_reports_there_instead_of_the_outbox():
@@ -1118,7 +1120,7 @@ def test_presented_work_shows_in_the_digest_awaiting_a_verdict():
 
     desk.present("fixer", "Open localhost:5300 and click Export.")
 
-    assert "presented, awaiting their verdict" in desk.digest()
+    assert "in review - presented, awaiting his verdict" in desk.digest()
     desk.close()
 
 
@@ -1233,7 +1235,7 @@ def test_an_approved_verdict_dispatches_the_landing():
 
     assert _wait_for(lambda: len(made[0].messages) == 2)
     assert "signed off" in made[0].messages[1]
-    assert "approved, landing it" in desk.digest()
+    assert "landing - approved, being merged now" in desk.digest()
     desk.close()
 
 
@@ -1284,7 +1286,7 @@ def test_the_delivery_stage_survives_into_the_state_file_and_back(tmp_path):
     # not reached them; the moment that goes out, the plain presented line returns.
     assert "has NOT reached them yet" in reborn.digest()
     reborn_outbox.drain()
-    assert "presented, awaiting their verdict" in reborn.digest()
+    assert "in review - presented, awaiting his verdict" in reborn.digest()
     assert reborn.delivery_stage("fixer") == "ready"
     reborn.close()
 
@@ -1564,3 +1566,45 @@ def test_the_state_that_allows_a_wrap_up_is_the_state_that_ticks_its_item(tmp_pa
 
     assert desk.retire("voice") is True
     assert ticked == ["Better voice"]
+
+
+def test_a_wrap_up_writes_how_the_thread_ended_and_the_briefing_says_it(tmp_path):
+    # The ladder's last rung. The archive alone keeps bare names, and a briefing of bare names
+    # left "delivered" a fact nobody held: minutes after robot-icon-ui landed and wrapped up, the
+    # brain told him "The robot icon UI work is done now; ready for you to look at" - reopening
+    # review of finished work. The ending is a record now, and the digest reads it back.
+    logs = tmp_path / "agent-logs"
+    record = tmp_path / "wrapped.json"
+    moment = [1000.0]
+    desk, outbox, _ = _desk(log_dir=logs)
+    desk._wrapped_path = record
+    desk._now = lambda: moment[0]
+    desk.start("robot-icon-ui", "/tmp/wt", "the robot icons on the Projects tab")
+    assert _wait_for(lambda: bool(outbox))
+    _approved(desk, "robot-icon-ui")
+
+    assert desk.retire("robot-icon-ui") is True
+    moment[0] = 1000.0 + 16 * 60
+
+    briefing = desk.digest()
+    assert "robot-icon-ui: DELIVERED 16 minutes ago" in briefing
+    assert "was on: the robot icons on the Projects tab" in briefing
+    desk.close()
+
+
+def test_a_died_agent_is_recorded_as_died_never_delivered(tmp_path):
+    logs = tmp_path / "agent-logs"
+    desk, outbox, made = _desk(log_dir=logs)
+    desk._wrapped_path = tmp_path / "wrapped.json"
+    desk._now = lambda: 1000.0
+    desk.start("doomed", "/tmp/wt", "a task")
+    assert _wait_for(lambda: bool(outbox))
+    made[0].work = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom"))
+    desk.send("doomed", "again")
+    assert _wait_for(lambda: desk._desked["doomed"].state == "failed")
+    outbox.drain()
+
+    assert desk.retire("doomed") is True
+
+    assert "doomed: DIED just now" in desk.digest()
+    desk.close()

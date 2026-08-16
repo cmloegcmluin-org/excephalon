@@ -24,7 +24,7 @@ import threading
 import time
 from pathlib import Path
 
-from excephalon.delivery import Delivery, DeliveryError
+from excephalon.delivery import LADDER, Delivery, DeliveryError
 from excephalon.memory import PROJECT_PREFIX
 from excephalon.models import DEFAULT_EFFORT, DEFAULT_MODEL, describe
 from excephalon.relay import notice
@@ -65,6 +65,18 @@ def _one_line(text, limit=160):
     """A task or a last word as one digest-sized line: its first line, capped."""
     line = str(text).strip().splitlines()[0] if str(text).strip() else ""
     return line if len(line) <= limit else line[:limit].rstrip() + "…"
+
+
+def _ago(seconds):
+    """An age as a person says one - the briefing reads better as "16 minutes ago" than as an
+    epoch nobody can subtract in their head."""
+    if seconds < 90:
+        return "just now"
+    if seconds < 90 * 60:
+        return f"{round(seconds / 60)} minutes ago"
+    if seconds < 36 * 3600:
+        return f"{round(seconds / 3600)} hours ago"
+    return f"{round(seconds / 86400)} days ago"
 
 
 # Commands that ship work OUT to the shared remote - the point past which it is no longer just this
@@ -197,7 +209,7 @@ class _Desked:
 class AgentDesk:
     def __init__(self, outbox, *, agent_factory=None, roster_path=None, log_dir=None,
                  monitor=None, clock=time.strftime, events=None, run=None, state_path=None,
-                 law_path=None, complete_enhancement=None):
+                 law_path=None, complete_enhancement=None, wrapped_path=None, now=time.time):
         from excephalon.worktrees import run_hidden
 
         self._run = run or run_hidden  # how retire removes a finished agent's worktree
@@ -217,6 +229,12 @@ class AgentDesk:
         self._log_dir = Path(log_dir) if log_dir else None
         # Where a finished agent's log goes to rest - the fleet's one archive (see tailing).
         self._archive_dir = archive_dir(self._log_dir) if self._log_dir else None
+        # The durable record of how each wrapped agent ENDED - delivered, or died. The archive
+        # alone keeps only names, and a briefing of bare names left "delivered" a fact nobody
+        # held: the brain re-offered review of work that had landed and been wrapped up minutes
+        # earlier ("The robot icon UI work is done now; ready for you to look at").
+        self._wrapped_path = Path(wrapped_path) if wrapped_path else None
+        self._now = now
         # Who is actually alive. Silence used to be measured off the agent-inbox FILENAMES, which
         # know nothing about agents: a note Excephalon wrote itself became an "agent" that then went
         # quiet, and a working agent that hadn't written to its inbox looked dead. Both were
@@ -343,7 +361,8 @@ class AgentDesk:
                 desked = _Desked(agent, entry.get("cwd"), entry.get("task", ""),
                                  self._open_log(name), model=model, effort=effort,
                                  delivery=Delivery(entry.get("delivery") or "building",
-                                                   entry.get("steps")),
+                                                   entry.get("steps"),
+                                                   entry.get("rejections") or 0),
                                  enhancement=entry.get("enhancement"),
                                  project=entry.get("project"))
                 desked.recorded_session = session  # what the next persist writes until it speaks
@@ -527,6 +546,11 @@ class AgentDesk:
                 for name, entry in self._desked.items()
             ]
         fleet = "\n".join(lines) or "No agents running."
+        # The ladder rides with the stages so a stage word is never left to interpretation, and
+        # the briefing claims its own authority: a stage it does not state is a stage the brain
+        # must not invent.
+        fleet = (f"Every work thread climbs: {LADDER}. This is the app's own record of where "
+                 f"each one stands - the one truth, never your memory of it.\n{fleet}")
         orphans = self._orphan_tabs()
         if orphans:
             fleet += ("\nTabs still open from agents no longer at the desk - close_agent_tab "
@@ -534,20 +558,57 @@ class AgentDesk:
         recently = self._recently_wrapped()
         if recently:
             fleet += ("\nRecently wrapped up, each log in the archive (run_errand can read "
-                      "one): " + ", ".join(recently))
+                      "one): " + "; ".join(recently))
         return fleet
 
     def _recently_wrapped(self, count=3):
-        """The newest wrapped-up agents, off their archived logs - so a name the user is still
-        using resolves even after its tab closed. Briefed from the live fleet alone, the brain
-        could not even see that a wrapped agent had existed, and reconstructed its fate from
-        stale memory instead ("That agent stalled on the merge") - about work that had in fact
-        merged. Newest first and a few only; the archive goes back months."""
+        """The newest wrapped-up agents WITH how each one ended - so a name the user is still
+        using resolves even after its tab closed, and its outcome is a fact on file rather than
+        a memory. Briefed from the live fleet alone, the brain could not even see that a wrapped
+        agent had existed ("That agent stalled on the merge" - about work that had merged); briefed
+        bare names, it re-invented their endings ("done now; ready for you to look at" - about
+        work delivered and wrapped up minutes earlier). Newest first and a few only."""
+        ended = {record["name"]: record for record in self._wrapped_records()}
         if self._archive_dir is None or not self._archive_dir.exists():
+            logs = []
+        else:
+            logs = sorted(self._archive_dir.glob("*.log"),
+                          key=lambda log: log.stat().st_mtime, reverse=True)[:count]
+        lines = []
+        for log in logs:
+            record = ended.get(log.stem)
+            if record is None:
+                lines.append(log.stem)  # wrapped before endings were recorded: the name still counts
+            else:
+                lines.append(f"{log.stem}: {record['outcome'].upper()} "
+                             f"{_ago(self._now() - record.get('at', 0))}"
+                             + (f" - was on: {_one_line(record['task'])}"
+                                if record.get("task") else ""))
+        return lines
+
+    def _wrapped_records(self):
+        """Every recorded ending, oldest first - [] when there is no record or it will not read."""
+        if self._wrapped_path is None or not self._wrapped_path.exists():
             return []
-        logs = sorted(self._archive_dir.glob("*.log"),
-                      key=lambda log: log.stat().st_mtime, reverse=True)
-        return [log.stem for log in logs[:count]]
+        try:
+            held = json.loads(self._wrapped_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return []
+        return held if isinstance(held, list) else []
+
+    def _record_wrapped(self, name, outcome, task):
+        """Write one agent's ending down. Append-and-cap, and never a reason a wrap-up fails -
+        a retirement that could not note itself must still retire."""
+        if self._wrapped_path is None:
+            return
+        try:
+            records = self._wrapped_records()
+            records.append({"name": name, "outcome": outcome, "at": self._now(),
+                            "task": _one_line(task)})
+            self._wrapped_path.parent.mkdir(parents=True, exist_ok=True)
+            self._wrapped_path.write_text(json.dumps(records[-50:], indent=2), encoding="utf-8")
+        except OSError:
+            pass
 
     @staticmethod
     def _delivery_truth(name, entry, owed):
@@ -615,6 +676,11 @@ class AgentDesk:
             finished_cleanly = entry is not None and entry.state == "idle"
             if entry is not None:
                 self._desked.pop(name, None)
+        # How this thread ENDED, written down before anything else can fail: the ladder's last
+        # rung is a fact the fleet record forgets the moment the agent leaves the desk, and a
+        # wrap-up nobody could look up is how "delivered" got re-invented as "ready for review".
+        if entry is not None:
+            self._record_wrapped(name, "delivered" if finished_cleanly else "died", entry.task)
         log = self._log_dir / f"{name}.log" if self._log_dir is not None else None
         if entry is None and (log is None or not log.exists()):
             return False
@@ -787,6 +853,7 @@ class AgentDesk:
                  "session_id": getattr(entry.agent, "session_id", None) or entry.recorded_session,
                  "state": entry.state, "model": entry.model, "effort": entry.effort,
                  "delivery": entry.delivery.stage, "steps": entry.delivery.steps,
+                 "rejections": entry.delivery.rejections,
                  "enhancement": entry.enhancement,
                  "project": entry.project}
                 for name, entry in self._desked.items()
