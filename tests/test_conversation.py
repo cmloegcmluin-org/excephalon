@@ -696,6 +696,42 @@ def test_a_pick_off_the_list_is_never_second_guessed_either():
     assert brain.gated == []
 
 
+def test_an_ask_does_not_outlive_the_turn_he_spoke_next():
+    # "it gave me the same message again a second time about a fix being ready for my eyes after I
+    # had just approved it." The brain was asked for that update at 21:52 and the app could not
+    # speak it - he was already talking - so the ask stayed pending. He then APPROVED the work,
+    # and the ask, still standing, delivered the stale "ready for your eyes" ungated. An ask
+    # covers the moment it was made; once he has spoken again it is not a licence over anything.
+    class Talking(FakeSTT):
+        """Mid-utterance on the first pass - he was already speaking when the ask was made - and
+        settled after, the way the window's mic reports it."""
+
+        def __init__(self, *args):
+            super().__init__(*args)
+            self.spoke = 0
+
+        def is_mid_utterance(self):
+            return self.spoke == 0
+
+        def listen(self):
+            self.spoke += 1
+            return super().listen()
+
+    outbox = Outbox()
+    outbox.push("fixer: ready for your eyes", about="fixer")
+    outbox.request("fixer")
+    tts = FakeTTS()
+    brain = GateBrain("skip")
+    convo = Conversation(Talking(["yes, perfect, that works", "goodbye entity"]), brain, tts,
+                         outbox=outbox)
+
+    convo.turn()  # nothing can go out - he is mid-sentence - and then he speaks
+    convo.turn()
+
+    assert brain.gated  # the ask lapsed with his turn, so the gate had its say
+    assert "ready for your eyes" not in "\n".join(tts.spoken)
+
+
 def test_an_update_he_just_asked_for_is_never_second_guessed():
     # deliver_update is the brain saying "hand him this one, now". Gating that would let it talk
     # itself out of the thing it had just been asked for.
