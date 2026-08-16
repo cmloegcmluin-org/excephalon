@@ -277,7 +277,8 @@ def _open_ears(announce):
 _SERVICE_FAULTS = {}
 
 
-def _greeting(brain, booted_at, previous_boot, was_seen=0.0, waiting=(), note=None, fleet=""):
+def _greeting(brain, booted_at, previous_boot, was_seen=0.0, waiting=(), note=None, fleet="",
+              busy=False):
     """The first line of the session: a welcome back mid-conversation, or the stock greeting.
 
     "It shouldn't always say 'I'm ready. What can I do for you?' That should only be the default
@@ -297,7 +298,7 @@ def _greeting(brain, booted_at, previous_boot, was_seen=0.0, waiting=(), note=No
             # How long he was WITHOUT it: from the last thing the old process wrote, not from
             # when that process started - which is the length of the conversation he just had.
             away=max(0.0, booted_at - max(was_seen, float(previous_boot.get("at") or booted_at))),
-            waiting=waiting, fleet=fleet)
+            waiting=waiting, fleet=fleet, busy=busy)
     if not note:
         return STOCK_GREETING
     try:
@@ -664,8 +665,11 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
                 else _greeting(brain, booted_at, previous_boot, was_seen,
                                waiting=sorted(name for name in outbox.owed_about() if name),
                                # Where every piece of work stands, so the welcome can never
-                               # contradict the record it greets him over.
-                               fleet=desk.digest()))
+                               # contradict the record it greets him over - and standing work
+                               # (any agent at the desk, revived above) makes this a return to
+                               # work in progress even past the fresh-start gap, because the
+                               # stock line to a man whose work is mid-flight reads as amnesia.
+                               fleet=desk.digest(), busy=bool(desk.roster())))
 
     def converse():
         try:

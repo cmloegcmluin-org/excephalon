@@ -118,22 +118,26 @@ def changes_since(repo, commit, run=None):
     return [line.strip() for line in (done.stdout or "").splitlines() if line.strip()]
 
 
-def homecoming_note(turns, changes, away, waiting=(), fleet=""):
+def homecoming_note(turns, changes, away, waiting=(), fleet="", busy=False):
     """The note that asks the brain for a welcome-back, or "" when a fresh start is the truth.
 
     Empty for the three cases where picking a thread up would be wrong: no thread at all, a
     thread he closed himself with a goodbye, and a gap long enough that this is a new day rather
-    than a restart. Otherwise it carries everything the answer needs IN the note - the exchange
-    it broke off on, what landed while it was down, how long he was without it, and where every
-    piece of work STANDS (`fleet`, the desk's own briefing) - rather than trusting the session's
-    seed to still hold the last turn. The fleet section exists because the greeting used to know
-    only the transcript's prose, and from prose alone it denied that anything had landed and
-    reopened an approval that was finished, in one sentence."""
-    if not turns or away > RESUMABLE_GAP:
+    than a restart - UNLESS work is still standing (`busy`: an agent at the desk). Those three
+    outs are about the conversation, and standing work outlives the conversation: an agent was
+    mid-task across a ninety-minute gap that ended in a wedge-forced close, and the boot said
+    "I'm ready. What can I do for you?" to a man whose work was in progress ("Excephalon gave me
+    the generic greeting just now even though it had some work in progress"). Otherwise the note
+    carries everything the answer needs IN it - the exchange it broke off on (only when the
+    conversation genuinely resumes), what landed while it was down, how long he was without it,
+    and where every piece of work STANDS (`fleet`, the desk's own briefing) - rather than
+    trusting the session's seed to still hold the last turn. The fleet section exists because
+    the greeting used to know only the transcript's prose, and from prose alone it denied that
+    anything had landed and reopened an approval that was finished, in one sentence."""
+    over = (not turns or away > RESUMABLE_GAP
+            or canonical(turns[-1][1]).startswith("be seeing you"))
+    if over and not busy:
         return ""
-    last_said, last_reply = turns[-1]
-    if canonical(last_reply).startswith("be seeing you"):
-        return ""  # he ended it; there is no task at hand to get back to
     landed = ("Nothing about you changed - he restarted for some other reason."
               if not changes else
               "What landed in you while you were down, in the words of the changes themselves: "
@@ -157,17 +161,28 @@ def homecoming_note(turns, changes, away, waiting=(), fleet=""):
                 "about any one of them and do not list them - two messages thirteen seconds "
                 "apart, one asking about a single update and one offering all of them, is what "
                 "he called unnatural.")
+    if over:
+        # The conversation is done - he closed it, or real time has passed - but the work is
+        # not, and the work is what the greeting is about. The stale exchange stays out of the
+        # note: hours later it is not a thread to pick back up.
+        thread = ("The last conversation is over, so do not pick it back up - but the work "
+                  "above is still standing, and that is why this is not a plain fresh start: "
+                  "say in one clause where the standing work is, from the records above only.")
+    else:
+        last_said, last_reply = turns[-1]
+        thread = (f"The exchange you broke off on - he said: {last_said}\n"
+                  f"You answered: {last_reply}\n\n"
+                  "Then pick the conversation back up. Do not ask what you can do for him - "
+                  "you already know what you were doing.")
     return (
         "[App note, not from him: you have just restarted and this is your FIRST line of the "
         f"session - he is looking at the window now. He was without you for about {away / 60:.0f} "
         f"minute(s). {landed}"
-        f"{standing}{owed}\n\n"
-        f"The exchange you broke off on - he said: {last_said}\nYou answered: {last_reply}\n\n"
+        f"{standing}{owed}\n\n{thread}\n\n"
         "Greet him in one short spoken paragraph: welcome him back, briefly acknowledge the gap "
-        "if he lost real time, say in one plain clause what changed ONLY if it is something he "
-        "would notice, and then pick the conversation back up. A greeting says where things "
-        "stand and hands him the floor: never promise an action of your own ('let me finish "
-        "reading…' opened a session and made no sense to him), and never invite him to approve "
-        "or review anything unless the records above say it is in review. Do not ask what you "
-        "can do for him - you already know what you were doing.]"
+        "if he lost real time, and say in one plain clause what changed ONLY if it is something "
+        "he would notice. A greeting says where things stand and hands him the floor: never "
+        "promise an action of your own ('let me finish reading…' opened a session and made no "
+        "sense to him), and never invite him to approve or review anything unless the records "
+        "above say it is in review.]"
     )

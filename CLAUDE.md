@@ -234,7 +234,11 @@ commit `runtime/boot.json` says the last process ran against this one's (what la
 down, in the commits' own words, never a summary invented here), and the gap since the last
 process last WROTE anything (past an hour it is a new day, not a restart; measured boot to boot
 instead, that gap is the length of the conversation he just had — "you were out about 49 minutes"
-about a restart he was away from for seconds). Those become one note and the BRAIN words
+about a restart he was away from for seconds). Standing work overrides every fresh-start out
+(`busy`, any agent at the desk): those outs are about the conversation, and work outlives the
+conversation — an agent sat mid-task across a ninety-minute gap and the boot greeted him with the
+stock line ("even though it had some work in progress"). Past the gap the stale exchange stays
+out of the note — the greeting is about where the WORK stands, never a thread hours dead. Those become one note and the BRAIN words
 the welcome back — a greeting assembled from templates is the stock line wearing more of them —
 and every failure falls back to the stock line, because a greeting is not worth a launch. The
 note says what is ALREADY waiting to be spoken and forbids naming any of it, and the greeting is
