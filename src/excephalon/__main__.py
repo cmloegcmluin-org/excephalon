@@ -60,6 +60,7 @@ from excephalon.homecoming import (
     record_boot,
 )
 from excephalon.transcript import MessageLog, Transcript, recent_turns
+from excephalon.tts_cloud import CloudVoiceError, Failover, connect, settings_in
 from excephalon.tts_neural import KokoroEngine, ensure_voice, voice_choice
 from excephalon.tts_system import NullTTS, SystemTTS
 from excephalon.voice import Speaker, play_stream
@@ -333,18 +334,33 @@ def _persona():
 
 
 def _voice(announce):
-    """The voice, fully loaded BEFORE Excephalon says it is ready.
+    """The voice, fully settled BEFORE Excephalon says it is ready.
 
     It first shipped the other way - the robot System.Speech voice served while the neural model
     loaded in the background - and the first reply of every session came out robot-voiced. His
     call: "Just don't be ready until it loads. Time to start up is not precious; it's only time
-    to respond while in session that matters." So startup blocks on the fetch (once ever) and the
-    load (~2s), and the robot voice remains only for a machine where the neural one genuinely
-    can't be had - said out loud, not discovered by ear."""
+    to respond while in session that matters." So startup blocks on the fetch (once ever), the
+    load (~2s) and, when there is a cloud voice configured, the one request that proves its key.
+
+    The cloud voice needs the local one behind it, so a machine that cannot have Kokoro does not
+    get ElevenLabs either: without a fallback a dropped connection would be silence, and silence
+    is the one thing this may never cost him."""
+    local = _local_voice(announce)
+    if local is None:
+        return SystemTTS(rate=2)
+    cloud = _cloud_voice(announce)
+    if cloud is None:
+        return Speaker(local, play=play_stream)
+    return Speaker(Failover(cloud, local, announce=announce), play=play_stream)
+
+
+def _local_voice(announce):
+    """Kokoro, fetched, loaded and warmed - or None on a machine that genuinely can't have it,
+    said out loud rather than discovered by ear."""
     paths = ensure_voice(RUNTIME_DIR / "tts", announce=announce)
     if paths is None:
         announce("(couldn't fetch the neural voice - the system voice will serve)")
-        return SystemTTS(rate=2)
+        return None
     name, speed = voice_choice(RUNTIME_DIR / "tts")
     announce(f"(loading the voice: {name} - change it in runtime/tts/voice.txt)")
     engine = KokoroEngine(*paths, voice=name, speed=speed)
@@ -352,8 +368,28 @@ def _voice(announce):
         engine.say("Ready.")  # the load and the warm-up, paid here rather than mid-conversation
     except Exception as exc:
         announce(f"(the neural voice failed to load: {exc!r} - the system voice will serve)")
-        return SystemTTS(rate=2)
-    return Speaker(engine, play=play_stream)
+        return None
+    return engine
+
+
+def _cloud_voice(announce):
+    """ElevenLabs, once the ACCOUNT has answered for the key - or None, which is the ordinary
+    case for a checkout that has never been given one and is announced as nothing at all.
+
+    A configured service announced from its config alone is how this project once reported Gmail
+    and Calendar reachable for a whole day against a server that never started; a key is spoken
+    to before it is called connected, and a key that has expired is a thing to hear at startup
+    rather than to discover as a voice that mysteriously changed mid-conversation."""
+    settings = settings_in(RUNTIME_DIR / "tts")
+    if settings is None:
+        return None
+    try:
+        engine = connect(settings)
+    except CloudVoiceError as fault:
+        announce(f"({fault} - the local voice will speak)")
+        return None
+    announce(f"(the cloud voice answered: {settings['voice']} - edit runtime/tts/cloud.json)")
+    return engine
 
 
 def _build_ears(text_mode, stop, interrupt, announce=print):
