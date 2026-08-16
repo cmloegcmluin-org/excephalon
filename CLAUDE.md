@@ -231,8 +231,10 @@ is a fresh start, since a restart is his only way to pick up a fix and most of t
 mid-thread — greeted as a stranger, with his own unanswered question still on the screen behind
 it. Three things already on disk settle it: the tail of the transcript (what was in flight), the
 commit `runtime/boot.json` says the last process ran against this one's (what landed while it was
-down, in the commits' own words, never a summary invented here), and the gap between the two
-boots (past an hour it is a new day, not a restart). Those become one note and the BRAIN words
+down, in the commits' own words, never a summary invented here), and the gap since the last
+process last WROTE anything (past an hour it is a new day, not a restart; measured boot to boot
+instead, that gap is the length of the conversation he just had — "you were out about 49 minutes"
+about a restart he was away from for seconds). Those become one note and the BRAIN words
 the welcome back — a greeting assembled from templates is the stock line wearing more of them —
 and every failure falls back to the stock line, because a greeting is not worth a launch.
 `conversation.py` is the loop (listen → think → speak) and owns turn-taking, barge-in, and the
@@ -481,8 +483,11 @@ one part that knows the conversation is the brain, because it has been having it
 one question TO the brain carrying the exact words: SAY or SKIP, never a rewrite — the app speaks
 stored news word for word on purpose. Every uncertainty falls toward saying it (no brain, a wedged
 brain, an unclear answer all open the gate), because news never spoken is the graver failure by
-far; and an update he has just asked for by name (deliver_update) skips the gate entirely, or the
-brain could talk itself out of the thing it was told to hand over. A line judged overtaken is
+far; and ANYTHING he asked for skips the gate entirely — a go-ahead answering the offer, a name
+off the roll call, deliver_update — because the gate exists to stop the app volunteering
+something stale, never to overrule him: it destroyed the update he had just said "Yes." to, two
+seconds later, having read its own "I've got an update on X when you're ready" as delivery (the
+prompt now says outright that mentioning an update is not giving it). A line judged overtaken is
 finished with rather than held: it goes to the durable record and its spool copy goes with it.
 `waiting.py` is what happens when several agents finish at once: they are read out numbered and
 held, and it says which one a reply just named — but a short reply carrying a DENIAL ("no",

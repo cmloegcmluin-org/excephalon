@@ -616,8 +616,14 @@ class Conversation:
         had actually reported never reached him at all ("that's not an update"). His go-ahead asks
         for that content; the content is the answer, and the app owes it rather than asking the
         brain to remember to include it. Anything more than a bare go-ahead is still a turn of
-        his to answer, and rides into the reply as it always did."""
-        return Turn(heard=heard, said=self._speak_held(place))
+        his to answer, and rides into the reply as it always did.
+
+        Never gated: this path is only ever reached because he ASKED - a go-ahead answering the
+        offer, or a name off the roll call. The gate exists to stop the app volunteering
+        something stale, never to overrule him. It once destroyed the update he had just said
+        "Yes." to, two seconds later, because the brain had seen itself offer that update and
+        read the offer as having delivered it."""
+        return Turn(heard=heard, said=self._speak_held(place, gate=False))
 
     def _superseded(self, news):
         """Tell the outbox this news will never be spoken - newer news about the same agent has

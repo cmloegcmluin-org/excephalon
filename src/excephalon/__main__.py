@@ -57,6 +57,7 @@ from excephalon.homecoming import (
     changes_since,
     homecoming_note,
     last_boot,
+    last_seen,
     record_boot,
 )
 from excephalon.transcript import MessageLog, Transcript, recent_turns
@@ -275,7 +276,7 @@ def _open_ears(announce):
 _SERVICE_FAULTS = {}
 
 
-def _greeting(brain, booted_at, previous_boot, note=None):
+def _greeting(brain, booted_at, previous_boot, was_seen=0.0, note=None):
     """The first line of the session: a welcome back mid-conversation, or the stock greeting.
 
     "It shouldn't always say 'I'm ready. What can I do for you?' That should only be the default
@@ -288,7 +289,9 @@ def _greeting(brain, booted_at, previous_boot, note=None):
         note = homecoming_note(
             turns=recent_turns(TRANSCRIPTS, keep=1),
             changes=changes_since(REPO, previous_boot.get("commit", "")),
-            away=max(0.0, booted_at - float(previous_boot.get("at") or booted_at)))
+            # How long he was WITHOUT it: from the last thing the old process wrote, not from
+            # when that process started - which is the length of the conversation he just had.
+            away=max(0.0, booted_at - max(was_seen, float(previous_boot.get("at") or booted_at))))
     if not note:
         return STOCK_GREETING
     try:
@@ -417,6 +420,8 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     # the commits inside it, are the whole of what a welcome-back knows (see homecoming).
     booted_at = time.time()
     previous_boot = last_boot(BOOT_RECORD)
+    # Read BEFORE this session's own transcript exists, or the newest write would be this one.
+    was_seen = last_seen(TRANSCRIPTS)
     record_boot(BOOT_RECORD, head_commit(REPO), booted_at)
     # Word from the agents Excephalon drives lands in this inbox; the watcher tails it and the
     # Excephalon speaks each new line at the next lull (never cutting the user off).
@@ -626,7 +631,7 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
         # console AFTER it exists, so the greeting is a message like any other. Still guarded,
         # because the mic is already live: unguarded, the greeting went out of their speakers,
         # back into the mic, and opened their draft box with "I do for you".
-        greeting = _greeting(brain, booted_at, previous_boot)
+        greeting = _greeting(brain, booted_at, previous_boot, was_seen)
         console.reply(greeting)
         if dictation is not None:
             dictation.begin_speaking()

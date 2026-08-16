@@ -619,6 +619,42 @@ def test_held_news_the_brain_still_stands_behind_goes_out_word_for_word():
     assert "fixer: the drive link is fixed" in tts.spoken  # unchanged, in its own words
 
 
+def test_a_go_ahead_answering_the_offer_is_never_second_guessed_either():
+    # The gate destroyed the very update he had just said yes to. "I've got an update on
+    # highdeas-scrubber-fix when you're ready" went out at 19:33, he answered "Yes." at 19:50,
+    # and two seconds later the line was judged overtaken and dropped - because the brain had
+    # seen itself OFFER that update and read the offer as having delivered it. He then spent five
+    # turns being told the update had already been given. Anything he asks for is his to hear.
+    clock = FakeClock()
+    outbox = Outbox()
+    tts = FakeTTS()
+    brain = GateBrain("skip")
+    convo = Conversation(FakeSTT(["", "yes", "goodbye entity"]), brain, tts, outbox=outbox,
+                         dormant_after=180, clock=clock)
+    clock.now = 600  # long enough away that news is OFFERED rather than dumped
+    outbox.push("The scrubber drag is ready for your eyes.", about="scrubber", composed=True)
+
+    convo.turn()  # the offer
+    convo.turn()  # his go-ahead
+
+    assert "The scrubber drag is ready for your eyes." in tts.spoken
+    assert brain.gated == []  # he said yes to hearing it; nothing may talk it out of that
+
+
+def test_a_pick_off_the_list_is_never_second_guessed_either():
+    outbox = Outbox()
+    outbox.push("fixer: the drive link is fixed", about="fixer")
+    outbox.push("docs-sidebar: needs your call on the width", about="docs-sidebar")
+    tts = FakeTTS()
+    brain = GateBrain("skip")
+    convo = Conversation(FakeSTT(["two"]), brain, tts, outbox=outbox)
+
+    convo.turn()  # the roll call, then he names one
+
+    assert "docs-sidebar: needs your call on the width" in "\n".join(tts.spoken)
+    assert brain.gated == []
+
+
 def test_an_update_he_just_asked_for_is_never_second_guessed():
     # deliver_update is the brain saying "hand him this one, now". Gating that would let it talk
     # itself out of the thing it had just been asked for.
