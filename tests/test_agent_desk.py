@@ -1594,17 +1594,69 @@ def test_a_wrap_up_writes_how_the_thread_ended_and_the_briefing_says_it(tmp_path
 
 def test_a_died_agent_is_recorded_as_died_never_delivered(tmp_path):
     logs = tmp_path / "agent-logs"
-    desk, outbox, made = _desk(log_dir=logs)
+    outbox = Outbox()
+    desk = AgentDesk(outbox, agent_factory=lambda *a, **k: _DyingAgent(), log_dir=logs)
     desk._wrapped_path = tmp_path / "wrapped.json"
     desk._now = lambda: 1000.0
     desk.start("doomed", "/tmp/wt", "a task")
-    assert _wait_for(lambda: bool(outbox))
-    made[0].work = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom"))
-    desk.send("doomed", "again")
     assert _wait_for(lambda: desk._desked["doomed"].state == "failed")
     outbox.drain()
 
     assert desk.retire("doomed") is True
 
     assert "doomed: DIED just now" in desk.digest()
+    desk.close()
+
+
+def test_a_crash_is_restarted_silently_and_never_reaches_him():
+    # "I should never need to know that anything died. It's not relevant to me." Asked whether to
+    # restart a dead agent, he answered "Yes, of course... your job is to insulate me from this
+    # kind of Pointless delay." One crash gets a fresh session on the same history and a
+    # pick-back-up - no event, no news, and the streak resets on the clean turn.
+    events = []
+    made = []
+
+    class DiesOnce:
+        session_id = "sess-fixer"
+
+        def __init__(self, resume=None):
+            self.resumed_from = resume
+            self.messages = []
+
+        def work(self, message, on_message=None):
+            self.messages.append(message)
+            if self is made[0]:
+                raise RuntimeError("server error")
+            return "picked back up and finished"
+
+        def close(self):
+            pass
+
+    def factory(name, cwd, decide, resume=None, **choice):
+        made.append(DiesOnce(resume))
+        return made[-1]
+
+    desk = AgentDesk(Outbox(), agent_factory=factory, events=lambda *e: events.append(e))
+    desk.start("fixer", "/tmp/wt", "a task")
+
+    assert _wait_for(lambda: any(e[0] == "finished" for e in events))
+    assert not [e for e in events if e[0] == "died"]
+    assert made[1].resumed_from == "sess-fixer"  # the same history: nothing of the task lost
+    assert "pick up exactly where you left off" in made[1].messages[0].lower()
+    assert desk._desked["fixer"].deaths == 0
+    desk.close()
+
+
+def test_a_task_that_keeps_killing_its_agents_finally_reaches_him():
+    # Bounded: a third death in a row is not weather, it is a task that keeps killing its agents,
+    # and silently feeding it new sessions forever would hide work that is genuinely stuck. The
+    # digest holds the crash count as a quiet fact for "what's taking so long?".
+    events = []
+    desk = AgentDesk(Outbox(), agent_factory=lambda *a, **k: _DyingAgent(),
+                     events=lambda *e: events.append(e))
+    desk.start("doomed", "/tmp/wt", "try")
+
+    assert _wait_for(lambda: any(e[0] == "died" for e in events))
+    assert len([e for e in events if e[0] == "died"]) == 1  # two restarts were silent
+    assert desk._desked["doomed"].deaths == 3
     desk.close()

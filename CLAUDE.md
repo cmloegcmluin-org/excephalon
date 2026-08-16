@@ -463,7 +463,14 @@ would otherwise rise from the dead and have its old news re-raised: "this is the
 pestered me"), each surviving agent resumed by CLI session id, one caught
 mid-task told to pick back up, one recorded mid-landing told to settle the merge NOW and watch it
 in the foreground (a backgrounded watch once ended the turn, nothing re-engages an idle agent, and
-the merged report never existed) — its digest also names tabs whose log files linger with no agent
+the merged report never existed). An agent that CRASHES is restarted by the desk itself - a fresh
+session resumed on the same CLI history, told to pick back up, silently: "I should never need to
+know that anything died. It's not relevant to me", ruled after being asked whether to restart a
+dead one ("Yes, of course... your job is to insulate me from this kind of Pointless delay").
+Bounded by DEATH_LIMIT and reset on any clean turn, because a task that keeps killing its agents
+is genuinely stuck and IS his business - only then does the died narration fire. The crash count
+rides the digest as a quiet fact, volunteered never, held for "what's taking so long?" — its
+digest also names tabs whose log files linger with no agent
 behind them, because the window draws a tab per log file and a brain briefed from the desk alone
 once could not see the tab the user was pointing at; it names the recently wrapped agents too,
 logs in the archive, because asked about one by the very name it had been using all day the brain
