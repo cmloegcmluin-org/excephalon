@@ -544,12 +544,12 @@ def test_fresh_news_from_a_listed_agent_keeps_its_place_so_the_numbers_he_heard_
 
     convo.turn()  # a roll call of two, then a question that names none of them
     outbox.push("fixer: green now, and pushed", about="fixer")
-    convo.turn()  # fresh news: the list is re-read, every agent still at its old number
+    convo.turn()  # fresh news, same names: the list stands as read, not repeated at him
     convo.turn()  # so "one" still means fixer - and yields its newest sentence
 
     spoken = "\n".join(tts.spoken)
     assert len([line for line in tts.spoken
-                if line == "Two updates waiting. One, fixer. Two, docs-sidebar. Which first?"]) == 2
+                if line == "Two updates waiting. One, fixer. Two, docs-sidebar. Which first?"]) == 1
     assert "fixer: green now, and pushed" in spoken
     assert "fixer: the drive link is fixed" not in spoken
 
@@ -574,49 +574,40 @@ def test_a_refreshed_agent_keeps_its_number_even_as_the_list_grows():
             in tts.spoken)
 
 
-class GateBrain(FakeBrain):
-    """A brain that answers the coherence gate, and replies normally to everything else."""
-
-    def __init__(self, verdict="say"):
-        super().__init__()
-        self.verdict = verdict
-        self.gated = []
-
-    def respond(self, utterance, *, remember=True, on_text=None):
-        if "App check" in utterance:
-            self.gated.append(utterance)
-            return self.verdict
-        return super().respond(utterance)
-
-
-def test_held_news_the_conversation_has_overtaken_is_never_spoken():
-    # The general fix, not another route: everything queued was composed at one moment and spoken
-    # at another, and the queue cannot know what happened in between. A recorded question was
-    # played back four minutes after he answered it. Every stored line is now put in front of the
-    # brain - the one part that has been having the conversation - before it is said.
+def test_no_stored_line_is_ever_withheld_from_him():
+    # A gate used to sit here judging whether a queued line had been overtaken, and twice it
+    # destroyed something he was asking for: the update he had just said "Yes." to, and the demo
+    # link he had asked for twice - "(overtaken, never spoken, for errands: The play cursor drag
+    # fix demo is at ...)". It prevented nothing in return; the stale-recording cases it was built
+    # for are stopped at their sources. News never spoken is the graver failure, always.
     outbox = Outbox()
-    outbox.push("You're on italki - which language are you learning there?", about="errands",
+    outbox.push("The play cursor drag fix demo is at localhost:5223.", about="errands",
                 listed=False)
     tts = FakeTTS()
-    brain = GateBrain("skip")
-    convo = Conversation(FakeSTT(["goodbye entity"]), brain, tts, outbox=outbox)
+    convo = Conversation(FakeSTT(["goodbye entity"]), FakeBrain(), tts, outbox=outbox)
 
     convo.turn()
 
-    assert brain.gated  # the exact words went in front of it
-    assert "which language" not in "\n".join(tts.spoken)  # and never reached him
-    assert not outbox  # nor is it left to come back next turn, or after a restart
+    assert "The play cursor drag fix demo is at localhost port 5223." in tts.spoken
 
 
-def test_held_news_the_brain_still_stands_behind_goes_out_word_for_word():
+def test_the_list_is_read_again_only_when_it_would_come_out_different():
+    # "why did it just give me the same message twice in a row?" - 22:22:59 and 22:23:07, the same
+    # sentence word for word. Fresh news had arrived for an agent already ON the list, which
+    # changed the news but not one word of the roll call, since a roll call says only names. What
+    # decides a re-read is what would be SAID, not what is held behind it.
     outbox = Outbox()
     outbox.push("fixer: the drive link is fixed", about="fixer")
+    outbox.push("docs-sidebar: needs your call on the width", about="docs-sidebar")
     tts = FakeTTS()
-    convo = Conversation(FakeSTT(["goodbye entity"]), GateBrain("say"), tts, outbox=outbox)
+    convo = Conversation(FakeSTT(["what time is it", "what time is it", "goodbye entity"]),
+                         FakeBrain(), tts, outbox=outbox)
 
+    convo.turn()  # the roll call
+    outbox.push("fixer: green now, and pushed", about="fixer")  # same names, newer news
     convo.turn()
 
-    assert "fixer: the drive link is fixed" in tts.spoken  # unchanged, in its own words
+    assert len([line for line in tts.spoken if line.startswith("Two updates waiting.")]) == 1
 
 
 def test_the_opening_line_and_the_waiting_list_go_out_as_one_message():
@@ -658,94 +649,6 @@ def test_the_opening_is_said_once_and_never_again():
     convo.turn()
 
     assert len([line for line in tts.spoken if "I'm ready" in line]) == 1
-
-
-def test_a_go_ahead_answering_the_offer_is_never_second_guessed_either():
-    # The gate destroyed the very update he had just said yes to. "I've got an update on
-    # highdeas-scrubber-fix when you're ready" went out at 19:33, he answered "Yes." at 19:50,
-    # and two seconds later the line was judged overtaken and dropped - because the brain had
-    # seen itself OFFER that update and read the offer as having delivered it. He then spent five
-    # turns being told the update had already been given. Anything he asks for is his to hear.
-    clock = FakeClock()
-    outbox = Outbox()
-    tts = FakeTTS()
-    brain = GateBrain("skip")
-    convo = Conversation(FakeSTT(["", "yes", "goodbye entity"]), brain, tts, outbox=outbox,
-                         dormant_after=180, clock=clock)
-    clock.now = 600  # long enough away that news is OFFERED rather than dumped
-    outbox.push("The scrubber drag is ready for your eyes.", about="scrubber", composed=True)
-
-    convo.turn()  # the offer
-    convo.turn()  # his go-ahead
-
-    assert "The scrubber drag is ready for your eyes." in tts.spoken
-    assert brain.gated == []  # he said yes to hearing it; nothing may talk it out of that
-
-
-def test_a_pick_off_the_list_is_never_second_guessed_either():
-    outbox = Outbox()
-    outbox.push("fixer: the drive link is fixed", about="fixer")
-    outbox.push("docs-sidebar: needs your call on the width", about="docs-sidebar")
-    tts = FakeTTS()
-    brain = GateBrain("skip")
-    convo = Conversation(FakeSTT(["two"]), brain, tts, outbox=outbox)
-
-    convo.turn()  # the roll call, then he names one
-
-    assert "docs-sidebar: needs your call on the width" in "\n".join(tts.spoken)
-    assert brain.gated == []
-
-
-def test_an_ask_does_not_outlive_the_turn_he_spoke_next():
-    # "it gave me the same message again a second time about a fix being ready for my eyes after I
-    # had just approved it." The brain was asked for that update at 21:52 and the app could not
-    # speak it - he was already talking - so the ask stayed pending. He then APPROVED the work,
-    # and the ask, still standing, delivered the stale "ready for your eyes" ungated. An ask
-    # covers the moment it was made; once he has spoken again it is not a licence over anything.
-    class Talking(FakeSTT):
-        """Mid-utterance on the first pass - he was already speaking when the ask was made - and
-        settled after, the way the window's mic reports it."""
-
-        def __init__(self, *args):
-            super().__init__(*args)
-            self.spoke = 0
-
-        def is_mid_utterance(self):
-            return self.spoke == 0
-
-        def listen(self):
-            self.spoke += 1
-            return super().listen()
-
-    outbox = Outbox()
-    outbox.push("fixer: ready for your eyes", about="fixer")
-    outbox.request("fixer")
-    tts = FakeTTS()
-    brain = GateBrain("skip")
-    convo = Conversation(Talking(["yes, perfect, that works", "goodbye entity"]), brain, tts,
-                         outbox=outbox)
-
-    convo.turn()  # nothing can go out - he is mid-sentence - and then he speaks
-    convo.turn()
-
-    assert brain.gated  # the ask lapsed with his turn, so the gate had its say
-    assert "ready for your eyes" not in "\n".join(tts.spoken)
-
-
-def test_an_update_he_just_asked_for_is_never_second_guessed():
-    # deliver_update is the brain saying "hand him this one, now". Gating that would let it talk
-    # itself out of the thing it had just been asked for.
-    outbox = Outbox()
-    outbox.push("fixer: the drive link is fixed", about="fixer")
-    outbox.request("fixer")  # what the brain's deliver_update tool records
-    tts = FakeTTS()
-    brain = GateBrain("skip")  # it would hold anything else back
-    convo = Conversation(FakeSTT(["goodbye entity"]), brain, tts, outbox=outbox)
-
-    convo.turn()
-
-    assert "fixer: the drive link is fixed" in tts.spoken
-    assert brain.gated == []  # not even asked: he named this one
 
 
 def test_unlisted_news_is_simply_said_and_never_joins_the_numbered_list():
@@ -1882,15 +1785,15 @@ def test_every_turn_carries_the_standing_conduct_note():
     assert "this turn" in prompt.lower()
 
 
-def test_fresh_news_about_an_agent_already_listed_is_read_out_again():
-    # The roll call had been read out with two agents waiting. One of them then reported the very
-    # thing he was waiting for - its work presented for his eyes - which SUPERSEDED its own older
-    # item, leaving the tally at two. Measured by count, "has the list changed" said no, and the
-    # presentation was never spoken: he closed the app still owed it ("I never heard back
-    # again"). The roll call is remembered by its news now, not by its length.
+def test_fresh_news_about_an_agent_already_listed_does_not_repeat_the_same_sentence():
+    # This used to re-read the roll call whenever the NEWS behind it changed, so that a fresh
+    # report could not sit silent. But a roll call says only names: with the same agents waiting
+    # it comes out word for word identical, and re-reading it delivers nothing while sounding
+    # broken - "why did it just give me the same message twice in a row?" (22:22:59 and 22:23:07).
+    # The list stands, his numbers still hold, and picking one is what delivers its newest news.
     outbox = Outbox()
     tts = FakeTTS()
-    convo = Conversation(FakeSTT(["", "", ""]), FakeBrain(), tts, outbox=outbox)
+    convo = Conversation(FakeSTT(["", "", "", "one"]), FakeBrain(), tts, outbox=outbox)
     outbox.push("fixer is still going", about="fixer")
     outbox.push("builder is still going", about="builder")
 
@@ -1903,5 +1806,7 @@ def test_fresh_news_about_an_agent_already_listed_is_read_out_again():
 
     outbox.push("fixer presented its work for your eyes", about="fixer")
     convo.turn()
+    assert len(tts.spoken) == spoken_so_far  # same names, same sentence: not said twice
 
-    assert len(tts.spoken) > spoken_so_far  # the fresh report re-opens the roll call
+    convo.turn()  # and when he takes number one, what he gets is the NEWEST of fixer's news
+    assert "fixer presented its work for your eyes" in "\n".join(tts.spoken)

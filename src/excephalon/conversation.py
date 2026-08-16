@@ -5,7 +5,6 @@ import threading
 import time
 from dataclasses import dataclass
 
-from excephalon.coherence import overtaken
 from excephalon.console import Console
 from excephalon.links import as_spoken
 from excephalon.phrases import canonical as _canonical
@@ -540,7 +539,7 @@ class Conversation:
             # copy word for word the moment the reply ends - one teller, the exact words, instead
             # of two versions of the same news 13 seconds apart.
             self._requested.discard(getattr(self._waiting[place], "about", None))
-            self._speak_held(place, gate=False)  # he asked for this one, by name, just now
+            self._speak_held(place)  # he asked for this one, by name, just now
             return
         if self._dormant():
             # They are off doing something else; news breaking in "out of nowhere" is a jolt.
@@ -575,7 +574,7 @@ class Conversation:
         if spoken is not None:
             spoken(news)
 
-    def _speak_held(self, place, name_the_rest=True, gate=True):
+    def _speak_held(self, place, name_the_rest=True):
         """Speak the held update at `place` word for word, then name any others still waiting -
         the one shape a held update ever reaches him in, whoever set it in motion (his pick, his
         go-ahead, or the brain handing it over with deliver_update).
@@ -584,19 +583,13 @@ class Conversation:
         something to say, and hanging a roll call off it turns the machinery he should never see
         into the thing he is answering about.
 
-        Every stored line passes the coherence gate first (see `coherence`): it was composed at
-        one moment and is being spoken at another, and the queue cannot know what happened in
-        between - which is how a recorded question came back four minutes after he answered it.
-        A line the brain says has been overtaken is finished with, not held: it goes to the
-        durable record so the next diagnosis can see it, and its spool copy goes with it.
-        `gate=False` for an update he has just asked for by name - gating that would let the
-        brain talk itself out of the very thing it was told to hand over."""
-        if gate and overtaken(self._brain, str(self._waiting[place])):
-            news = self._waiting.pop(place)
-            self._console.evidence(f"(overtaken, never spoken, for "
-                                   f"{getattr(news, 'about', None) or 'no agent'}: {news})")
-            self._superseded(news)
-            return ""
+        Nothing held is ever withheld. A gate used to sit here asking the brain whether a stored
+        line had been overtaken by the conversation; in two days it prevented nothing and twice
+        destroyed what he was asking for - the update he had just said "Yes." to, and the demo
+        link he had asked for twice. The stale-recording cases it was built for are stopped at
+        their sources instead (an errand may not ask him questions; telling an agent, rejecting
+        its work or retiring it drops its held news), and news never spoken stays the graver
+        failure."""
         news = self._waiting.pop(place)
         listed = [held for held in self._waiting if getattr(held, "listed", True)]
         named = bool(name_the_rest and listed)
@@ -629,7 +622,7 @@ class Conversation:
         something stale, never to overrule him. It once destroyed the update he had just said
         "Yes." to, two seconds later, because the brain had seen itself offer that update and
         read the offer as having delivered it."""
-        return Turn(heard=heard, said=self._speak_held(place, gate=False))
+        return Turn(heard=heard, said=self._speak_held(place))
 
     def _superseded(self, news):
         """Tell the outbox this news will never be spoken - newer news about the same agent has
@@ -641,10 +634,15 @@ class Conversation:
             forget(news)
 
     def _roll(self):
-        """What is waiting right now, as the comparison the roll call is remembered by: the news
-        itself, not how much of it there is - and only the LISTED news, because the roll IS the
-        list, and unlisted news is never a name on it."""
-        return tuple(str(item) for item in self._waiting if getattr(item, "listed", True))
+        """The roll call as it would be SPOKEN right now - the sentence, which is what a re-read
+        has to be compared against.
+
+        Compared against the held NEWS instead, fresh news for an agent already on the list
+        counted as a change while the sentence stayed identical, and he got the same words twice
+        eight seconds apart ("why did it just give me the same message twice in a row?"). Compared
+        by COUNT, an earlier version of this went the other way and never re-read a genuinely
+        changed list at all. The sentence is the thing he hears; the sentence is the test."""
+        return roll_call([held for held in self._waiting if getattr(held, "listed", True)])
 
     def _say_opening(self):
         """Say the session's first line, once, if there is one and nothing carried it already."""
@@ -657,8 +655,8 @@ class Conversation:
         """Read out who is waiting, numbered, so one of them can be named. The session's opening
         line rides on the front of it when there is one, so a restart with news waiting is ONE
         message rather than a welcome and a menu thirteen seconds apart."""
-        self._announced = self._roll()
-        line = roll_call([held for held in self._waiting if getattr(held, "listed", True)])
+        line = self._roll()
+        self._announced = line
         opening, self._opening = self._opening, ""
         if opening:
             self._console.reply(opening)
