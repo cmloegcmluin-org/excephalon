@@ -9,10 +9,17 @@ local voice's, which is the last moment the choice is still free.
 
 The format is `pcm_24000` - signed 16-bit little-endian at 24kHz, the rate Kokoro also speaks
 at - so the samples go straight to the sound device with no decoder and no dependency for one.
+
+`setup` is the door he double-clicks (`Connect ElevenLabs.bat`, and the .command beside it):
+key in, the account's own voices out as a numbered list, and the one he picks written to
+runtime/tts/cloud.json - personal, gitignored, and absent in every checkout that has never been
+given a key, which is not a fault. The list is the point of the door: only voices ADDED to the
+account can be spoken in, and that is not a thing he can answer from a file.
 """
 
 import itertools
 import json
+import os
 import urllib.request
 from pathlib import Path
 
@@ -67,22 +74,30 @@ def settings_in(directory):
     return held
 
 
-def connect(settings, *, open_url=_urlopen):
-    """The engine his settings name, once the account has actually answered for them.
+def account_voices(key, *, open_url=_urlopen):
+    """The voices this key can actually speak in - which is also what proves the key works.
 
-    Announcing a service from its config alone is how this project last shipped a whole day of
-    "connected" against a server that never started; the same rule holds here. Listing the voices
-    proves the key in one cheap request AND resolves the name he wrote to the id the API wants,
-    so he never has to paste twenty characters of noise into a file to pick a voice."""
-    key = settings["key"]
-    wanted = str(settings["voice"]).strip()
+    Only voices ADDED to the account are usable; the shared library is thousands he has not.
+    A key is spoken to before it is called connected: announcing a service from its config alone
+    is how this project once reported Gmail reachable for a whole day against a server that never
+    started."""
     request = urllib.request.Request(f"{API}/v2/voices?page_size=100",
                                      headers={"xi-api-key": key})
     try:
         with open_url(request, timeout=TIMEOUT_SECONDS) as response:
-            voices = json.loads(response.read() or b"{}").get("voices") or []
+            return json.loads(response.read() or b"{}").get("voices") or []
     except Exception as fault:
         raise CloudVoiceError(f"ElevenLabs wouldn't answer for that key: {fault}") from fault
+
+
+def connect(settings, *, open_url=_urlopen):
+    """The engine his settings name, once the account has actually answered for them.
+
+    The one request resolves the name he wrote to the id the API wants as well as proving the
+    key, so he never has to paste twenty characters of noise into a file to pick a voice."""
+    key = settings["key"]
+    wanted = str(settings["voice"]).strip()
+    voices = account_voices(key, open_url=open_url)
     for voice in voices:
         # A name is his to type, so it matches however he capitalized it; an id is the API's own
         # string and matches exactly.
@@ -94,6 +109,67 @@ def connect(settings, *, open_url=_urlopen):
     # usable, so the list is the actionable half of this - not that the name was wrong.
     have = ", ".join(str(voice.get("name")) for voice in voices) or "none at all"
     raise CloudVoiceError(f"no ElevenLabs voice called {wanted!r} on that account - it has: {have}")
+
+
+def setup(directory, *, ask=input, say=print, open_url=_urlopen):
+    """The door he double-clicks: key in, voices out, one of them chosen. True when it changed.
+
+    The alternative was hand-writing JSON around a twenty-character id, and the question it
+    answers - "which voices does this account even have?" - is one he cannot answer from a file.
+    A key that does not work is said HERE, at the door, rather than found at the next launch,
+    where the only symptom would be a voice that isn't the one he chose. Every way out that is
+    not a completed choice leaves what was already configured exactly as it was: a door opened
+    by accident must never be a way to lose a working setup."""
+    say("Your ElevenLabs API key is at elevenlabs.io -> your profile -> API Keys.")
+    key = str(ask("Paste it here (or press Enter to leave things as they are): ")).strip()
+    if not key:
+        say("Nothing pasted - nothing changed.")
+        return False
+    try:
+        voices = account_voices(key, open_url=open_url)
+    except CloudVoiceError as fault:
+        say(str(fault))
+        return False
+    if not voices:
+        say("That key works, but the account has no voices yet - add one from the Voice Library "
+            "at elevenlabs.io first, then run this again.")
+        return False
+    say("")
+    for number, voice in enumerate(voices, 1):
+        say(f"  {number}. {voice.get('name')}")
+    say("")
+    answer = str(ask("Which voice should Excephalon speak in? (number or name): ")).strip()
+    chosen = _chosen(answer, voices)
+    if chosen is None:
+        say(f"No voice matches {answer!r} - nothing changed.")
+        return False
+    path = Path(directory)
+    path.mkdir(parents=True, exist_ok=True)
+    (path / SETTINGS_FILE).write_text(
+        json.dumps({"key": key, "voice": chosen}, indent=2), encoding="utf-8")
+    os.chmod(path / SETTINGS_FILE, 0o600)  # his key; no other account on the machine needs it
+    say(f"\nExcephalon will speak as {chosen}. Restart it to hear the change.")
+    return True
+
+
+def _chosen(answer, voices):
+    """The voice he meant, by its number in the list or by its name - or None."""
+    names = [str(voice.get("name")) for voice in voices]
+    if answer.isdigit() and 1 <= int(answer) <= len(names):
+        return names[int(answer) - 1]
+    for name in names:
+        if answer.lower() == name.lower():
+            return name
+    return None
+
+
+# Found from this file, so the door works whatever cwd a double-click gives it - the same reason
+# google_bridge finds its own runtime/ that way.
+RUNTIME_TTS = Path(__file__).resolve().parents[2] / "runtime" / "tts"
+
+
+if __name__ == "__main__":
+    raise SystemExit(0 if setup(RUNTIME_TTS) else 1)
 
 
 class ElevenLabsEngine:
@@ -152,9 +228,9 @@ class Failover:
     def say(self, text):
         if self._given_up:
             return self._local.say(text)
-        chunks, samplerate = self._cloud.say(text)
-        pieces = iter(chunks)
         try:
+            chunks, samplerate = self._cloud.say(text)
+            pieces = iter(chunks)
             first = next(pieces)
         except Exception as fault:
             return self._fell_back(text, fault)
