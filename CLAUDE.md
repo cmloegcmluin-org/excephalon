@@ -456,7 +456,13 @@ used to be lost to context resets), streams the whole exchange into its log,
 answers to the name HE gives it (`rename` moves the desk's key, the log the window
 draws a tab from, the survival record and the tag on any queued news - the worktree and branch
 keep their own names, which are git's; `start_agent` takes a name up front, so "call it the
-auto-play fix" works from the first word, and `safe_name` is what makes his words a filename), records the fleet in
+auto-play fix" works from the first word, and `safe_name` is what makes his words a filename).
+Every door that takes a name resolves it first (`resolve`: exact, then safe_name prefix either
+way - which is what a truncation is - then shared words, only ever a UNIQUE winner, never a
+guess between two): the desk itself truncates his words to make a key, the brain and foreman
+retype it, and one retyping missed - the foreman reported the agent "isn't reachable at the
+desk", and that machinery failure reached him as a heads-up ("this is bullshit I shouldn't be
+pestered about"). It records the fleet in
 `runtime/agents.json` and revives it on startup — an agent whose log is already in the archive is
 NOT brought back (the record is written on the way down, so one wrapped up from outside the app
 would otherwise rise from the dead and have its old news re-raised: "this is the third time it's

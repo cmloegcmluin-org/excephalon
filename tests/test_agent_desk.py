@@ -1660,3 +1660,52 @@ def test_a_task_that_keeps_killing_its_agents_finally_reaches_him():
     assert len([e for e in events if e[0] == "died"]) == 1  # two restarts were silent
     assert desk._desked["doomed"].deaths == 3
     desk.close()
+
+
+def test_a_truncated_or_retyped_name_still_reaches_the_agent():
+    # The desk names agents by truncating his words to a filename, then hands that name to the
+    # brain and the foreman - who retype it. One retyping missed, the foreman answered "the
+    # agent isn't reachable at the desk under the name I was given", and its failure report
+    # reached the user as a heads-up about machinery: "it can't find the agent... it should be
+    # smart enough to just look at open/recent agents or ones with names that are similar. this
+    # is bullshit I shouldn't be pestered about."
+    task = ("when a task is multiline here in the Projects tab, the robot icon link to the "
+            "agent log is vertically centered")
+    from excephalon.tailing import safe_name
+
+    key = safe_name(task)  # the 60-char truncation the desk itself made
+    desk, _, made = _desk()
+    desk.start(key, "/tmp/wt", task)
+    assert _wait_for(lambda: made and len(made[0].messages) == 1)
+
+    assert desk.send(task, "the full sentence he actually said") is True  # untruncated
+    assert desk.send(key.rstrip("-"), "the name minus its odd trailing dash") is True
+    assert desk.send("the robot icon multiline fix", "words that share its tokens") is True
+    assert _wait_for(lambda: len(made[0].messages) == 4)
+    assert desk.resolve("no such agent at all, nothing shared") is None
+    desk.close()
+
+
+def test_an_ambiguous_name_is_never_guessed_between_two():
+    desk, _, made = _desk()
+    desk.start("alpha-scrubber-fix", "/tmp/a", "fix the scrubber")
+    desk.start("alpha-scrubber-polish", "/tmp/b", "polish the scrubber")
+    assert _wait_for(lambda: len(made) == 2 and all(a.messages for a in made))
+
+    assert desk.resolve("alpha-scrubber") is None  # two candidates: refusing beats guessing
+    assert desk.send("alpha-scrubber", "hello?") is False
+    assert desk.resolve("alpha-scrubber-polish") == "alpha-scrubber-polish"
+    desk.close()
+
+
+def test_held_news_is_dropped_by_whatever_name_he_used():
+    # tell_agent drops the agent's held news (his new words supersede it) - and the drop must
+    # land however the name was said, or the stale update is still offered afterwards.
+    desk, outbox, made = _desk()
+    desk.start("robot-icon-alignment", "/tmp/wt", "align the robot icons")
+    assert _wait_for(lambda: bool(outbox))
+
+    desk.drop_news("the robot icon alignment work")
+
+    assert not outbox.owed_about()
+    desk.close()
