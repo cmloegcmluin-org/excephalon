@@ -95,6 +95,16 @@ PROMPTS = {
         "did not land, tell them in one sentence what is stuck. Never relay the report's "
         "internals - no commit hashes, no test counts, no branch names, no file lists.]"
     ),
+    # The desk verified the merge against git and did the whole wrap-up itself - log archived,
+    # list item ticked, session closed - so this narration only SAYS it; nothing is left for
+    # the brain to do, because the wrap-up hanging on a narration is how a failed compose left
+    # a merged agent haunting the desk for fourteen hours.
+    "landed": (
+        "[Agent event, from the app - not the user speaking. Your agent {agent}'s approved work "
+        "has MERGED, and the app has already wrapped everything up: its list item is ticked and "
+        "its tab is closed. Tell the user in one short sentence that it is in and done. Never "
+        "relay the report's internals - no commit hashes, no test counts, no branch names.]"
+    ),
     # A restart found an agent holding work it had already presented and never got a verdict on.
     # Nothing re-engages an idle agent, so without this the review simply stopped existing: he
     # rejected a round, the agent fixed and re-presented into a closed app, and the next launch

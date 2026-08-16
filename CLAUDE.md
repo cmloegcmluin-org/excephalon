@@ -492,7 +492,14 @@ only once nothing about that agent is still waiting to be spoken (`Outbox.owed_a
 the spool's view of the whole debt): `mark_ready` fires when the walkthrough is COMPOSED, that
 walkthrough then sat in hand for over an hour, and the brain briefed across the gap told him "I
 presented it earlier... no new update since then" about steps he had never heard ("That's false.
-You never presented it to me."); and `retire()` wraps a finished agent up whole: its log moved to
+You never presented it to me."). The loop's LAST leg is the desk's own: when a landing agent's
+turn ends, the desk asks git whether its branch actually reached origin/main (`_merged` — fetch,
+then merge-base --is-ancestor; any failure reads as not-merged) and if so wraps it up itself and
+only then says so (the "landed" narration, composed from the fact, nothing left for the brain to
+do). It used to hang on a narration COMMANDING the brain to close the tab; that narration failed
+once and the merged agent haunted the desk for fourteen hours — revived every boot,
+re-presenting delivered work as new, refusing retirement, its ticket open ("make sure that tasks
+are designed to be automatically checked off when the work gets finished"). And `retire()` wraps a finished agent up whole: its log moved to
 the fleet's one archive (`runtime/agent-logs-archive/`, a SIBLING of the live folder so an archived
 log is outside what the roster globs and can never come back as a tab — `tailing.archive_dir` names
 it in one place, shared with the window's own close button), the Enhancements item it was completing
@@ -503,7 +510,11 @@ list's record of ask and answer. The CARD rides along too (`project`, the Projec
 item lives on, None meaning the Enhancements card), because every tick could once land only on the
 Enhancements card and an afternoon's three delivered tasks sat open on their cards ("it did not
 check them off in the Projects tab") — check_off_enhancement and the CLI's `tick` take the card
-name the same way. `retire` also REFUSES an agent holding work he has not ruled on -
+name the same way. A tick whose named card misses falls back to whichever card holds the number
+(`complete_enhancement_anywhere`) — but only when exactly ONE does, since ids are per-card and
+#2 exists three times: the brain guessed a project for an item in plain sight on the
+Enhancements card, and "the tool can't find it" reached him ("please fix whatever is wrong with
+it so that it can't find what is in plain sight"). `retire` also REFUSES an agent holding work he has not ruled on -
 a tab was once closed over a finished feature and he met it as a fait accompli ("are you saying
 you delivered a feature without me verifying it first?"), so a verdict is the only state a
 wrap-up is legal from, exactly as it is for the push - and it REFUSES a desked agent whose news

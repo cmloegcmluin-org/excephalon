@@ -554,14 +554,32 @@ def test_a_little_chore_goes_to_the_errand_hand_not_an_agent_tab():
 
 def test_checking_off_by_id_flips_the_tick_and_a_missing_id_is_said():
     desk, ticked = FakeDesk(), []
-    tools = _tools(desk, check_off=lambda item_id: ticked.append(item_id) or item_id == 43)
+    tools = _tools(desk, check_off=lambda item_id: ticked.append(item_id) or item_id == 43,
+                   check_off_anywhere=lambda item_id: None)
 
     said_yes = _call(tools["check_off_enhancement"], id=43)
     said_no = _call(tools["check_off_enhancement"], id=999)
 
     assert ticked == [43, 999]
     assert "checked off" in said_yes
-    assert "no item" in said_no.lower()
+    assert "no single open item" in said_no.lower()
+
+
+def test_a_wrongly_guessed_card_still_ticks_the_item_when_one_card_holds_it():
+    # "I see #132 in the briefing but the tool can't find it on the Enhancements list" - the
+    # brain guessed a project for an item sitting in plain sight on the Enhancements card, the
+    # named card had no such number, and the miss reached the user ("please fix whatever is
+    # wrong with it so that it can't find what is in plain sight"). One card holding the number
+    # IS the answer; several holding it is still a refusal.
+    desk, ticked = FakeDesk(), []
+    tools = _tools(desk, check_off=lambda item_id, **where: False,
+                   check_off_anywhere=lambda item_id: ticked.append(item_id) or "Enhancements")
+
+    said = _call(tools["check_off_enhancement"], id=132, project="Excephalon")
+
+    assert ticked == [132]
+    assert "#132 is checked off" in said
+    assert "Enhancements" in said
 
 
 def test_checking_off_a_project_card_task_reaches_that_card():

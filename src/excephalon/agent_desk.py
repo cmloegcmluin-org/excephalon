@@ -882,13 +882,45 @@ class AgentDesk:
             return
         with self._lock:
             entry.deaths = 0  # a clean turn: earlier crashes were weather, not a pattern
+        # Asked BEFORE the state flips to idle: the git round-trip takes real time, and spent
+        # between idle and the finished event it opens a window where the agent reads as done
+        # with nothing owed about it yet.
+        landed = entry.delivery.stage == "landing" and self._merged(entry)
         self._set_state(name, "idle", last_word=reply)
+        if landed:
+            # The loop's last leg is mechanical, so the desk walks it itself: approved work
+            # that has actually reached origin/main is wrapped up NOW - log archived, list
+            # item ticked, session closed - and only then told to him, composed from the fact.
+            # It used to hang on a narration commanding the brain to close the tab; that
+            # narration failed once and the merged agent haunted the desk for fourteen hours -
+            # revived every boot, re-presenting delivered work as new, refusing retirement -
+            # while his ticket sat open ("make sure that tasks are designed to be
+            # automatically checked off when the work gets finished").
+            self.drop_news(name)  # its own prose reports are superseded by the fact of landing
+            if self.retire(name):
+                self._events("landed", name, reply)
+                return
         if entry.delivery.stage != "landing":
             # A landing agent still owes a merge report, so its silence clock keeps running - the
             # overnight stall was invisible precisely because idle stopped the count. Retirement
             # is what finally stops it.
             self._finished(name)
         self._events("finished", name, reply)
+
+    def _merged(self, entry):
+        """Has this agent's branch actually reached origin/main? Git is the one holder of that
+        truth, so it is asked directly - a fetch first, since the merge queue lands on the
+        remote and a minutes-old merge is invisible to a stale clone. Any failure to answer
+        reads as not-merged: a wrap-up on a guess would close work still in flight, and the
+        normal narration path still covers it."""
+        try:
+            self._run(["git", "-C", entry.cwd, "fetch", "origin", "--quiet"],
+                      check=False, timeout=60)
+            asked = self._run(["git", "-C", entry.cwd, "merge-base", "--is-ancestor",
+                               "HEAD", "origin/main"], check=False, timeout=30)
+            return getattr(asked, "returncode", 1) == 0
+        except Exception:
+            return False
 
     def _restart_dead(self, name, entry, message):
         """Give a crashed agent a fresh session on its own history and tell it to pick back up -
