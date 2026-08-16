@@ -574,6 +574,67 @@ def test_a_refreshed_agent_keeps_its_number_even_as_the_list_grows():
             in tts.spoken)
 
 
+class GateBrain(FakeBrain):
+    """A brain that answers the coherence gate, and replies normally to everything else."""
+
+    def __init__(self, verdict="say"):
+        super().__init__()
+        self.verdict = verdict
+        self.gated = []
+
+    def respond(self, utterance, *, remember=True, on_text=None):
+        if "App check" in utterance:
+            self.gated.append(utterance)
+            return self.verdict
+        return super().respond(utterance)
+
+
+def test_held_news_the_conversation_has_overtaken_is_never_spoken():
+    # The general fix, not another route: everything queued was composed at one moment and spoken
+    # at another, and the queue cannot know what happened in between. A recorded question was
+    # played back four minutes after he answered it. Every stored line is now put in front of the
+    # brain - the one part that has been having the conversation - before it is said.
+    outbox = Outbox()
+    outbox.push("You're on italki - which language are you learning there?", about="errands",
+                listed=False)
+    tts = FakeTTS()
+    brain = GateBrain("skip")
+    convo = Conversation(FakeSTT(["goodbye entity"]), brain, tts, outbox=outbox)
+
+    convo.turn()
+
+    assert brain.gated  # the exact words went in front of it
+    assert "which language" not in "\n".join(tts.spoken)  # and never reached him
+    assert not outbox  # nor is it left to come back next turn, or after a restart
+
+
+def test_held_news_the_brain_still_stands_behind_goes_out_word_for_word():
+    outbox = Outbox()
+    outbox.push("fixer: the drive link is fixed", about="fixer")
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["goodbye entity"]), GateBrain("say"), tts, outbox=outbox)
+
+    convo.turn()
+
+    assert "fixer: the drive link is fixed" in tts.spoken  # unchanged, in its own words
+
+
+def test_an_update_he_just_asked_for_is_never_second_guessed():
+    # deliver_update is the brain saying "hand him this one, now". Gating that would let it talk
+    # itself out of the thing it had just been asked for.
+    outbox = Outbox()
+    outbox.push("fixer: the drive link is fixed", about="fixer")
+    outbox.request("fixer")  # what the brain's deliver_update tool records
+    tts = FakeTTS()
+    brain = GateBrain("skip")  # it would hold anything else back
+    convo = Conversation(FakeSTT(["goodbye entity"]), brain, tts, outbox=outbox)
+
+    convo.turn()
+
+    assert "fixer: the drive link is fixed" in tts.spoken
+    assert brain.gated == []  # not even asked: he named this one
+
+
 def test_unlisted_news_is_simply_said_and_never_joins_the_numbered_list():
     # "Two updates waiting. One, weekly-schedule-builder. Two, errands." - "I thought we're only
     # working on one thing. I don't even know what errands would be." The errand hand is
