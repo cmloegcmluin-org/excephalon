@@ -236,7 +236,14 @@ process last WROTE anything (past an hour it is a new day, not a restart; measur
 instead, that gap is the length of the conversation he just had — "you were out about 49 minutes"
 about a restart he was away from for seconds). Those become one note and the BRAIN words
 the welcome back — a greeting assembled from templates is the stock line wearing more of them —
-and every failure falls back to the stock line, because a greeting is not worth a launch.
+and every failure falls back to the stock line, because a greeting is not worth a launch. The
+note says what is ALREADY waiting to be spoken and forbids naming any of it, and the greeting is
+handed to the conversation as its `opening` rather than spoken beside it, so a restart with news
+waiting is ONE message (welcome, then the roll call) instead of the two thirteen seconds apart he
+got — a welcome asking about one update, then the app offering all three. What landed is offered
+to him only if he could NOTICE it: the same note warns that most commits are internal machinery,
+after the brain turned two of them into "a voice safety layer caught some things before they
+reached you... you're still driving", which meant nothing to him.
 `conversation.py` is the loop (listen → think → speak) and owns turn-taking, barge-in, and the
 delivery of agent news at a lull; it puts the desk's fleet briefing in front of the brain every
 turn and streams the reply into the voice as it is written. `voice.py` is how a streamed reply
