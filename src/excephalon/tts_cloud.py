@@ -59,6 +59,21 @@ def _urlopen(request, timeout=None):
     return urllib.request.urlopen(request, timeout=timeout)  # noqa: S310 - a pinned https API
 
 
+def _said_by(fault):
+    """What went wrong, in the API's OWN words where it has any.
+
+    A refusal's str() is only its status line - "HTTP Error 402: Payment Required" - and the half
+    he can act on is in the body: "Free users cannot use library voices via the API. Please
+    upgrade your subscription to use this voice." Throwing that away left him reading a number
+    and asking what it meant, which is a service named as broken without its own explanation."""
+    body = fault.read() if hasattr(fault, "read") else b""
+    try:
+        message = json.loads(body).get("detail", {}).get("message")
+    except (AttributeError, ValueError):
+        message = None
+    return f"{fault} - {message}" if message else str(fault)
+
+
 def settings_in(directory):
     """His cloud.json beside the local model, or None when there isn't a usable one.
 
@@ -87,7 +102,8 @@ def account_voices(key, *, open_url=_urlopen):
         with open_url(request, timeout=TIMEOUT_SECONDS) as response:
             return json.loads(response.read() or b"{}").get("voices") or []
     except Exception as fault:
-        raise CloudVoiceError(f"ElevenLabs wouldn't answer for that key: {fault}") from fault
+        raise CloudVoiceError(
+            f"ElevenLabs wouldn't answer for that key: {_said_by(fault)}") from fault
 
 
 def connect(settings, *, open_url=_urlopen):
@@ -102,13 +118,29 @@ def connect(settings, *, open_url=_urlopen):
         # A name is his to type, so it matches however he capitalized it; an id is the API's own
         # string and matches exactly.
         if wanted == voice.get("voice_id") or wanted.lower() == str(voice.get("name", "")).lower():
-            return ElevenLabsEngine(key, voice["voice_id"],
-                                    model=settings.get("model") or DEFAULT_MODEL,
-                                    open_url=open_url)
+            engine = ElevenLabsEngine(key, voice["voice_id"],
+                                      model=settings.get("model") or DEFAULT_MODEL,
+                                      open_url=open_url)
+            _prove(engine)
+            return engine
     # The library is thousands of voices and only the ones he has added to the account are
     # usable, so the list is the actionable half of this - not that the name was wrong.
     have = ", ".join(str(voice.get("name")) for voice in voices) or "none at all"
     raise CloudVoiceError(f"no ElevenLabs voice called {wanted!r} on that account - it has: {have}")
+
+
+def _prove(engine, token="Hi."):
+    """Actually SPEAK with this voice once, discarding the audio - the same warm-up the local
+    voice does at startup, and here the only thing that settles whether the voice works.
+
+    Listing the voices proves the KEY and says nothing about the VOICE: a Voice Library voice
+    sits in a free account's list and then refuses the moment it is spoken ("Free users cannot
+    use library voices via the API"), which he met as a launch that looked fine followed by a
+    voice that was not the one he chose. Three characters is about one credit against a plan
+    measured in tens of thousands."""
+    chunks, _ = engine.say(token)
+    for _ in chunks:
+        break
 
 
 def setup(directory, *, ask=input, say=print, open_url=_urlopen):
@@ -120,7 +152,9 @@ def setup(directory, *, ask=input, say=print, open_url=_urlopen):
     where the only symptom would be a voice that isn't the one he chose. Every way out that is
     not a completed choice leaves what was already configured exactly as it was: a door opened
     by accident must never be a way to lose a working setup."""
-    say("Your ElevenLabs API key is at elevenlabs.io -> your profile -> API Keys.")
+    # The direct address, because "your profile -> API Keys" is what he was told the first time
+    # and he could not find it.
+    say("Your ElevenLabs API key is at https://elevenlabs.io/app/settings/api-keys")
     key = str(ask("Paste it here (or press Enter to leave things as they are): ")).strip()
     if not key:
         say("Nothing pasted - nothing changed.")
@@ -143,6 +177,15 @@ def setup(directory, *, ask=input, say=print, open_url=_urlopen):
     if chosen is None:
         say(f"No voice matches {answer!r} - nothing changed.")
         return False
+    try:
+        # The list holds every voice on the account, and a free plan cannot SPEAK the ones added
+        # from the Voice Library. Caught here he simply picks another; written anyway, he finds
+        # out after a restart, in a voice that isn't the one he chose.
+        _prove(ElevenLabsEngine(key, _id_of(chosen, voices), open_url=open_url))
+    except Exception as fault:
+        say(f"\n{chosen} can't be spoken with that key: {_said_by(fault)}")
+        say("Nothing changed - run this again and pick another.")
+        return False
     path = Path(directory)
     path.mkdir(parents=True, exist_ok=True)
     (path / SETTINGS_FILE).write_text(
@@ -161,6 +204,10 @@ def _chosen(answer, voices):
         if answer.lower() == name.lower():
             return name
     return None
+
+
+def _id_of(name, voices):
+    return next(voice["voice_id"] for voice in voices if str(voice.get("name")) == name)
 
 
 # Found from this file, so the door works whatever cwd a double-click gives it - the same reason
@@ -193,7 +240,13 @@ class ElevenLabsEngine:
             headers={"xi-api-key": self._key, "content-type": "application/json",
                      "accept": "audio/pcm"},
         )
-        with self._open_url(request, timeout=TIMEOUT_SECONDS) as response:
+        try:
+            response = self._open_url(request, timeout=TIMEOUT_SECONDS)
+        except Exception as fault:
+            # Re-raised in the API's own words, so the aside `Failover` writes says what to do
+            # rather than only that something went wrong.
+            raise CloudVoiceError(_said_by(fault)) from fault
+        with response:
             remainder = b""
             while True:
                 block = response.read(4096)

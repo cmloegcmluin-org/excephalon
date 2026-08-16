@@ -263,10 +263,17 @@ and after three failures running the local voice simply takes over — each atte
 network timeout before any sound comes out, so against a dead key that pause would otherwise sit
 in front of every sentence all session. The key is spoken to at startup rather than merely read
 (`connect` lists the account's voices, which proves it AND resolves the name he wrote to the id
-the API wants), and `Connect ElevenLabs.bat` — with the .command beside it, because a door built
-for one desk is no door on the other — is how `runtime/tts/cloud.json` gets written: only voices
-ADDED to the account can be spoken in, and which those are is not a thing he can answer from a
-file. A checkout with no cloud.json is the ordinary case and is announced as nothing at all. The
+the API wants), and the VOICE is spoken WITH — `_prove` synthesizes one token and throws the
+audio away, the same warm-up the local voice does, because the list proves the key and says
+nothing about the voice: a Voice Library voice sits in a free account's list and then refuses the
+moment it is spoken ("Free users cannot use library voices via the API"), which he met as a
+launch that looked fine followed by a voice that was not the one he chose. A refusal is reported
+in the API's OWN words (`_said_by` reads the body; its str() is only "HTTP Error 402: Payment
+Required", and the half he can act on is inside). `Connect ElevenLabs.bat` — with the .command
+beside it, because a door built for one desk is no door on the other — is how
+`runtime/tts/cloud.json` gets written, and it proves the pick the same way before writing it:
+only voices ADDED to the account appear at all, only some of those can be SPOKEN, and neither is
+a thing he can answer from a file. A checkout with no cloud.json is the ordinary case and is announced as nothing at all. The
 cloud voice requires the local one behind it: on a machine that cannot have Kokoro there is no
 fallback, and silence is the one thing this may never cost him. `actions.py` is everything the brain can DO: sixteen typed in-process tools wired to
 the desk — among them update_persona, drop_instruction, remember and forget_memory, its levers over
