@@ -65,6 +65,23 @@ def _resolve(target):
     return [os.path.expanduser(part.strip()) for part in re.split(r"[,\n]", target) if part.strip()]
 
 
+def take_care_spec(project, task_text, *, selves=SELF_NAMES):
+    """What to start for a Projects-tab robot click, or None if there is nothing to start.
+
+    A click starts an agent on the task then and there - the deterministic half of "please take care
+    of this task". The task's own words are the task and the enhancement it ticks off when the work
+    lands, and the seed of the agent's name; the card's project rides along so the tick lands on the
+    right card - except Excephalon's own card (the Enhancements roadmap), which the desk names by
+    project=None, the same None its own tasks tick against."""
+    text = (task_text or "").strip()
+    if not text:
+        return None
+    proj = (project or "").strip()
+    proj = None if proj.lower() in selves else (proj or None)
+    return {"name": safe_name(text) or "task-agent", "task": text,
+            "enhancement": text, "project": proj}
+
+
 def names_another_app(item, others, selves=SELF_NAMES):
     """The other project this item is a feature request for, or None.
 

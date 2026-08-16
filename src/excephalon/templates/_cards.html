@@ -28,11 +28,13 @@
     to that moment in the conversation (the window reads #at= and scrolls there). The row puts it
     back on save, so the file keeps the exact stamp it always did.
 
-    The agent gutter leads every checklist row, filled or empty, so the boxes stay in one column
-    whether or not a task has an agent on it ("shift all checkboxes over to make room"). When an
-    agent IS on the task, the slot is a link to its log (and the row carries the id that agent's
-    log links back to); otherwise it is a same-width spacer. -#}
-<li class="{{ 'done' if item.done }}"{% if item.anchor %} id="{{ item.anchor }}"{% endif %}{% if item.id %} data-id="{{ item.id }}"{% endif %}{% if item.filed %} data-filed="{{ item.filed }}"{% endif %}>{% if item.agent %}<a class="agent-link" href="/agents#agent-{{ item.agent }}" title="{{ item.agent }} is on this — open its log">{{ agent_icon() }}</a>{% else %}<span class="agent-slot" aria-hidden="true"></span>{% endif %}<input type="checkbox" aria-label="Done" {{ 'checked' if item.done }}>{% if item.id %}<span class="tag">#{{ item.id }}</span>{% endif %}<span class="item" contenteditable="plaintext-only">{{ item.text }}</span>{% if item.filed %}<a class="filed" href="/#at={{ item.filed | urlencode }}" title="Links back to where this enhancement was identified in the conversation">{{ item.filed }}</a>{% endif %}</li>
+    The robot leads every checklist row, always: when an agent IS on the task it is the green,
+    glowing link to that agent's log (and the row carries the id the log links back to); when none
+    is, it is a gray button that starts one - a click tells Excephalon to take care of this task,
+    the same as saying so (projects.js). Either way it is the same fixed-width gutter, so the boxes
+    stay in one column whether or not a task has an agent on it ("shift all checkboxes over to make
+    room"). -#}
+<li class="{{ 'done' if item.done }}"{% if item.anchor %} id="{{ item.anchor }}"{% endif %}{% if item.id %} data-id="{{ item.id }}"{% endif %}{% if item.filed %} data-filed="{{ item.filed }}"{% endif %}>{% if item.agent %}<a class="agent-link working" href="/agents#agent-{{ item.agent }}" title="{{ item.agent }} is on this — open its log">{{ agent_icon() }}</a>{% else %}<button type="button" class="agent-start" title="Have Excephalon take care of this task">{{ agent_icon() }}</button>{% endif %}<input type="checkbox" aria-label="Done" {{ 'checked' if item.done }}>{% if item.id %}<span class="tag">#{{ item.id }}</span>{% endif %}<span class="item" contenteditable="plaintext-only">{{ item.text }}</span>{% if item.filed %}<a class="filed" href="/#at={{ item.filed | urlencode }}" title="Links back to where this enhancement was identified in the conversation">{{ item.filed }}</a>{% endif %}</li>
 {%- else -%}
 {#- A bullet may open with a NAME - three words at most, bold - so a wall of standing instructions
     can be read down rather than through. It is stored in the file as markdown (`**name** the rule`);
@@ -48,7 +50,8 @@
     and it folds into the Done section at the foot, so what he still has to act on is what he sees. -#}
 {% macro card(section) -%}
 <section class="section" id="card-{{ section.title | lower | replace(' ', '-') }}"
-         data-heading="{{ section.heading }}" data-kind="{{ section.kind }}">
+         data-heading="{{ section.heading }}" data-kind="{{ section.kind }}"
+         data-project="{{ section.title }}">
     <h2>{{ section.title }}
       {%- if section.kind == "checklist" %}
       <span class="counts">{{ section["active"] | length }} open</span>

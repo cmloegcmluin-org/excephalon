@@ -299,7 +299,8 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
                profile_path=None, learned_path=None, translations_path=None, terms=(),
                persona_additions_path=None, agent_logs_dir=None, agent_state_path=None, clock=None,
                on_quit=None, on_restart=None, upgrade_ready=None, on_translations_saved=None,
-               scanned_terms=(), lexicon_reader=None, on_lexicon_saved=None, on_rename=None):
+               scanned_terms=(), lexicon_reader=None, on_lexicon_saved=None, on_rename=None,
+               on_take_care=None):
     """`model` is the conversation to show. `mirror` is what fills it from the feed, when there
     is a live session behind it - without one the model is whatever was put in it.
 
@@ -472,6 +473,17 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
         cards = _project_cards(_profile_raw())
         assign(cards, fleet_enhancements(agent_state_path))
         return render_template("projects.html", here="/projects", sections=cards)
+
+    @app.post("/task/take-care")
+    def take_care():
+        """A task's gray robot was clicked: start an agent on it, then and there. This is the
+        deterministic half of "please take care of this task" - no brain in the loop to decide, the
+        way clicking a task and telling Excephalon to handle it both mean the same thing. The
+        agent's name comes back so the page can turn that task green at once. With no fleet behind
+        the app (a bare checkout, a test) there is nothing to start, and it says so cleanly."""
+        name = (on_take_care(request.form.get("project", ""), request.form.get("text", ""))
+                if on_take_care is not None else None)
+        return {"agent": name}
 
     @app.post("/project/new")
     def new_project():

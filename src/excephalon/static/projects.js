@@ -67,6 +67,56 @@ if (editing) {
   history.replaceState(null, "", "/projects");  // so a reload does not reopen the editor
 }
 
+/* The gray robot on a task an agent is NOT on starts one, then and there - the deterministic half
+   of "telling Excephalon 'please take care of this task'", with no brain in the loop to decide. The
+   click posts the task to /task/take-care, the server starts the agent, and the moment it hands the
+   name back the robot goes green here: the task is now one an agent is on. A task already green is
+   the link instead, left to the browser as an ordinary <a>.
+
+   Delegated from the document so a row made after load (Enter clones one) is wired without rebinding,
+   and it reads the task off its own row - the project its card names, and the words. */
+function announceAsked(what) {
+  const saved = document.getElementById("saved");
+  if (!saved) return;   // the same quiet status line a save uses - a click nobody can see is one
+  saved.textContent = what;   // nobody trusts
+  saved.classList.add("showing");
+  setTimeout(() => saved.classList.remove("showing"), 1600);
+}
+
+/* The gray start button becomes the green working link the instant its agent exists - the robot
+   glyph itself is reused, only its wrapper changes, so the task turns green in place with no reload. */
+function turnGreen(button, agent) {
+  const link = document.createElement("a");
+  link.className = "agent-link working";
+  link.href = `/agents#agent-${encodeURIComponent(agent)}`;
+  link.title = `${agent} is on this — open its log`;
+  while (button.firstChild) link.append(button.firstChild);
+  button.replaceWith(link);
+}
+
+document.addEventListener("click", async (event) => {
+  const button = event.target.closest(".agent-start");
+  if (!button) return;
+  const row = button.closest("li");
+  const text = row?.querySelector(".item")?.textContent.trim();
+  if (!text) return;   // an empty, not-yet-saved row is nothing to put an agent on yet
+  const project = row.closest(".section")?.dataset.project || "";
+  button.disabled = true;   // one click is one agent; a double-click must not start two
+  try {
+    const answer = await fetch("/task/take-care",
+      { method: "POST", body: new URLSearchParams({ project, text }) });
+    const agent = answer.ok ? (await answer.json()).agent : null;
+    if (agent) {
+      turnGreen(button, agent);
+      announceAsked(`On it — ${agent} is on this now`);
+      return;
+    }
+    button.disabled = false;   // nothing started; leave it clickable
+  } catch {
+    button.disabled = false;
+  }
+});
+
 /* An agent's log links here with #task-<card>-<id>: bring that task into view and flash it, so it
    is obvious which one was meant rather than landing somewhere in a long card. The same "you
    landed here" highlight the conversation uses (.landed), and only for a moment. */
