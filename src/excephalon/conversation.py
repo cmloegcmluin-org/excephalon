@@ -320,6 +320,7 @@ class Conversation:
         interrupt=None,
         briefing=None,
         standing=None,
+        opening="",
     ):
         self._stt = stt
         self._brain = brain
@@ -343,6 +344,11 @@ class Conversation:
         self.empty_turn_reply = empty_turn_reply
         self._unwritten = []  # lines spoken in its name that it didn't compose; told to it next turn
         self._waiting = []  # news drained from the outbox and not delivered yet
+        # The session's FIRST line, said through this one mouth rather than beside it. Spoken
+        # outside the loop, it was one of two messages he got thirteen seconds apart at startup -
+        # a welcome asking about one update, then the app offering all three ("I just opened
+        # Excephalon and then it quickly sent me two messages. it should only have sent me one").
+        self._opening = opening
         self._requested = set()  # agents whose held news the brain asked spoken (deliver_update)
         self._announced = ()  # the news the roll call last read out, so fresh news re-reads
         self._clock = clock
@@ -477,7 +483,7 @@ class Conversation:
         recording, because it once broke in mid-sentence while they were talking.
         """
         if self._outbox is None:
-            return
+            return self._say_opening()
         # A drop (the agent was retired, or the user just engaged it with new words) cleans the
         # queue and the spool, but not the news already drained into this hand - that copy was
         # still offered after he had sent the agent fresh instructions ("surely there's no update
@@ -514,7 +520,7 @@ class Conversation:
         if not self._waiting:
             self._announced = ()  # nothing outstanding, so the next single item is simply spoken
             self._update_offered = False
-            return
+            return self._say_opening()
         if self._they_are_talking():
             return
         # Unlisted news is not an item to choose between - the errand hand is machinery, not an
@@ -640,10 +646,23 @@ class Conversation:
         list, and unlisted news is never a name on it."""
         return tuple(str(item) for item in self._waiting if getattr(item, "listed", True))
 
+    def _say_opening(self):
+        """Say the session's first line, once, if there is one and nothing carried it already."""
+        opening, self._opening = self._opening, ""
+        if opening:
+            self._console.reply(opening)
+            self._say(opening, record=False, known=True)
+
     def _announce(self):
-        """Read out who is waiting, numbered, so one of them can be named."""
+        """Read out who is waiting, numbered, so one of them can be named. The session's opening
+        line rides on the front of it when there is one, so a restart with news waiting is ONE
+        message rather than a welcome and a menu thirteen seconds apart."""
         self._announced = self._roll()
         line = roll_call([held for held in self._waiting if getattr(held, "listed", True)])
+        opening, self._opening = self._opening, ""
+        if opening:
+            self._console.reply(opening)
+            line = f"{opening}\n\n{line}"
         self._console.heads_up(line)
         self._say(line, record=False)
 
