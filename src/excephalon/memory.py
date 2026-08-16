@@ -889,6 +889,30 @@ def complete_enhancement_by_id(item_id, path=DEFAULT_PROFILE_PATH, heading=ENHAN
     return False
 
 
+def complete_enhancement_anywhere(item_id, path=DEFAULT_PROFILE_PATH):
+    """Tick #id on whichever card holds it - when exactly ONE does - and name that card, or None.
+
+    The brain must name an item's card to tick it, and it guessed: told to check #132 off, it
+    invented a project, the named card had no such item, and "the tool can't find it on the
+    Enhancements list" reached the user about an item sitting in plain sight ("please fix
+    whatever is wrong with it so that it can't find what is in plain sight"). Ids are per-card,
+    so a number can exist on several - #2 does - and there a guess would tick the wrong ask:
+    one card or nothing, the same unique-winner rule every loose match in this app obeys."""
+    path = Path(path)
+    sections = profile_sections(_read(path))
+    cards = [find_heading(sections, ENHANCEMENTS_HEADING)]
+    cards += [heading for heading in sections
+              if heading.lower().startswith(PROJECT_PREFIX.lower()) and heading not in cards]
+    holding = [card for card in cards
+               if any(item.get("id") == int(item_id) and not item["done"]
+                      for item in checklist_items(sections.get(card, "")))]
+    if len(holding) != 1:
+        return None
+    if complete_enhancement_by_id(item_id, path, heading=holding[0]):
+        return holding[0]
+    return None
+
+
 def complete_enhancement(item, path=DEFAULT_PROFILE_PATH, heading=ENHANCEMENTS_HEADING):
     """Tick the enhancement whose text contains `item`, in place. True if one was found.
 

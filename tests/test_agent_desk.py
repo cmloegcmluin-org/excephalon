@@ -1709,3 +1709,33 @@ def test_held_news_is_dropped_by_whatever_name_he_used():
 
     assert not outbox.owed_about()
     desk.close()
+
+
+def test_approved_work_that_reached_main_is_wrapped_up_by_the_desk_itself(tmp_path):
+    # The loop's last leg used to hang on a narration commanding the brain to close the tab;
+    # that narration failed once and the merged agent haunted the desk for fourteen hours -
+    # revived every boot, re-presenting delivered work as new, refusing retirement - while the
+    # ticket sat open ("make sure that tasks are designed to be automatically checked off when
+    # the work gets finished"). The desk asks git whether the branch reached origin/main and
+    # walks the wrap-up itself: item ticked, log archived, and only then the news, as "landed".
+    events, ticked, made = [], [], []
+    logs = tmp_path / "agent-logs"
+
+    def factory(name, cwd, decide, **choice):
+        made.append(FakeAgent(name, cwd, decide))
+        return made[-1]
+
+    desk = AgentDesk(Outbox(), agent_factory=factory, log_dir=logs,
+                     run=lambda *a, **k: SimpleNamespace(returncode=0),
+                     events=lambda *e: events.append(e),
+                     complete_enhancement=lambda item, **where: ticked.append(item) or True)
+    desk.start("lander", "/tmp/wt", "align the icons", enhancement="fix the icons")
+    assert _wait_for(lambda: any(e[0] == "finished" for e in events))
+    desk.present("lander", "open the demo")
+    desk.verdict("lander", True)
+
+    assert _wait_for(lambda: any(e[0] == "landed" for e in events))
+    assert ticked == ["fix the icons"]
+    assert (tmp_path / "agent-logs-archive" / "lander.log").exists()
+    assert desk.roster() == []  # retired: nothing left to haunt the next boot
+    desk.close()

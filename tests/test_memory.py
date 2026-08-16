@@ -1114,3 +1114,35 @@ def test_reorder_projects_keeps_any_card_the_order_forgot(tmp_path):
 
     assert project_headings(path.read_text(encoding="utf-8")) == ["Project: C", "Project: A",
                                                                   "Project: B"]
+
+
+def test_an_id_found_on_exactly_one_card_ticks_there_whatever_card_was_guessed(tmp_path):
+    # "I see #132 in the briefing but the tool can't find it on the Enhancements list" - the
+    # brain guessed a project card for an item in plain sight on the Enhancements card, and the
+    # miss reached the user ("please fix whatever is wrong with it so that it can't find what
+    # is in plain sight"). When exactly one card holds the number, that card is the answer.
+    from excephalon.memory import complete_enhancement_anywhere
+
+    path = tmp_path / "profile.md"
+    lines = ["# P", "", "## Enhancements he wants for you (roadmap, not now)",
+             "- [ ] #132 robot icon alignment", "", "## Project: Highdeas",
+             "- [ ] #2 play cursor drag"]
+    path.write_text(chr(10).join(lines) + chr(10), encoding="utf-8")
+
+    assert complete_enhancement_anywhere(132, path).startswith("Enhancements")
+    assert "- [x] #132 robot icon alignment" in path.read_text(encoding="utf-8")
+
+
+def test_an_id_living_on_several_cards_is_refused_never_guessed(tmp_path):
+    # Ids are per-card, so #2 exists on more than one; a guess between them would tick the
+    # wrong ask, corrupting the list's record of ask and answer.
+    from excephalon.memory import complete_enhancement_anywhere
+
+    path = tmp_path / "profile.md"
+    lines = ["# P", "", "## Enhancements he wants for you (roadmap, not now)",
+             "- [ ] #2 better voice", "", "## Project: Highdeas", "- [ ] #2 play cursor drag"]
+    path.write_text(chr(10).join(lines) + chr(10), encoding="utf-8")
+
+    assert complete_enhancement_anywhere(2, path) is None
+    kept = path.read_text(encoding="utf-8")
+    assert "- [ ] #2 better voice" in kept and "- [ ] #2 play cursor drag" in kept

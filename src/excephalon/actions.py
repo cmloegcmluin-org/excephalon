@@ -21,7 +21,8 @@ from claude_agent_sdk import create_sdk_mcp_server, tool
 
 from excephalon.delivery import DeliveryError
 from excephalon.memory import (PROJECT_PREFIX, append_enhancement, append_learned,
-                           drop_persona_instruction, forget_learned, save_persona_instruction,
+                           complete_enhancement_anywhere, drop_persona_instruction,
+                           forget_learned, save_persona_instruction,
                            complete_enhancement_by_id, revise_enhancement)
 from excephalon.models import resolve as resolve_model
 from excephalon.tailing import safe_name
@@ -103,6 +104,7 @@ def names_another_app(item, others, selves=SELF_NAMES):
 
 def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement,
                   revise=revise_enhancement, check_off=complete_enhancement_by_id,
+                  check_off_anywhere=complete_enhancement_anywhere,
                   save_instruction=save_persona_instruction,
                   drop_instruction=drop_persona_instruction,
                   remember_fact=append_learned, forget_fact=forget_learned,
@@ -225,15 +227,24 @@ def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement
     @tool("check_off_enhancement", "Mark one list item DONE by its #id, the moment the thing it "
           "asks for is finished - never by rewriting its words. The tick flips; the number and "
           "the words stay. `project` is the Projects-tab card the item lives on (e.g. "
-          "'Highdeas'); leave it out for the Enhancements card. An afternoon's finished tasks "
-          "once sat unticked on their cards because only the Enhancements card was reachable.",
+          "'Highdeas'); pass \"\" for the Enhancements card - never a guess. An afternoon's "
+          "finished tasks once sat unticked on their cards because only the Enhancements card "
+          "was reachable.",
           {"id": int, "project": str})
     async def check_off_item_tool(args):
         project = str(args.get("project") or "").strip()
         where = {"heading": f"{PROJECT_PREFIX}{project}"} if project else {}
         card = f" on {project}" if project else ""
         if not check_off(int(args["id"]), **where):
-            return _say(f"No item carries #{args['id']}{card} - check the number on the tab.")
+            # The named card was a guess, and guesses miss: told to tick #132, the brain
+            # invented a project, and "the tool can't find it" reached the user about an item
+            # in plain sight. When exactly one card holds the number, that card is the answer.
+            landed = check_off_anywhere(int(args["id"]))
+            if landed is None:
+                return _say(f"No single open item carries #{args['id']}{card} - check the "
+                            "number on the tab.")
+            return _say(f"#{args['id']} is checked off - it was on the {landed} card"
+                        + (f", not {project}" if project else "") + ".")
         return _say(f"#{args['id']}{card} is checked off.")
 
     @tool("update_persona", "Record a lasting change to how YOU behave - a standing instruction "
