@@ -487,28 +487,18 @@ never presented to me to be validated"). A rejection stands either way — he of
 own looking — and drops the now-stale walkthrough; `steps.py` decides
 what a streamed message becomes there — the agent's words as messages, and its commands, diffs and
 output as the machinery under them, capped at both ends with what was dropped counted in place.
-`coherence.py` is the gate every STORED line passes before it is spoken. Anything queued was
-composed at one moment and said at another, and the queue carries no notion of what happened in
-between — so a recorded question was played back four minutes after he had answered it, and each
-previous fix named one more route by which a stale recording could reach him (retire, tell_agent,
-superseded, drained-in-hand, errands): six patches about paths, none about the disease, which he
-named as "a thin skin around a bunch of stupid little idiots who don't talk to each other". The
-one part that knows the conversation is the brain, because it has been having it, so the check is
-one question TO the brain carrying the exact words: SAY or SKIP, never a rewrite — the app speaks
-stored news word for word on purpose. Every uncertainty falls toward saying it (no brain, a wedged
-brain, an unclear answer all open the gate), because news never spoken is the graver failure by
-far; and ANYTHING he asked for skips the gate entirely — a go-ahead answering the offer, a name
-off the roll call, deliver_update — because the gate exists to stop the app volunteering
-something stale, never to overrule him: it destroyed the update he had just said "Yes." to, two
-seconds later, having read its own "I've got an update on X when you're ready" as delivery (the
-prompt now says outright that mentioning an update is not giving it). An ask covers the MOMENT it
-was made and no longer: one the app could not serve at once — he was already mid-sentence — stayed
-pending across his next turn and then spoke its stale "ready for your eyes" ungated, seconds after
-he had approved that very work, so his next words clear every pending ask and what is left is
-ordinary held news facing the gate. A line judged overtaken is
-finished with rather than held: it goes to the durable record and its spool copy goes with it.
+**A gate that judged whether stored news had been overtaken lived here for two days and was
+REMOVED**, by the evidence: it prevented nothing and twice destroyed what he was asking for —
+the update he had just answered "Yes." to (it read its own "I've got an update on X when
+you're ready" as having delivered it) and the demo link he had asked for twice. The staleness
+it was built for is stopped at the sources instead — an errand may not ask him a question,
+and telling an agent, ruling on its work or retiring it drops its held news — and news never
+spoken stays the graver failure. Do not rebuild a model's veto over what he is owed.
 `waiting.py` is what happens when several agents finish at once: they are read out numbered and
-held, and it says which one a reply just named — but a short reply carrying a DENIAL ("no",
+held, and the list is read again ONLY when it would come out in different words — compared
+against the news behind it instead, fresh news for an agent already listed re-read a
+word-for-word identical sentence eight seconds later ("why did it just give me the same message
+twice in a row?"), while a roll call says only names. It says which one a reply just named — but a short reply carrying a DENIAL ("no",
 "not") is never a pick, because picking is affirmative and the sentence that got read as one was
 him correcting the transcriber ("I said errands, not Aaron's"), answered with that agent's held
 news, which was a question he had already answered. What the list holds is agents only: news the
