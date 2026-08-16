@@ -1,18 +1,21 @@
 import threading
 from contextlib import contextmanager
 
-from excephalon.voice import SentenceStream, Speaker, play_samples
+from excephalon.voice import SentenceStream, Speaker, play_stream
 
 
 class FakeEngine:
-    """Synthesis as a marker: the "samples" for a text are just the text, tagged."""
+    """Synthesis as a marker: the "samples" for a text are just the text, tagged.
+
+    An engine hands over its audio in pieces; this one always has the whole line at once, which
+    is one piece - the shape a local engine has and a cloud one grows into."""
 
     def __init__(self):
         self.synthesized = []
 
     def say(self, text):
         self.synthesized.append(text)
-        return f"<{text}>", 24000
+        return [f"<{text}>"], 24000
 
 
 class FakePlayer:
@@ -20,10 +23,10 @@ class FakePlayer:
         self.played = []
         self._hold = hold  # set to an Event to make playback take real time
 
-    def __call__(self, samples, samplerate, interrupt=None):
+    def __call__(self, chunks, samplerate, interrupt=None):
         if interrupt is not None and interrupt.is_set():
             return
-        self.played.append(samples)
+        self.played.extend(chunks)
         if self._hold is not None:
             self._hold.wait(2.0)
 
@@ -172,8 +175,9 @@ def test_playback_writes_the_whole_clip_in_small_pieces():
     # moment playback can stop, so a piece is at most a tenth of a second of sound.
     output = FakeOutput()
 
-    play_samples([0.1] * 5, samplerate=20, interrupt=None,
-                 open_stream=lambda samplerate: _fake_stream(output), chunk_seconds=0.1)
+    play_stream([[0.1] * 5], samplerate=20, interrupt=None,
+                open_stream=lambda samplerate: _fake_stream(output), chunk_seconds=0.1,
+                prebuffer_seconds=0)
 
     assert [len(chunk) for chunk in output.written] == [2, 2, 1]  # 0.1s at 20Hz = 2 samples
     assert [sample for chunk in output.written for sample in chunk] == [0.1] * 5
@@ -188,7 +192,44 @@ def test_playback_stops_at_the_first_check_after_a_cut_off():
             interrupt.set()
 
     output = CutsAfterFirstWrite()
-    play_samples([0.1] * 6, samplerate=20, interrupt=interrupt,
-                 open_stream=lambda samplerate: _fake_stream(output), chunk_seconds=0.1)
+    play_stream([[0.1] * 6], samplerate=20, interrupt=interrupt,
+                open_stream=lambda samplerate: _fake_stream(output), chunk_seconds=0.1,
+                prebuffer_seconds=0)
 
     assert len(output.written) == 1  # the rest of the clip was never written
+
+
+def test_playback_starts_before_the_clip_has_finished_arriving():
+    # A cloud voice hands over its audio in pieces as it is generated; waiting for the last piece
+    # would put the whole synthesis between the question and the first sound, which is the world
+    # sentence-by-sentence speaking exists to escape.
+    output = FakeOutput()
+    arrived = []
+
+    def pieces():
+        for value in (0.1, 0.2, 0.3):
+            arrived.append(value)
+            yield [value] * 2
+
+    play_stream(pieces(), samplerate=20, interrupt=None,
+                open_stream=lambda samplerate: _fake_stream(output), chunk_seconds=0.1,
+                prebuffer_seconds=0)
+
+    # Three pieces in, three pieces out - none of them held back for the ones behind it.
+    assert [sample for chunk in output.written for sample in chunk] == [0.1, 0.1, 0.2, 0.2, 0.3, 0.3]
+
+
+def test_playback_holds_the_first_pieces_back_until_there_is_a_cushion():
+    # Writing the very first bytes the instant they land leaves the device with nothing queued, so
+    # any hesitation in the network is heard as a gap or a click mid-word. A short cushion of
+    # sound is banked first; from then on the device's own buffer paces the writes.
+    output = FakeOutput()
+
+    play_stream([[0.1]] * 6, samplerate=20, interrupt=None,
+                open_stream=lambda samplerate: _fake_stream(output), chunk_seconds=0.1,
+                prebuffer_seconds=0.2)
+
+    # 0.2s at 20Hz is 4 samples: nothing is written until four have arrived, and they go out
+    # together rather than dribbling.
+    assert [len(chunk) for chunk in output.written] == [2, 2, 2]
+    assert [sample for chunk in output.written for sample in chunk] == [0.1] * 6

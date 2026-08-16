@@ -62,7 +62,7 @@ from excephalon.homecoming import (
 from excephalon.transcript import MessageLog, Transcript, recent_turns
 from excephalon.tts_neural import KokoroEngine, ensure_voice, voice_choice
 from excephalon.tts_system import NullTTS, SystemTTS
-from excephalon.voice import Speaker, play_samples
+from excephalon.voice import Speaker, play_stream
 from excephalon.worktrees import head_commit
 
 REPO = Path(__file__).resolve().parents[2]
@@ -353,7 +353,7 @@ def _voice(announce):
     except Exception as exc:
         announce(f"(the neural voice failed to load: {exc!r} - the system voice will serve)")
         return SystemTTS(rate=2)
-    return Speaker(engine, play=play_samples)
+    return Speaker(engine, play=play_stream)
 
 
 def _build_ears(text_mode, stop, interrupt, announce=print):

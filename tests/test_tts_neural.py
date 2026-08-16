@@ -67,9 +67,11 @@ def test_the_engine_synthesizes_with_its_configured_voice():
     engine = KokoroEngine("model.onnx", "voices.bin", voice="af_heart", speed=1.1,
                           kokoro_factory=FakeKokoro)
 
-    samples, samplerate = engine.say("Hey.")
+    chunks, samplerate = engine.say("Hey.")
 
-    assert samples == "[af_heart@1.1] Hey."
+    # The whole line at once is what a local engine has, and one piece is how it says so - the
+    # same shape the player takes from a cloud engine that hands its audio over as it generates.
+    assert list(chunks) == ["[af_heart@1.1] Hey."]
     assert samplerate == 24000
 
 
