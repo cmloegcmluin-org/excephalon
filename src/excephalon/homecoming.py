@@ -86,7 +86,7 @@ def changes_since(repo, commit, run=None):
     return [line.strip() for line in (done.stdout or "").splitlines() if line.strip()]
 
 
-def homecoming_note(turns, changes, away):
+def homecoming_note(turns, changes, away, waiting=()):
     """The note that asks the brain for a welcome-back, or "" when a fresh start is the truth.
 
     Empty for the three cases where picking a thread up would be wrong: no thread at all, a
@@ -102,15 +102,26 @@ def homecoming_note(turns, changes, away):
     landed = ("Nothing about you changed - he restarted for some other reason."
               if not changes else
               "What landed in you while you were down, in the words of the changes themselves: "
-              + "; ".join(changes))
+              + "; ".join(changes) + ". Most of what lands is INTERNAL machinery that makes no "
+              "difference he could ever notice - if that is what these are, there is nothing to "
+              "tell him about it, and you say nothing rather than inventing a meaning for him. "
+              "He met one of these as \"a voice safety layer caught some things before they "
+              "reached you... you're still driving\", and asked what on earth it meant.")
+    owed = ""
+    if waiting:
+        owed = (f"\n\nThere are already {len(waiting)} update(s) waiting to be spoken to him, and "
+                "the app reads that list out itself the moment your greeting ends. So do NOT ask "
+                "about any one of them and do not list them - two messages thirteen seconds "
+                "apart, one asking about a single update and one offering all of them, is what "
+                "he called unnatural.")
     return (
         "[App note, not from him: you have just restarted and this is your FIRST line of the "
         f"session - he is looking at the window now. He was without you for about {away / 60:.0f} "
-        f"minute(s). {landed}\n\n"
+        f"minute(s). {landed}"
+        f"{owed}\n\n"
         f"The exchange you broke off on - he said: {last_said}\nYou answered: {last_reply}\n\n"
-        "Greet him in one short spoken paragraph: welcome him back, say in one plain clause what "
-        "changed in you if anything did (what it means for him, never a commit's phrasing read "
-        "out), briefly acknowledge the gap if he lost time, and then pick the conversation back "
-        "up by putting your own last question to him again. Do not ask what you can do for him - "
-        "you already know what you were doing.]"
+        "Greet him in one short spoken paragraph: welcome him back, briefly acknowledge the gap "
+        "if he lost real time, say in one plain clause what changed ONLY if it is something he "
+        "would notice, and then pick the conversation back up. Do not ask what you can do for "
+        "him - you already know what you were doing.]"
     )

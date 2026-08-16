@@ -276,7 +276,7 @@ def _open_ears(announce):
 _SERVICE_FAULTS = {}
 
 
-def _greeting(brain, booted_at, previous_boot, was_seen=0.0, note=None):
+def _greeting(brain, booted_at, previous_boot, was_seen=0.0, waiting=(), note=None):
     """The first line of the session: a welcome back mid-conversation, or the stock greeting.
 
     "It shouldn't always say 'I'm ready. What can I do for you?' That should only be the default
@@ -291,7 +291,8 @@ def _greeting(brain, booted_at, previous_boot, was_seen=0.0, note=None):
             changes=changes_since(REPO, previous_boot.get("commit", "")),
             # How long he was WITHOUT it: from the last thing the old process wrote, not from
             # when that process started - which is the length of the conversation he just had.
-            away=max(0.0, booted_at - max(was_seen, float(previous_boot.get("at") or booted_at))))
+            away=max(0.0, booted_at - max(was_seen, float(previous_boot.get("at") or booted_at))),
+            waiting=waiting)
     if not note:
         return STOCK_GREETING
     try:
@@ -625,27 +626,20 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
         console = Console(voice=not text_mode, record=session_record.write,
                           messages=session_messages.keep)
 
-    if not text_mode and not muted:
-        # Spoken lines render as bubbles - "'I'm ready, what can I do for you?'... don't render
-        # in the conversation view, but they should, because Excephalon says them aloud." Through the
-        # console AFTER it exists, so the greeting is a message like any other. Still guarded,
-        # because the mic is already live: unguarded, the greeting went out of their speakers,
-        # back into the mic, and opened their draft box with "I do for you".
-        greeting = _greeting(brain, booted_at, previous_boot, was_seen)
-        console.reply(greeting)
-        if dictation is not None:
-            dictation.begin_speaking()
-        try:
-            tts.speak(greeting)  # say out loud that startup finished
-        finally:
-            if dictation is not None:
-                dictation.end_speaking()
+    # The session's first line, handed to the conversation rather than spoken beside it: spoken
+    # here, it was one of TWO messages he got thirteen seconds apart on opening the app - a
+    # welcome asking about one update, then the app's own list offering all three ("it should
+    # only have sent me one"). The loop says it through the one mouth everything else uses, with
+    # the waiting list on the back of it when there is one.
+    greeting = ("" if text_mode or muted
+                else _greeting(brain, booted_at, previous_boot, was_seen,
+                               waiting=sorted(name for name in outbox.owed_about() if name)))
 
     def converse():
         try:
             Conversation(
                 stt, brain, tts, outbox=outbox, interrupt=barge_in,
-                console=console, read_pause=read_pause, timings=timings,
+                console=console, read_pause=read_pause, timings=timings, opening=greeting,
                 # A dead sign-in answers with the door already open: a terminal at the claude
                 # prompt, not just the steps to get one.
                 sign_in_helper=open_sign_in,

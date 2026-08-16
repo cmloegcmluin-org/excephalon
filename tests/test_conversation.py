@@ -619,6 +619,47 @@ def test_held_news_the_brain_still_stands_behind_goes_out_word_for_word():
     assert "fixer: the drive link is fixed" in tts.spoken  # unchanged, in its own words
 
 
+def test_the_opening_line_and_the_waiting_list_go_out_as_one_message():
+    # "I just opened Excephalon and then it quickly sent me two messages. it should only have sent
+    # me one." The welcome-back was spoken outside the loop and the roll call by the loop thirteen
+    # seconds later - two mouths at the boot boundary, one asking about a single update and one
+    # offering all of them. One opening, one utterance.
+    outbox = Outbox()
+    outbox.push("fixer: the drive link is fixed", about="fixer")
+    outbox.push("docs-sidebar: needs your call on the width", about="docs-sidebar")
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["goodbye entity"]), FakeBrain(), tts, outbox=outbox,
+                         opening="Welcome back. Where were we?")
+
+    convo.turn()
+
+    said = tts.spoken[0]
+    assert said.startswith("Welcome back. Where were we?")
+    assert "Two updates waiting. One, fixer. Two, docs-sidebar. Which first?" in said
+    assert len([line for line in tts.spoken if "Welcome back" in line]) == 1
+
+
+def test_the_opening_is_said_on_its_own_when_nothing_is_waiting():
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["goodbye entity"]), FakeBrain(), tts, outbox=Outbox(),
+                         opening="I'm ready. What can I do for you?")
+
+    convo.turn()
+
+    assert tts.spoken[0] == "I'm ready. What can I do for you?"
+
+
+def test_the_opening_is_said_once_and_never_again():
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["what time is it", "goodbye entity"]), FakeBrain(), tts,
+                         outbox=Outbox(), opening="I'm ready. What can I do for you?")
+
+    convo.turn()
+    convo.turn()
+
+    assert len([line for line in tts.spoken if "I'm ready" in line]) == 1
+
+
 def test_a_go_ahead_answering_the_offer_is_never_second_guessed_either():
     # The gate destroyed the very update he had just said yes to. "I've got an update on
     # highdeas-scrubber-fix when you're ready" went out at 19:33, he answered "Yes." at 19:50,

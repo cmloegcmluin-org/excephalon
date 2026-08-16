@@ -83,6 +83,32 @@ def test_a_restart_in_the_middle_of_something_asks_the_brain_to_pick_the_thread_
     assert "back" in note.lower()
 
 
+def test_a_change_he_cannot_see_is_not_something_to_tell_him_about():
+    # "the stuff it said about 'voice safety layer' doesn't make any sense to me... what does it
+    # mean for me to still be driving?!?" - that was the brain paraphrasing two commits about the
+    # app's own internals. Most of what lands is machinery; asked what it MEANS for him, it will
+    # invent a meaning rather than say there isn't one.
+    note = homecoming_note(
+        turns=[("what about the scrubber?", "It's ready for your eyes.")],
+        changes=["Nothing stored is spoken without the brain checking it against the conversation"],
+        away=95.0)
+
+    assert "nothing to tell him about it" in note
+    assert "INTERNAL" in note
+
+
+def test_the_note_says_what_is_already_waiting_so_the_greeting_does_not_ask_about_one():
+    # He opened it and got two messages thirteen seconds apart: a welcome asking about the
+    # scrubber fix, then "Three updates waiting. One... Two... Three... Which first?" The
+    # greeting must not pick one out - the list is the app's to read.
+    note = homecoming_note(
+        turns=[("what about the scrubber?", "It's ready for your eyes.")],
+        changes=[], away=95.0, waiting=["highdeas-scrubber-fix", "robot-icon-ui"])
+
+    assert "2 update" in note
+    assert "do NOT ask" in note and "do not list them" in note
+
+
 def test_a_session_he_said_goodbye_to_is_not_the_middle_of_anything():
     # He ended it himself; coming back with "so, back to the task at hand" would be picking up a
     # thread he had closed.
