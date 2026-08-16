@@ -240,7 +240,12 @@ and every failure falls back to the stock line, because a greeting is not worth 
 note says what is ALREADY waiting to be spoken and forbids naming any of it, and the greeting is
 handed to the conversation as its `opening` rather than spoken beside it, so a restart with news
 waiting is ONE message (welcome, then the roll call) instead of the two thirteen seconds apart he
-got — a welcome asking about one update, then the app offering all three. What landed is offered
+got — a welcome asking about one update, then the app offering all three. The opening rides the
+FIRST delivery whatever its shape — the roll call, or the lone held update, which a boot with
+exactly one piece of news once left it behind for: the welcome sat pending for seven minutes and
+surfaced inviting him to look at a demo he had already approved ("this message makes no sense") —
+and a first line that misses its moment dies the instant he speaks, because it is a first line or
+nothing. What landed is offered
 to him only if he could NOTICE it: the same note warns that most commits are internal machinery,
 after the brain turned two of them into "a voice safety layer caught some things before they
 reached you... you're still driving", which meant nothing to him.
@@ -415,7 +420,10 @@ its own space before the voice judges the words, or the address is read raw with
 word welded on - and EVERY link shape stops at an em- or en-dash, path as well as address,
 because scoping that to URLs alone left "...aug14-20.html—and send your routine" still swallowing
 "the dash and the following word" into the link a day later; an ordinary hyphen is a name's own
-character and stays. A path wearing the `file://` scheme an agent writes for Claude's own app is
+character and stays. `link_parts` judges each LINE on its own: split on spaces alone, a newline
+stayed inside a word, and the address ending a numbered demo step arrived welded to the next
+line's "2." - unmatchable, so the one address the message existed to hand over was drawn as
+plain text ("link not rendering"). A path wearing the `file://` scheme an agent writes for Claude's own app is
 recognized, WRITTEN as the plain path (`bare_path`, percent-escapes and all) since this window
 draws and opens that already, and opened on the machine rather than handed to a browser. A file
 is SPOKEN by name only when the name is one a person says - "it's in profile.md" - and as "the

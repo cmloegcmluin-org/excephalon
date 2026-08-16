@@ -296,3 +296,28 @@ def test_a_click_reaches_this_desk_s_own_opener(tmp_path, monkeypatch):
     open_link(str(tmp_path))
 
     assert opened == expected
+
+
+def test_an_address_ending_a_list_line_is_still_offered():
+    from excephalon.links import link_parts
+
+    # Agents hand demo steps over as numbered lists, and the address ends its line. Split on
+    # spaces alone, "http://localhost:8770/projects\n2." was one unmatchable word, and the one
+    # address the message existed to hand over was drawn as plain text ("link not rendering").
+    steps = "1. Open http://localhost:8770/projects\n2. Click any gray robot icon"
+    parts = link_parts(steps, exists=lambda p: False)
+
+    assert [p["link"] for p in parts if p["link"]] == ["http://localhost:8770/projects"]
+    # Every word survives, on the lines it was written on - only the joiner's own trailing
+    # space before the break, which the box never shows, may differ.
+    assert "".join(p["text"] for p in parts).replace(" \n", "\n") == steps
+
+
+def test_lines_hold_their_own_links_and_blank_lines_survive():
+    from excephalon.links import link_parts
+
+    text = "See localhost:5200 first\n\nthen " + r"C:\ada\notes.md" + " after"
+    parts = link_parts(text, exists=lambda p: False)
+
+    assert [p["link"] for p in parts if p["link"]] == ["localhost:5200", r"C:\ada\notes.md"]
+    assert "".join(p["text"] for p in parts).replace(" \n", "\n") == text
