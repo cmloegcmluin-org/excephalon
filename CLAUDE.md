@@ -512,16 +512,18 @@ the APP's to answer, never the brain's: the first update is spoken word for word
 still held is NAMED after it (`_hand_over`, the one delivery path) - answering a go-ahead with the
 numbered list and "Which first?" is answering the answer to a question with the question again
 ("I already said yes to the Highdeas-submission-feedback one. Why would you ask me this? You sound
-insane."); the list decides ORDER, not whether. The brain reaches that same path with its
-deliver_update tool when a full-sentence ask names an agent whose news is held (a full sentence
-never reads as a pick - see MOST_WORDS): the app speaks the held copy word for word the moment
-the reply ends, because the brain retelling held news in its own words put "two versions of the
-same message in quick succession" thirteen seconds apart, and the app then delivered its copy
-anyway. Word for word, because folded into a fresh
-turn the content twice went missing - a "Yes" answered with "Go check it out then" - while
-the news was marked delivered either way, so what the agent reported reached him not at
-all ("that's not an update"). Anything more than a bare
-go-ahead is still a turn of his, and the update rides into that reply as before. An agent HOLDS
+insane."); the list decides ORDER, not whether. Anything OWED into a brain turn is welded onto
+that turn's reply BY CODE, word for word, one utterance: the update he was offered, and any the
+brain hands over mid-think (deliver_update, for the full-sentence ask that never reads as a pick
+- see MOST_WORDS). Welded, because every other arrangement has failed him in the transcript:
+asked to weave the update into its reply, the brain twice lost the content ("a 'Yes' answered
+with 'Go check it out then'... that's not an update") while the app marked it delivered; asked to
+retell it, he heard "two versions of the same message in quick succession" thirteen seconds
+apart; and served on a LATER loop pass (deliver_update's old shape), the reply announced an
+update that never followed ("Hm, what do you mean? You didn't get me anything."). And nothing is
+SPENT unless its utterance began sounding (`_say` answers whether it did): a barge-in already
+down when the words were about to start used to clear the spool over zero audio, and a merged
+report died in that black hole. An agent HOLDS
 its number for as long as it stays on the list: fresh news takes that agent's earliest place,
 never its own arrival place (`_newest_per_agent`), because a refresh that moved an agent to the
 end had the same three names read back re-numbered seconds apart ("Why did you give me two

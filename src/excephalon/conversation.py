@@ -151,9 +151,10 @@ _GO_AHEADS = frozenset((
 # the brain improvised the news from memory, and the stored sentence then played anyway.
 OFFERED_NOTICE = (
     "[System note, not from the user: you told them an update on {about} was waiting, and they "
-    "have now answered. This reply IS the delivery. The update, which they have not heard yet: "
-    "{news}\nSay what it says once, complete, folded around whatever they just said - and never "
-    "repeat it in a later turn.]\n\n"
+    "have now answered. Immediately after your reply, in the same breath, the app itself will "
+    "speak the update word for word - so answer what they just said in a sentence, and do NOT "
+    "restate, summarize, or answer the update's content yourself. For your awareness only, the "
+    "words the app will add: {news}]\n\n"
 )
 
 
@@ -382,7 +383,7 @@ class Conversation:
         failed utterance must never crash the loop (it did, and they lost the whole run)."""
         if self._interrupted():
             self._console.aside("(left unsaid - they had cut in)")
-            return
+            return False  # nothing sounded: the caller must not spend what it never said
         if not known:
             # They are about to hear this as Excephalon speaking, and the brain did not write it -
             # so the brain has to be told, or the two of them remember different conversations.
@@ -398,17 +399,20 @@ class Conversation:
             self._tts.speak(as_spoken(text), interrupt=self._interrupt)
         except Exception as exc:  # a failed utterance must never crash the loop - but it IS evidence
             self._console.aside(f"(voice failed: {exc!r})")
+            return False  # the hiccup, not the news, is what dies: nothing is spent on it
         else:
             if self._interrupted():  # the utterance was killed partway - the record must say so,
                 self._console.aside("(cut off mid-utterance)")  # or a silenced line looks delivered
         finally:
             if stop_watching is not None:
                 stop_watching()
+        return True  # it began sounding (a mid-cut is his deliberate stop, not an undelivery)
 
     def _speak_reply(self, text, *, known=False):
-        """Show the reply, then say it - the same words on screen as in their ear."""
+        """Show the reply, then say it - the same words on screen as in their ear. Answers
+        whether it began sounding, so a delivery welded to it is only spent when it did."""
         self._console.reply(text)
-        self._say(text, record=False, known=known)
+        return self._say(text, record=False, known=known)
 
     def _pause_to_read(self):
         """A short beat after a reply before the mic reopens, so they aren't rushed off it - skipped if
@@ -589,20 +593,26 @@ class Conversation:
         link he had asked for twice. The stale-recording cases it was built for are stopped at
         their sources instead (an errand may not ask him questions; telling an agent, rejecting
         its work or retiring it drops its held news), and news never spoken stays the graver
-        failure."""
+        failure - which is also why nothing is SPENT here unless it began sounding: a barge-in
+        already down when the words were about to start used to clear the spool over zero audio,
+        and the news died in the black hole."""
+        if self._interrupted():
+            return ""  # nothing will sound; the news stays in hand, owed, for the next opening
         news = self._waiting.pop(place)
         listed = [held for held in self._waiting if getattr(held, "listed", True)]
         named = bool(name_the_rest and listed)
-        said = f"{news}\n\n{roll_call(listed)}" if named else news
+        said = f"{news}\n\n{roll_call(listed)}" if named else str(news)
+        self._console.heads_up(said)
+        # Known only when the whole utterance is the brain's own sentence; with a roll call
+        # appended, part of what they hear is app-authored and the ledger must carry it.
+        if not self._say(said, record=False,
+                         known=getattr(news, "composed", False) and said == str(news)):
+            self._waiting.insert(place, news)  # never sounded: still owed, back where it stood
+            return ""
         # What has been READ OUT, which is only ever a roll call that actually went out. Recorded
         # after an errand's answer instead, it would mark the agents' list announced and that list
         # would then never be spoken, since it re-reads only when it has changed.
         self._announced = self._roll() if named else ()
-        self._console.heads_up(said)
-        # Known only when the whole utterance is the brain's own sentence; with a roll call
-        # appended, part of what they hear is app-authored and the ledger must carry it.
-        self._say(said, record=False,
-                  known=getattr(news, "composed", False) and said == news)
         self._delivered(news)
         return said
 
@@ -897,31 +907,60 @@ class Conversation:
         # The record matches the ear: a stray goodbye the gate kept out of the voice comes off
         # the screen's copy too, and a reply that WAS only the goodbye becomes a silent turn.
         said = re.sub(r"[ \t]{2,}", " ", self._stray_goodbye.sub(r"\1", said)).strip()
-        if not said.strip():
+        # Any held update this turn owes him - the one he was offered, and any the brain handed
+        # over mid-think (deliver_update) - is appended to the reply BY CODE, word for word, one
+        # utterance. Woven by the brain instead, the content twice went missing ("a 'Yes'
+        # answered with 'Go check it out then'"); requested and served on a later loop pass
+        # instead, the reply promised an update that never followed ("Hm, what do you mean? You
+        # didn't get me anything.").
+        served = self._requested_now()
+        extras = ([offered] if offered is not None else []) + [news for _, news in served]
+        if not said.strip() and not extras:
             # Nothing to say - the turn completed silently. A blank "excephalon>" line or an empty
             # utterance would be noise.
             self._settle(reply)
             release_floor()
             return Turn(heard=heard, said="")
+        combined = "\n\n".join([part for part in [said] if part]
+                               + [str(extra) for extra in extras])
         speak_start = time.monotonic()
         if reply is not None:
+            for extra in extras:
+                # Into the same stream, so it is one utterance and one stop silences all of it.
+                spoken_parts.append(f"\n\n{extra}")
+                reply.add(f"\n\n{extra}")
             # On screen the moment the text is complete - the audio is still going out, and
             # reading the whole of it beats being read to ("I want to see all the text
             # immediately up front and then hear it").
-            self._console.reply(said)
-            reply.done()  # then wait out the rest of the audio
+            self._console.reply(combined)
+            sounded = reply.done()  # then wait out the rest of the audio
             if self._interrupted():  # the audio was cut partway - the record must say so
                 self._console.aside("(cut off mid-utterance)")
+            # What done() answers is what actually reached the air: an utterance drained whole
+            # by a barge-in that beat its first word never sounded, and must spend nothing.
+            began = bool(sounded.strip())
         else:
-            spoken_parts.append(said)  # the floor's script: the whole reply is about to be audible
-            self._speak_reply(said, known=True)  # if they hit Enter while it talks, this is cut off
+            spoken_parts.append(combined)  # the floor's script: about to be audible in full
+            began = self._speak_reply(combined, known=True)
         release_floor()
-        if offered is not None:
-            self._delivered(offered)  # the update rode in this reply, and the reply was spoken
+        if began:
+            for extra in extras:
+                self._delivered(extra)
+                if not getattr(extra, "composed", False):
+                    # He heard it in Excephalon's voice and the brain did not write it - the same
+                    # ledger every app-authored line rides, so it is never denied later.
+                    self._unwritten.append(str(extra))
+        else:
+            # Never sounded: still owed, never spent - and each goes back where it STOOD, because
+            # re-queued anywhere else the numbers he was read stop meaning what he heard ("Now I
+            # don't know what to tell you").
+            self._keep_for_later(offered)
+            for place, news in served:
+                self._waiting.insert(min(place, len(self._waiting)), news)
         if self._timings:
             self._console.timing(think=think_time, speak=time.monotonic() - speak_start)
         self._pause_to_read()
-        return Turn(heard=heard, said=said)
+        return Turn(heard=heard, said=combined)
 
     def _settle(self, reply):
         """Let an open reply stream wind down (whatever was already spoken has been heard; the rest
@@ -931,9 +970,43 @@ class Conversation:
 
     def _keep_for_later(self, offered):
         """An update popped into a turn that never delivered it goes back to waiting - they were
-        promised that line, and the failed turn must not be where it silently ends."""
+        promised that line, and the failed turn must not be where it silently ends. Appended, not
+        pushed to the front: the OFFERED update is taken from the tail of the hand, so the tail
+        is where it stood - re-queued at the head it would reorder the list and a later roll call
+        would come back renumbered, the failure he described as not knowing which numbering to
+        answer. (A deliver_update extra, popped from an arbitrary place, is restored by place
+        instead - see _answer's kept path.)"""
         if offered is not None:
-            self._waiting.insert(0, offered)
+            self._waiting.append(offered)
+
+    def _requested_now(self):
+        """The held items the brain handed over DURING this turn (deliver_update), popped to ride
+        this very reply. Served on a later loop pass instead, anything in between could void the
+        request, and a reply announcing an update was followed by nothing at all ("Hm, what do
+        you mean? You didn't get me anything.")."""
+        wanted = getattr(self._outbox, "take_requested", None)
+        if wanted is None:
+            return []
+        asked = wanted()
+        if not asked:
+            return []
+        # The request answers the outbox's WHOLE debt, and news that landed while he was talking
+        # is still in the queue, not the hand - so the queue is drained into the hand first, the
+        # same drain-and-collapse every delivery pass does, or a promise made about mid-turn news
+        # would be another reply followed by nothing.
+        self._waiting.extend(self._outbox.drain())
+        self._waiting, superseded = _newest_per_agent(self._waiting)
+        for stale in superseded:
+            self._superseded(stale)
+        served = []
+        for about in asked:
+            place = next((at for at, held in enumerate(self._waiting)
+                          if getattr(held, "about", None) == about), None)
+            if place is not None:
+                # The place rides along so a weld that never sounds can put it back where it
+                # stood - re-queued anywhere else, the numbers he was read stop being true.
+                served.append((place, self._waiting.pop(place)))
+        return sorted(served)
 
     def run(self, should_continue=lambda: True, on_turn=None):
         while should_continue():

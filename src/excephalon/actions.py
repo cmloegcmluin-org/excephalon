@@ -151,19 +151,20 @@ def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement
             drop_held(name)
         return _say(f"Delivered to {name}.")
 
-    @tool("deliver_update", "Hand over an agent's HELD update: the app speaks it word for word "
-          "the moment your reply ends. Call this whenever the user asks for an agent's update "
-          "and the briefing says news for that agent is still waiting to be spoken - and never "
-          "retell or summarize a held update in your own words; that is how the user heard two "
-          "versions of the same news 13 seconds apart. After calling, say at most one short "
-          "lead-in sentence, never the update's content.", {"name": str})
+    @tool("deliver_update", "Hand over an agent's HELD update: the app appends it to THIS very "
+          "reply, word for word, in the same breath. Call this whenever the user asks for an "
+          "agent's update and the briefing says news for that agent is still waiting to be "
+          "spoken - and never retell or summarize a held update in your own words; that is how "
+          "the user heard two versions of the same news 13 seconds apart. After calling, say at "
+          "most one short sentence answering their words, never the update's content.",
+          {"name": str})
     async def deliver_update(args):
         name = str(args["name"]).strip()
         if not desk.hand_over_news(name):
             return _say(f"Nothing is waiting to be spoken about {name} - answer from the fleet "
                         "briefing, and say plainly if it holds no answer.")
-        return _say(f"{name}'s update will be spoken the moment your reply ends - do not repeat "
-                    "or summarize its content.")
+        return _say(f"{name}'s update will be appended to this reply of yours, word for word - "
+                    "do not repeat or summarize its content.")
 
     @tool("set_next_agent_model", "Set which model and effort the NEXT agent starts on, from the "
           "user's words ('fable on max', 'back to opus'). Agents already working keep the model "
