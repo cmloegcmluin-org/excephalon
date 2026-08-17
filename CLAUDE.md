@@ -681,9 +681,20 @@ remembers what it wrote), and the plain capped notice is the fallback when the b
 - or answers too late: each narration's wait is bounded, because one hung narration once held the
 brain's lock with the merge report and the quiet warning queued behind it until the app closed and
 all of it died unspoken.
-`brain_sdk.py` holds the persona and the session: the FAST tier (Haiku), `tools=[]`, replies
-streamed delta by delta — a talker that pulls levers, never an investigator; the agents it starts
-are where Opus-tier work happens. Its every ask is bounded, and so is waiting for its one-at-a-time
+`brain_sdk.py` holds the persona and the session: `tools=[]`, replies streamed delta by delta — a
+talker that pulls levers, never an investigator; the agents it starts are where the heaviest work
+happens. It ran on the FAST tier for months, chosen for first words in about a second, and that
+was the wrong trade on the hardest seam in the app: everything he hears is decided here, and
+nearly every reply he has called insane was a JUDGMENT failure rather than a slow one — retelling
+news he had just been handed, restating one fact in two shapes inside one reply, welding two
+topics into one message, asking a question and rambling past it, calling delivered work
+unreviewed. Some fifty gates in the loop and this file's own standing law grew to compensate, and
+the gates began breaking each other. Latency is the problem this codebase already solved — the
+voice speaks each sentence the moment it is written, so what he waits for is one sentence and not
+one turn — while incoherence is not solvable by gates, so the tier that thinks is the tier that
+talks (`DEFAULT_BRAIN_MODEL`). The fast tier keeps the backchannel, the work he never hears as a
+voice: `naming.NAME_MODEL` distilling an agent's task into a filename, `errands.ERRAND_MODEL`
+fetching and carrying. Its every ask is bounded, and so is waiting for its one-at-a-time
 lock: a stream once died without raising, held the lock from inside a narration, and everything
 after — the merged report, a direct question, every later submission — sat at "(thinking…)"
 forever; now the deadline sheds the dead session (closing it makes the stranded ask raise, which
