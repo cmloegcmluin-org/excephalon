@@ -1515,3 +1515,25 @@ def test_both_tabs_flash_the_row_a_cross_link_lands_on():
     agents_js = _client().get("/static/agents.js").get_data(as_text=True)
     for js in (projects_js, agents_js):
         assert "location.hash" in js and "landed" in js
+
+
+def test_an_agent_name_in_a_message_links_to_that_agents_log(tmp_path):
+    # "when Excephalon speaks about an agent, the agent's name should be a link to that agent's
+    # logs." The roll calls and heads-ups write names verbatim, so the exact name is the handle:
+    # a live agent's name opens its own tab, and the link is the app's own page - never routed
+    # through /open, which is for addresses and files on the machine.
+    logs = tmp_path / "agent-logs"
+    logs.mkdir()
+    (logs / "spinner-fix.log").write_text("===== 2026-08-16 =====\n", encoding="utf-8")
+    model = _model(("day", "2026-08-16"),
+                   ("message", "heads-up", "19:56:00",
+                    "Two updates waiting. One, spinner-fix. Two, autoplay. Which first?"))
+
+    shown = _client(model, agent_logs_dir=logs, clock=lambda: "12:00:00").get(
+        "/messages").get_json()
+
+    parts = shown["entries"][1]["parts"]
+    linked = [p for p in parts if p["link"]]
+    assert linked == [{"text": "spinner-fix", "link": "/agents#agent-spinner-fix"}]
+    joined = "".join(p["text"] for p in parts)
+    assert joined == "Two updates waiting. One, spinner-fix. Two, autoplay. Which first?"

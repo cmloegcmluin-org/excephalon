@@ -575,6 +575,17 @@ class AgentDesk:
             self.drop_news(name)
             self._dispatch(name, REJECTED_TRY_AGAIN.format(feedback=feedback))
 
+    def in_review(self):
+        """The agents whose work is in front of the user's eyes RIGHT NOW: presented, the
+        walkthrough actually spoken (nothing about them still owed), verdict pending. The
+        conversation holds other news while this is non-empty - one thing at a time, his own
+        standing instruction, enforced by the loop rather than asked of the persona."""
+        held = getattr(self._outbox, "owed_about", None)
+        owed = held() if held is not None else set()
+        with self._lock:
+            return [name for name, entry in self._desked.items()
+                    if entry.delivery.stage == "ready" and name not in owed]
+
     def delivery_stage(self, name):
         """Where `name`'s work stands - what the narrator asks before wording a finished turn."""
         name = self.resolve(name) or name
