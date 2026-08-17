@@ -1433,6 +1433,30 @@ def test_a_task_started_from_its_robot_stays_green_when_projects_reloads(tmp_pat
     desk.close()
 
 
+def test_projects_fleet_reports_which_tasks_have_an_agent_as_json(tmp_path):
+    # The Projects page fires a start and shows a spinner, but a tab switch loads the page afresh and
+    # loses that (client-only) spinner. This read-only endpoint says which tasks have an agent right
+    # now, keyed by the task's own words, so the page can pick the spinner back up and resolve it to
+    # the green working link once the desk has recorded the agent - without a full reload.
+    profile = tmp_path / "profile.md"
+    profile.write_text("## Enhancements\n- [ ] #3 live captions in the window\n", encoding="utf-8")
+    state = tmp_path / "agents.json"
+    state.write_text('[{"name": "captions", "enhancement": "live captions in the window"}]',
+                     encoding="utf-8")
+
+    fleet = _client(profile_path=profile, agent_state_path=state).get("/projects/fleet").get_json()
+    assert fleet["working"]["live captions in the window"]["agent"] == "captions"
+    assert fleet["working"]["live captions in the window"]["title"] == "Excephalon"
+
+
+def test_projects_fleet_is_empty_when_no_agent_is_on_any_task(tmp_path):
+    # No fleet behind the app (a bare checkout, a test): the page has nothing to resolve, and the
+    # endpoint says so cleanly rather than failing.
+    profile = tmp_path / "profile.md"
+    profile.write_text("## Enhancements\n- [ ] #3 live captions in the window\n", encoding="utf-8")
+    assert _client(profile_path=profile).get("/projects/fleet").get_json() == {"working": {}}
+
+
 def test_every_checklist_row_shows_the_robot_and_reserves_its_gutter(tmp_path):
     # The robot is always there, every task: an agent on it is the green link to its log; no agent
     # is a gray button that starts one. Either way the same fixed-width gutter leads the row, so the
@@ -1521,6 +1545,19 @@ def test_the_spinner_replaces_the_robot_and_spins():
     assert "animation" in ring and "border-radius" in ring   # a spinning ring stands in for the robot
     aside = _rule_for(css, ".checklist .agent-start.starting .agent-icon")
     assert "display: none" in aside                          # the robot glyph steps aside while it spins
+
+
+def test_projects_js_carries_the_spinner_across_a_tab_switch_and_resolves_it():
+    # A start's spinner is drawn in the page's own DOM, so a tab switch - a fresh /projects load -
+    # would lose it. projects.js remembers the fired start in sessionStorage, re-applies the spinner
+    # on load, and polls /projects/fleet to turn it green once the desk records the agent - so the
+    # spinner stays visible across the switch and resolves on its own, no manual reload.
+    js = _client().get("/static/projects.js").get_data(as_text=True)
+    assert "sessionStorage" in js                 # the fired start is remembered across a reload
+    assert "rememberStarting" in js               # written on the click
+    assert "startButtonFor" in js                 # and re-applied to the right task on the next load
+    assert "/projects/fleet" in js                # resolved against the server's own truth
+    assert "setInterval" in js                    # by a poll that turns the spinner green when it lands
 
 
 def test_an_agents_log_links_back_to_the_task_it_is_working_on(tmp_path):

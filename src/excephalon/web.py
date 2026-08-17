@@ -509,6 +509,17 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
         assign(cards, fleet_enhancements(agent_state_path))
         return render_template("projects.html", here="/projects", sections=cards)
 
+    @app.get("/projects/fleet")
+    def projects_fleet():
+        """Which tasks have an agent right now, as JSON keyed by the task's own words. The robot's
+        click turns it green in this page's own DOM, but that dies with the page on a tab switch -
+        so the page remembers the start it fired and, on the next load, resolves it here: a task
+        that has landed an agent becomes the green working link, without a full reload. Read-only,
+        the same assign() the render uses."""
+        by_agent = assign(_project_cards(_profile_raw()), fleet_enhancements(agent_state_path))
+        return {"working": {info["text"]: {"agent": name, "title": info["title"]}
+                            for name, info in by_agent.items()}}
+
     @app.post("/task/take-care")
     def take_care():
         """A task's gray robot was clicked: start an agent on it, then and there. This is the

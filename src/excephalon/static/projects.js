@@ -86,12 +86,78 @@ function announceAsked(what) {
 /* The gray start button becomes the green working link the instant its agent exists - the robot
    glyph itself is reused, only its wrapper changes, so the task turns green in place with no reload. */
 function turnGreen(button, agent) {
+  if (!button.isConnected) return;   // the poll may have already turned this one green after a reload
   const link = document.createElement("a");
   link.className = "agent-link working";
   link.href = `/agents#agent-${encodeURIComponent(agent)}`;
   link.title = `${agent} is on this — open its log`;
   while (button.firstChild) link.append(button.firstChild);
   button.replaceWith(link);
+}
+
+/* A start takes a beat, and turnGreen draws its green in THIS page's DOM - so a tab switch, which
+   loads /projects afresh, loses it: the task shows gray until the desk's record makes it green on
+   some later load, and the spinner in between vanishes. To carry the spinner across that switch,
+   every task a start is fired on is remembered in sessionStorage (this browser session only), its
+   spinner re-applied on load, then resolved against /projects/fleet - the server's own truth for
+   "an agent is on this" - the moment the agent lands, or dropped after a bound so a start that never
+   lands can't spin forever. sessionStorage never overrides that truth; it only bridges the gap until
+   a load can read it. */
+const STARTING_KEY = "excephalon:starting-tasks";
+const STARTING_TTL = 90000;   // a start not landed in this long is treated as gone, not still spinning
+
+function startingTasks() {
+  try { return JSON.parse(sessionStorage.getItem(STARTING_KEY)) || {}; } catch { return {}; }
+}
+function saveStarting(tasks) { sessionStorage.setItem(STARTING_KEY, JSON.stringify(tasks)); }
+function taskKey(project, text) { return `${project}\n${text}`; }
+function rememberStarting(project, text) {
+  const tasks = startingTasks(); tasks[taskKey(project, text)] = Date.now(); saveStarting(tasks);
+}
+function forgetStarting(project, text) {
+  const tasks = startingTasks(); delete tasks[taskKey(project, text)]; saveStarting(tasks);
+}
+
+/* The gray start button for a given task, found by its words and its card - the handle a remembered
+   start needs to spin or turn green after a reload, when the click that made it is long gone. */
+function startButtonFor(project, text) {
+  return [...document.querySelectorAll(".agent-start")].find((button) => {
+    const row = button.closest("li");
+    return row?.querySelector(".item")?.textContent.trim() === text
+        && (row.closest(".section")?.dataset.project || "") === project;
+  });
+}
+
+/* While any start is remembered, ask the server which have landed an agent and resolve each: a
+   landed one turns green (spinner -> link, no reload), one that never lands drops back to gray after
+   its bound, the rest keep spinning. Runs on load (to pick spinners back up after a tab switch) and
+   after a click; stops itself once nothing is left to resolve. One poll for all of them. */
+let resolving = null;
+function pollStarting() {
+  if (Object.keys(startingTasks()).length === 0) return;   // nothing remembered: no poll to run
+  if (resolving === null) resolving = setInterval(resolveStarting, 1500);
+  resolveStarting();
+}
+async function resolveStarting() {
+  const tasks = startingTasks();
+  if (Object.keys(tasks).length === 0) { clearInterval(resolving); resolving = null; return; }
+  let working;
+  try { working = ((await (await fetch("/projects/fleet")).json()).working) || {}; }
+  catch { return; }   // a hiccup reaching the server: leave everything as it is, try again next tick
+  for (const key of Object.keys(tasks)) {
+    const [project, text] = key.split("\n");
+    const button = startButtonFor(project, text);
+    const landed = working[text];
+    if (landed && landed.title === project) {
+      forgetStarting(project, text);
+      if (button) turnGreen(button, landed.agent);                 // the desk has it now
+    } else if (Date.now() - tasks[key] > STARTING_TTL) {
+      forgetStarting(project, text);                               // never landed: stop spinning
+      if (button) { button.disabled = false; button.classList.remove("starting"); }
+    } else if (button) {
+      button.disabled = true; button.classList.add("starting");    // still coming up: keep it spinning
+    }
+  }
 }
 
 document.addEventListener("click", async (event) => {
@@ -104,6 +170,8 @@ document.addEventListener("click", async (event) => {
   button.disabled = true;   // one click is one agent; a double-click must not start two
   button.classList.add("starting");   // a spinner in the robot's place, so the click plainly took -
                                        // the start takes a beat, and green waits for the log to be there
+  rememberStarting(project, text);   // so the spinner survives a tab switch while the start is in flight
+  pollStarting();                    // and turns green on its own once the desk records the agent
   try {
     const answer = await fetch("/task/take-care",
       { method: "POST", body: new URLSearchParams({ project, text }) });
@@ -111,17 +179,30 @@ document.addEventListener("click", async (event) => {
     if (agent) {
       // The desk opens the log before it hands the name back, so by here the tab is there to open:
       // the spinner gives way to the green working link, which replaces the whole button.
+      forgetStarting(project, text);
       turnGreen(button, agent);
       announceAsked(`On it — ${agent} is on this now`);
       return;
     }
-    button.disabled = false;   // nothing started; put the gray robot back to try again
-    button.classList.remove("starting");
-  } catch {
+    forgetStarting(project, text);   // a clean "nothing started" answer: drop the spinner and record
     button.disabled = false;
     button.classList.remove("starting");
+  } catch {
+    // Usually the page tearing down under a tab switch, which aborts this fetch - leave the record so
+    // the poll resolves it on the page we land back on; the start may be proceeding server-side.
   }
 });
+
+/* On load, pick up any start still in flight from before a tab switch: show its spinner at once - no
+   gray flash before the first poll - then let the poll turn it green (or drop it) against the server. */
+const pending = startingTasks();
+for (const key of Object.keys(pending)) {
+  const [project, text] = key.split("\n");
+  if (Date.now() - pending[key] > STARTING_TTL) { forgetStarting(project, text); continue; }
+  const button = startButtonFor(project, text);
+  if (button) { button.disabled = true; button.classList.add("starting"); }
+}
+pollStarting();
 
 /* An agent's log links here with #task-<card>-<id>: bring that task into view and flash it, so it
    is obvious which one was meant rather than landing somewhere in a long card. The same "you
