@@ -289,7 +289,13 @@ word at all ("it seems to be stuck again. I said ship it then it never said anyt
 on PROGRESS, not on the turn or on silence: each piece that reaches the air resets his wait, so
 a reply still arriving is never cut off — measured on silence alone the bound never fired for
 the turn that mattered, because the brain had written one clause before it hung and "it has said
-something" stayed true while he sat twenty minutes. And the cancel it fires goes on a thread of
+something" stayed true while he sat twenty minutes. Progress is the turn MOVING, never the turn
+speaking: every message the model sends — a tool call, a tool's result, a word — resets this
+bound and the brain's own 180s one alike (`on_activity`, carried from `SdkSession`'s
+`on_message`). Measured on words alone, a turn doing exactly what he asked was indistinguishable
+from a turn that had died, because reading his calendar is minutes of tool calls with no words
+in them: "Can we go through a demo of your ability to manage my day based on a calendar that
+you've prepared" was answered ninety seconds later with the broken-head line, mid-errand. And the cancel it fires goes on a thread of
 its own, never waited on: the interrupt reaches the CLI by scheduling a coroutine on the
 session's own loop, which a session hung on a dead read never runs — called inline, it defeated
 the very deadline that called it. The brain-failure path it raises into already keeps the held

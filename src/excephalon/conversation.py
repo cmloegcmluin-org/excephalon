@@ -383,15 +383,20 @@ def _receipt(answer, text="", cut=False):
     return Receipt(began=bool(said), said=said, cut=bool(cut))
 
 
-def _accepts_streaming(brain):
-    """Whether this brain's respond() can hand text out as it is written (an `on_text` keyword).
+def _accepts(brain, keyword):
+    """Whether this brain's respond() takes `keyword`.
 
     Checked once rather than per call, so a brain fake with the plain signature runs the plain
     path instead of blowing up mid-turn."""
     try:
-        return "on_text" in inspect.signature(brain.respond).parameters
+        return keyword in inspect.signature(brain.respond).parameters
     except (TypeError, ValueError):
         return False
+
+
+def _accepts_streaming(brain):
+    """Whether this brain can hand text out as it is written (an `on_text` keyword)."""
+    return _accepts(brain, "on_text")
 
 
 @dataclass(frozen=True)
@@ -485,6 +490,10 @@ class Conversation:
         # last told - "" on a turn where nothing of his has moved.
         self._standing = standing
         self._brain_streams = _accepts_streaming(brain)
+        # Whether the brain can report that the model is still alive while it writes no words -
+        # a tool call in flight. Without it, a turn spent doing what he asked looks exactly like
+        # a turn that died, and his wait below cuts the live one off.
+        self._brain_reports_work = _accepts(brain, "on_activity")
         self._interrupt_poll = interrupt_poll
         self._cancel_wait = cancel_wait
         self._read_pause = read_pause  # a beat after a reply so they can read it before listening resumes
@@ -975,7 +984,7 @@ class Conversation:
         talking = getattr(self._stt, "is_mid_utterance", None)
         return bool(talking and talking())
 
-    def _think(self, heard, on_text=None, progress=None):
+    def _think(self, heard, on_text=None, progress=None, on_activity=None):
         """Ask the brain off the main thread so the interrupt stays answerable the whole time. If
         they barge in while it's thinking, the call is cancelled and `_ThinkInterrupted` is raised
         so the loop drops the turn. Re-raises whatever the brain raised, so the caller's error
@@ -985,17 +994,26 @@ class Conversation:
         each of its own asks, but it may spend several of them - lock, shed, reconnect, ask
         again - and a turn of his went twelve minutes with no word at all ("it seems to be stuck
         again. I said ship it then it never said anything"). The bound is on PROGRESS, not on the
-        turn: `progress` answers when something last reached the air, so a reply still being
-        written is never cut off, and a reply that stopped mid-way is not mistaken for one."""
+        turn: `progress` answers when the turn last moved, so a reply still being written is never
+        cut off, and a reply that stopped mid-way is not mistaken for one.
+
+        Moving means WORKING, not merely speaking. Measured on words alone, a turn that went
+        straight into a long tool call had never "progressed" at all, and the bound killed it at
+        ninety seconds: he asked for a walk through his day from a calendar it was in the middle
+        of reading, and was told something was broken in its head. Every message the model sends -
+        a tool call, a tool's result, a word - is the turn moving, so only genuine silence ends
+        the wait."""
         outcome = {}
         done = threading.Event()
 
         def work():
             try:
+                extras = {}
                 if on_text is not None:
-                    outcome["reply"] = self._brain.respond(heard, on_text=on_text)
-                else:
-                    outcome["reply"] = self._brain.respond(heard)
+                    extras["on_text"] = on_text
+                if on_activity is not None and self._brain_reports_work:
+                    extras["on_activity"] = on_activity
+                outcome["reply"] = self._brain.respond(heard, **extras)
             except BaseException as exc:  # carry it back to the main thread to re-raise in context
                 outcome["error"] = exc
             finally:
@@ -1157,13 +1175,18 @@ class Conversation:
         # heard mid-reply is Excephalon's own leak or someone talking over it. Spoken form, since
         # that is what is audible and therefore what a leak transcribes.
         spoken_parts = []
-        # When something last reached the air - what his wait is measured against, so a reply
-        # still arriving is never cut off and one that stopped part-way is not mistaken for it.
+        # When the turn last MOVED - what his wait is measured against, so a reply still arriving
+        # is never cut off and one that stopped part-way is not mistaken for it. Moved, not spoke:
+        # a turn that goes straight into reading his calendar writes no words for minutes, and
+        # measured on words it was killed as a wedge while doing exactly what he asked.
         last_progress = [0.0]
+
+        def working(_message=None):
+            last_progress[0] = self._clock()
 
         def audible(piece):
             spoken_parts.append(piece)
-            last_progress[0] = self._clock()
+            working()
             reply.add(piece)
 
         # The gates between the brain and the voice: a pasted document line is dropped before it
@@ -1179,7 +1202,8 @@ class Conversation:
         try:
             said = self._think(self._with_system_notes(heard, offered),
                                on_text=paste.feed if paste is not None else None,
-                               progress=lambda: last_progress[0])
+                               progress=lambda: last_progress[0],
+                               on_activity=working)
         except _ThinkInterrupted:  # they cut the thinking off - no reply, straight back to listening
             self._keep_for_later(offered)  # nothing was said, so the update is still owed
             self._settle(reply)
