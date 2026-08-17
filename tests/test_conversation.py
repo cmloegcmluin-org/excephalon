@@ -2312,3 +2312,92 @@ def test_a_greeting_that_retells_the_news_is_dropped_for_the_news_itself():
     said = tts.spoken[0]
     assert said.count("waiting for your verdict") == 1
     assert "Back with you" not in said  # the retelling greeting was dropped whole
+
+
+def test_a_brain_that_answers_his_words_with_nothing_is_asked_again():
+    # "Yes, looks good. Ship it." - and the reply was dead air: the turn was spent on tool calls
+    # and wrote no words, so he heard nothing, assumed nothing had happened, and waited half an
+    # hour for an update on a landing nobody had recorded. Silence is never an answer to his
+    # words, and the second ask is told what went wrong rather than repeating the turn blind.
+    asked = []
+
+    class MuteThenSpeaking(FakeBrain):
+        def respond(self, utterance):
+            asked.append(utterance)
+            return "" if len(asked) == 1 else "Recorded - it's landing now."
+
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["yes looks good ship it", "goodbye entity"]),
+                         MuteThenSpeaking(), tts)
+
+    turn = convo.turn()
+
+    assert turn.said == "Recorded - it's landing now."
+    assert tts.spoken == ["Recorded - it's landing now."]
+    assert "produced no words" in asked[1]  # told plainly, not asked the same thing twice
+    convo.turn()
+
+
+def test_two_silent_turns_running_are_said_to_be_a_fault_never_dead_air():
+    tts = FakeTTS()
+
+    class Mute(FakeBrain):
+        def respond(self, utterance):
+            super().respond(utterance)
+            return ""
+
+    convo = Conversation(FakeSTT(["ship it", "goodbye entity"]), Mute(), tts)
+
+    turn = convo.turn()
+
+    assert turn.said and turn.said == tts.spoken[0]  # he hears SOMETHING, never nothing
+    convo.turn()
+
+
+def test_a_silence_alarm_never_destroys_a_report_from_the_same_agent():
+    # "been silent for 20 minutes" arrived twenty minutes after that agent's merge report and,
+    # being the newest news about it, superseded it - the one thing he was waiting for was
+    # destroyed by a timer's guess about an agent that had already finished.
+    outbox = Outbox()
+    outbox.push("fixer: landed and wrapped up", about="fixer", kind="landed")
+    outbox.push("fixer: been silent for 20 minutes", about="fixer", kind="quiet")
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["goodbye entity"]), FakeBrain(), tts, outbox=outbox)
+
+    convo.turn()
+
+    assert tts.spoken[0] == "fixer: landed and wrapped up"
+    assert not outbox.owed_about()  # and the alarm did not linger as news of its own
+
+
+def test_a_landing_report_is_never_held_behind_a_review():
+    # One thing at a time holds other threads' chatter - never a thread's LAST WORD. Held, a
+    # merge report is the black hole this project has already sat through once.
+    outbox = Outbox()
+    outbox.push("fixer: it merged and is wrapped up", about="fixer", kind="landed")
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["goodbye entity"]), FakeBrain(), tts, outbox=outbox,
+                         in_review=lambda: {"spinner"})
+
+    convo.turn()
+
+    assert tts.spoken[0] == "fixer: it merged and is wrapped up"
+
+
+def test_a_review_nobody_ever_ruled_on_stops_holding_the_fleet():
+    # The gate silences every other thread, so it may never outlive its premise: a verdict that
+    # never got RECORDED left a review open forever, and behind it he had a merge report he was
+    # asking for. Past a couple of his turns with no verdict, his attention has plainly moved.
+    outbox = Outbox()
+    outbox.push("names: the naming layer is ready for your eyes", about="names")
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["ship it", "what about the names", "and now", "goodbye entity"]),
+                         FakeBrain(), tts, outbox=outbox, in_review=lambda: {"spinner"})
+
+    convo.turn()
+    assert not [line for line in tts.spoken if "naming layer" in line]  # held: he is reviewing
+    convo.turn()
+    convo.turn()
+
+    assert any("naming layer" in line for line in tts.spoken)
+    convo.turn()

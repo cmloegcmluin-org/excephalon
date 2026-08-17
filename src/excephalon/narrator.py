@@ -229,17 +229,18 @@ class Narrator:
                 if said.strip() and _claims_deployed(said, stage):
                     # It said the work is out there when it is not. The plain notice carries the
                     # news without the claim; a sentence he would act on must not be a guess.
-                    self._outbox.push(notice(agent, report), about=agent, listed=listed)
+                    self._outbox.push(notice(agent, report), about=agent, listed=listed, kind=kind)
                 elif said.strip():
-                    self._outbox.push(said.strip(), about=agent, composed=True, listed=listed)
+                    self._outbox.push(said.strip(), about=agent, composed=True, listed=listed,
+                                      kind=kind)
                 else:
                     # The brain could not answer; the capped plain notice still carries the news,
                     # marked app-authored so the ledger reads it back to the brain next turn.
-                    self._outbox.push(notice(agent, report), about=agent, listed=listed)
+                    self._outbox.push(notice(agent, report), about=agent, listed=listed, kind=kind)
             composed.set()
 
         threading.Thread(target=compose, daemon=True).start()
         if not composed.wait(self._deadline) and take():
             # The brain has sat on this past the deadline - wedged, or buried under a queue that
             # will outlive the user's patience. The notice ships now; the late answer is dropped.
-            self._outbox.push(notice(agent, report), about=agent, listed=listed)
+            self._outbox.push(notice(agent, report), about=agent, listed=listed, kind=kind)

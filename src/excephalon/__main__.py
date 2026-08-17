@@ -448,11 +448,17 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     newsroom = {}
 
     def agent_events(kind, agent, report):
+        # A silence alarm about an agent that has already left the desk is a timer talking about
+        # nothing: one fired twenty minutes after its agent's work had merged and been wrapped
+        # up, and being the newest news about that agent it replaced the merge report itself.
+        desk = newsroom.get("desk")
+        if kind == "quiet" and desk is not None and desk.ended(agent) is not None:
+            return
         narrator = newsroom.get("narrator")
         if narrator is not None:
             narrator.tell(kind, agent, report)
         else:
-            outbox.push(notice(agent, report), about=agent)
+            outbox.push(notice(agent, report), about=agent, kind=kind)
 
     # Don't just wait to be told - watch the agents. If one goes silent past the threshold, the
     # monitor surfaces a heads-up so the user isn't left in the dark by a hung or stalled agent.
@@ -481,6 +487,7 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
                      # the user's list (profile.md) - the pool they file into, self-draining as
                      # the work lands.
                      complete_enhancement=complete_enhancement)
+    newsroom["desk"] = desk  # so an event can ask whether its agent is still a going concern
     # The senior layer: engaged only when the brain hands it a stuck agent (ask_foreman), so its
     # bigger model is paid for per snag, never per turn.
     foreman = Foreman(desk, outbox)
