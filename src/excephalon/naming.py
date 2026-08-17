@@ -8,7 +8,8 @@ in a sentence.
 
 A name here is DISTILLED instead. A small, fast model reads the task, understands it, and hands
 back one to three words for it (`AgentNamer`); the project it belongs to is prefixed, so a Highdeas
-task is "highdeas-<words>" and the roll call groups by project at a glance. The distillation is the
+task is "highdeas-<words>" and Excephalon's own work is "excephalon-<words>" (SELF_PROJECT, for a
+task with no project card of its own), so the roll call groups by project at a glance. The distillation is the
 one part that can be slow or fail, so it is bounded and ALWAYS has a mechanical fallback - the
 task's own first few meaningful words (`distill_name`). The app never blocks forever on a name, and
 never fails to start an agent because a name could not be thought up.
@@ -29,6 +30,12 @@ from excephalon.sdk_session import SdkSession
 from excephalon.tailing import safe_name
 
 MAX_NAME_WORDS = 3  # "distills it down to 1-3 words"
+
+# What a task with no project card of its own belongs to: Excephalon itself. Its own roadmap items
+# (the Enhancements card) and any ad-hoc self-work carry project=None for ticking purposes, but the
+# NAME still wants a prefix - "excephalon-distill-names", never a bare "distill-names" - so the roll
+# call groups its own work by project too, exactly like Highdeas's.
+SELF_PROJECT = "excephalon"
 
 # Words that carry no identity in a short label - dropped so "fix the drive link" becomes
 # "fix-drive-link", not "fix-the-drive". Kept to the truly contentless connectives (articles,
@@ -52,21 +59,20 @@ def _words(phrase):
 
 def compose(project, phrase):
     """The final agent name: "<project>-<1-3 words>", trimmed to what a filename and a URL segment
-    can carry. `project` of "" or None means no prefix (Excephalon's own work). Never returns "":
-    an empty phrase with no project still yields "agent", so an agent always has a name."""
+    can carry. A missing or unusable `project` is Excephalon's own work, prefixed "excephalon-"
+    (SELF_PROJECT). Never returns "": an empty phrase still yields the prefix, so an agent always
+    has a name."""
+    prefix = (safe_name(project).lower() if project else "") or SELF_PROJECT
     body = "-".join(_words(phrase))
-    prefix = safe_name(project).lower() if project else ""
-    if prefix and body:
-        name = f"{prefix}-{body}"
-    else:
-        name = prefix or body
-    return safe_name(name) or "agent"
+    name = f"{prefix}-{body}" if body else prefix
+    return safe_name(name) or SELF_PROJECT
 
 
 def distill_name(task, project=None):
-    """A name WITHOUT the model: the task's own first few meaningful words, prefixed by the project.
-    This is the default namer the tools carry, and the fallback the thinking namer drops to when the
-    model cannot be reached. Better than the whole task hyphenated; a plain string, no I/O."""
+    """A name WITHOUT the model: the task's own first few meaningful words, prefixed by the project
+    (or "excephalon-" when it has none of its own). This is the default namer the tools carry, and
+    the fallback the thinking namer drops to when the model cannot be reached. Better than the whole
+    task hyphenated; a plain string, no I/O."""
     return compose(project, task)
 
 
