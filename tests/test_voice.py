@@ -1,7 +1,7 @@
 import threading
 from contextlib import contextmanager
 
-from excephalon.voice import SentenceStream, Speaker, play_stream
+from excephalon.voice import Receipt, SentenceStream, Speaker, play_stream
 
 
 class FakeEngine:
@@ -70,10 +70,80 @@ def test_a_one_shot_line_is_synthesized_and_played_whole():
     engine, player = FakeEngine(), FakePlayer()
     speaker = Speaker(engine, play=player)
 
-    speaker.speak("Be seeing you.")
+    sounded = speaker.speak("Be seeing you.")
 
     assert engine.synthesized == ["Be seeing you."]
     assert player.played == ["<Be seeing you.>"]
+    assert sounded  # the receipt: this actually reached the air
+    assert sounded.said == "Be seeing you."
+    assert sounded.cut is False
+
+
+def test_a_line_a_barge_in_beat_is_never_spoken_and_never_receipted():
+    # The black hole this project has already sat through: an utterance a barge-in silenced before
+    # its first word was counted as delivered anyway, and the news behind it - a merge report he
+    # was waiting on - was spent over zero audio. Whoever owes something must be told NO here.
+    engine, player = FakeEngine(), FakePlayer()
+    interrupt = threading.Event()
+    interrupt.set()
+    speaker = Speaker(engine, play=player)
+
+    sounded = speaker.speak("Three updates waiting.", interrupt=interrupt)
+
+    assert player.played == []
+    assert not sounded
+    assert sounded.said == ""
+
+
+def test_an_empty_line_is_not_a_delivery():
+    engine, player = FakeEngine(), FakePlayer()
+    speaker = Speaker(engine, play=player)
+
+    assert not speaker.speak("   ")
+    assert engine.synthesized == []
+
+
+def test_a_receipt_carries_a_cut_without_taking_the_delivery_back():
+    # A mid-utterance cut is HIS deliberate stop, not an undelivery: he heard the start and chose
+    # to stop it, so what it carried is spent. The cut is still recorded, because the transcript
+    # must not show a silenced line as fully spoken.
+    engine, player = FakeEngine(), FakePlayer()
+    interrupt = threading.Event()
+
+    class CutsMidLine(FakePlayer):
+        def __call__(self, chunks, samplerate, interrupt=None):
+            super().__call__(chunks, samplerate, interrupt)
+            interrupt.set()
+
+    speaker = Speaker(engine, play=CutsMidLine())
+    sounded = speaker.speak("The first of three.", interrupt=interrupt)
+
+    assert sounded          # it began sounding
+    assert sounded.cut      # ...and he stopped it partway
+    assert sounded.said == "The first of three."
+
+
+def test_a_reply_drained_whole_by_a_barge_in_reports_that_nothing_sounded():
+    # The same rule on the streamed path, so one type answers "did he hear it?" everywhere.
+    engine, player = FakeEngine(), FakePlayer()
+    interrupt = threading.Event()
+    interrupt.set()
+    speaker = Speaker(engine, play=player)
+
+    reply = speaker.stream(interrupt=interrupt)
+    reply.add("Both agents are green. ")
+    sounded = reply.done()
+
+    assert player.played == []
+    assert not sounded
+    assert sounded.said == ""
+    assert sounded.cut
+
+
+def test_a_receipt_is_falsy_when_nothing_sounded_and_truthy_when_something_did():
+    assert not Receipt(began=False)
+    assert Receipt(began=True, said="Anything.")
+    assert str(Receipt(began=True, said="Anything.")) == "Anything."
 
 
 def test_a_streamed_reply_is_spoken_sentence_by_sentence_in_order():
@@ -86,7 +156,8 @@ def test_a_streamed_reply_is_spoken_sentence_by_sentence_in_order():
     spoken = reply.done()
 
     assert player.played == ["<Both agents are green.>", "<The drive one wants a decision>"]
-    assert spoken == "Both agents are green. The drive one wants a decision"
+    assert spoken.said == "Both agents are green. The drive one wants a decision"
+    assert spoken  # it sounded
 
 
 def test_sentences_are_synthesized_in_their_spoken_form_but_recorded_raw():
@@ -101,7 +172,7 @@ def test_sentences_are_synthesized_in_their_spoken_form_but_recorded_raw():
     spoken = reply.done()
 
     assert engine.synthesized == ["It's in path.md."]
-    assert spoken == "It's in C:/deep/path.md."
+    assert spoken.said == "It's in C:/deep/path.md."
 
 
 def test_a_reply_reports_when_its_sound_is_actually_in_the_air():
@@ -154,7 +225,9 @@ def test_a_barge_in_cuts_the_reply_and_the_rest_stays_unspoken():
     spoken = reply.done()
 
     assert player.played == ["<First thing.>"]
-    assert spoken == "First thing."
+    assert spoken.said == "First thing."
+    assert spoken       # its first sentence reached him - the delivery stands
+    assert spoken.cut   # ...and he stopped the rest
 
 
 class FakeOutput:

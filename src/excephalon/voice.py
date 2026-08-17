@@ -10,6 +10,7 @@ the first sentence END, not to the end of the whole turn.
 import queue
 import re
 import threading
+from dataclasses import dataclass
 
 import numpy
 
@@ -46,6 +47,37 @@ class SentenceStream:
 _END = object()  # closes a Reply's queue; never spoken
 
 
+@dataclass(frozen=True)
+class Receipt:
+    """Whether an utterance actually reached the air - the one answer to "did he hear it?".
+
+    Everything the app owes him is spent on this: news leaves the durable spool, an offer counts as
+    made, a first line counts as said. The question was being answered five different ways in the
+    loop - a bare True from a speak that returns nothing, a truthy string from a drained stream, a
+    flag latched before the audio started - and each one that guessed wrong spent something over
+    zero sound. A merge report died in exactly that gap: the barge-in was already down when the
+    words were about to start, and the spool was cleared as if he had heard them.
+
+    `began` is the only thing anyone may spend on. `cut` says he stopped it partway, which is his
+    deliberate act and never an undelivery - he heard the start and chose to stop it - but the
+    record must still say so, or a silenced line reads as fully spoken. `said` is what actually
+    sounded, which after a cut is the head of it that got out.
+    """
+
+    began: bool
+    said: str = ""
+    cut: bool = False
+
+    def __bool__(self):
+        return self.began
+
+    def __str__(self):
+        return self.said
+
+
+UNSAID = Receipt(began=False)  # nothing sounded, so nothing may be spent
+
+
 class Speaker:
     """The voice: one engine, one way audio goes out, for one-shot lines and streamed replies alike.
 
@@ -61,12 +93,19 @@ class Speaker:
         self._play = play
 
     def speak(self, text, *, interrupt=None):
-        """One whole utterance - a greeting, a piece of news. The same contract SystemTTS had."""
+        """One whole utterance - a greeting, a piece of news - and a Receipt for it.
+
+        The interrupt is read again after synthesis, immediately before the audio goes out, which
+        is the same discipline the streamed pump keeps: a barge-in landing while the engine works
+        means nothing sounded, and nothing owed may be spent on it."""
         said = str(text).strip()
         if not said or _fired(interrupt):
-            return
+            return UNSAID
         chunks, samplerate = self._engine.say(said)
+        if _fired(interrupt):
+            return UNSAID
         self._play(chunks, samplerate, interrupt=interrupt)
+        return Receipt(began=True, said=said, cut=_fired(interrupt))
 
     def stream(self, *, interrupt=None, spoken_form=None):
         """A reply about to arrive as text deltas: speak it sentence by sentence as it forms.
@@ -82,8 +121,8 @@ class Reply:
 
     Deltas go in on whatever thread the brain streams from; a worker of its own synthesizes and
     plays each finished sentence, so the next sentence forms while the last one sounds. `done()`
-    waits for the audio to run out and returns what was actually spoken - which, after a barge-in,
-    is the head of the reply that got out before the cut."""
+    waits for the audio to run out and returns the Receipt for it - what was actually spoken,
+    which after a barge-in is the head of the reply that got out before the cut."""
 
     def __init__(self, engine, play, interrupt, spoken_form=None):
         self._engine = engine
@@ -104,11 +143,16 @@ class Reply:
         self._sentences.feed(delta)
 
     def done(self):
-        """The reply's text is complete; wait out the audio and say what of it was spoken."""
+        """The reply's text is complete; wait out the audio and receipt what of it was spoken.
+
+        An utterance a barge-in drained whole - the cut was already down when its first word was
+        about to go out - sounded nothing, and its receipt says so: whatever it was carrying is
+        still owed."""
         self._sentences.flush()
         self._queue.put(_END)
         self._worker.join()
-        return " ".join(self._spoken)
+        said = " ".join(self._spoken)
+        return Receipt(began=bool(said.strip()), said=said, cut=_fired(self._interrupt))
 
     def _pump(self):
         try:

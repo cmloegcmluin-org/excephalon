@@ -4,6 +4,7 @@ import time
 from excephalon.console import Console
 from excephalon.conversation import Conversation, Turn
 from excephalon.outbox import Outbox
+from excephalon.voice import UNSAID
 
 
 class FakeSTT:
@@ -687,6 +688,29 @@ def test_a_delivery_that_never_began_sounding_is_still_owed():
     convo.turn()  # he picks again; the news was still owed, and now it goes out
 
     assert any("fixer: the drive link is fixed" in line for line in tts.spoken)
+
+
+def test_a_mouth_that_receipts_its_own_silence_is_believed(tmp_path):
+    # The gap the loop could not see. Its own interrupt was never set, so every check it makes
+    # says the line went out - but the voice knows better: a barge-in landed while the engine was
+    # synthesizing, and not one sample reached the air. Answered True regardless, the news was
+    # spent over zero audio, which is how a merge report died. The mouth's receipt is now the
+    # answer, and a mouth that says nothing sounded is believed over the loop's own view.
+    outbox = Outbox(spool=tmp_path / "spool.json")
+    outbox.push("fixer: the drive link is fixed", about="fixer")
+
+    class SilentMouth(FakeTTS):
+        def speak(self, text, *, interrupt=None):
+            self.spoken.append(text)  # it was asked for - and it never made a sound
+            return UNSAID
+
+    tts = SilentMouth()
+    convo = Conversation(FakeSTT(["what time is it"]), FakeBrain(), tts, outbox=outbox)
+
+    convo.turn()
+
+    assert convo._waiting  # nothing was spent: the news is still owed and comes back
+    assert outbox.owed_about() == {"fixer"}
 
 
 def test_the_weld_holds_on_the_streaming_path_the_real_app_runs():

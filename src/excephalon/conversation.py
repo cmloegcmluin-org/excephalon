@@ -11,6 +11,7 @@ from excephalon.phrases import canonical as _canonical
 from excephalon.phrases import ends_with_command as _ends_with_command
 from excephalon.phrases import wakes as _wakes
 from excephalon.sdk_session import needs_sign_in
+from excephalon.voice import UNSAID, Receipt
 from excephalon.waiting import chosen, roll_call
 
 # Both names, as the window's wake phrases already carried both: the app says "Excephalon" every
@@ -365,6 +366,23 @@ def _newest_per_agent(waiting):
     return keep, gone
 
 
+def _receipt(answer, text="", cut=False):
+    """A mouth's answer as a Receipt, whatever shape of mouth answered.
+
+    Every voice this app ships receipts its own utterance now. A mouth written before the receipt
+    existed answers None, and a streamed one answered the text that sounded; both still mean what
+    they always meant, so both are read here rather than at five call sites each with its own
+    guess. That spread is what let a barge-in-silenced line count as delivered: the question "did
+    he hear it?" had five answers and the wrong one spent a merge report over zero audio.
+
+    `cut` is the loop's own view of the interrupt, and stands in only for a mouth that does not
+    report one - the answer this code has always used for the "(cut off mid-utterance)" note."""
+    if isinstance(answer, Receipt):
+        return answer
+    said = str(answer if isinstance(answer, str) else text).strip()
+    return Receipt(began=bool(said), said=said, cut=bool(cut))
+
+
 def _accepts_streaming(brain):
     """Whether this brain's respond() can hand text out as it is written (an `on_text` keyword).
 
@@ -501,7 +519,7 @@ class Conversation:
         failed utterance must never crash the loop (it did, and they lost the whole run)."""
         if self._interrupted():
             self._console.aside("(left unsaid - they had cut in)")
-            return False  # nothing sounded: the caller must not spend what it never said
+            return UNSAID  # nothing sounded: the caller must not spend what it never said
         if not known:
             # They are about to hear this as Excephalon speaking, and the brain did not write it -
             # so the brain has to be told, or the two of them remember different conversations.
@@ -514,21 +532,24 @@ class Conversation:
             # Said, not written: an address becomes "the link" and a path becomes its filename. The
             # line above already showed the real thing, which is what they read and clicks - this is
             # only the difference between what is on the screen and what a person would say aloud.
-            self._tts.speak(as_spoken(text), interrupt=self._interrupt)
+            sounded = _receipt(self._tts.speak(as_spoken(text), interrupt=self._interrupt),
+                               text, cut=self._interrupted())
         except Exception as exc:  # a failed utterance must never crash the loop - but it IS evidence
             self._console.aside(f"(voice failed: {exc!r})")
-            return False  # the hiccup, not the news, is what dies: nothing is spent on it
+            return UNSAID  # the hiccup, not the news, is what dies: nothing is spent on it
         else:
-            if self._interrupted():  # the utterance was killed partway - the record must say so,
+            if sounded.cut:  # the utterance was killed partway - the record must say so,
                 self._console.aside("(cut off mid-utterance)")  # or a silenced line looks delivered
         finally:
             if stop_watching is not None:
                 stop_watching()
-        return True  # it began sounding (a mid-cut is his deliberate stop, not an undelivery)
+        # The receipt is what anything owed is spent on: a mid-cut is his deliberate stop and still
+        # counts as heard, while an utterance a barge-in beat to its first word counts as nothing.
+        return sounded
 
     def _speak_reply(self, text, *, known=False):
-        """Show the reply, then say it - the same words on screen as in their ear. Answers
-        whether it began sounding, so a delivery welded to it is only spent when it did."""
+        """Show the reply, then say it - the same words on screen as in their ear. Answers with
+        the Receipt, so a delivery welded to it is only spent when it actually sounded."""
         self._console.reply(text)
         return self._say(text, record=False, known=known)
 
@@ -1193,15 +1214,16 @@ class Conversation:
             # reading the whole of it beats being read to ("I want to see all the text
             # immediately up front and then hear it").
             self._console.reply(combined)
-            sounded = reply.done()  # then wait out the rest of the audio
-            if self._interrupted():  # the audio was cut partway - the record must say so
+            # The receipt is what actually reached the air: an utterance drained whole by a
+            # barge-in that beat its first word never sounded, and must spend nothing.
+            sounded = _receipt(reply.done(), combined,  # then wait out the rest of the audio
+                               cut=self._interrupted())
+            if sounded.cut:  # the audio was cut partway - the record must say so
                 self._console.aside("(cut off mid-utterance)")
-            # What done() answers is what actually reached the air: an utterance drained whole
-            # by a barge-in that beat its first word never sounded, and must spend nothing.
-            began = bool(sounded.strip())
+            began = bool(sounded)
         else:
             spoken_parts.append(combined)  # the floor's script: about to be audible in full
-            began = self._speak_reply(combined, known=True)
+            began = bool(self._speak_reply(combined, known=True))
         release_floor()
         if began:
             for extra in extras:
