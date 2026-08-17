@@ -468,6 +468,12 @@ class AgentDesk:
             # Tabs still open without an agent behind them answer to their names too - the
             # window shows them, so he and the tools speak of them.
             held += [path.stem for path in self._log_dir.glob("*.log") if path.stem not in held]
+        if self._archive_dir is not None and self._archive_dir.exists():
+            # And so do the wrapped-up: their logs are the record of finished work, and a name
+            # that resolves only while its agent is alive is how the foreman answered "with no
+            # log I can't confirm" about logs sitting whole in the archive.
+            held += [path.stem for path in self._archive_dir.glob("*.log")
+                     if path.stem not in held]
         if not wanted or not held:
             return None
         if wanted in held:
@@ -594,21 +600,43 @@ class AgentDesk:
             return entry.delivery.stage if entry is not None else None
 
     def task_of(self, name):
-        """What `name` was put on - the first thing a senior read of its situation needs."""
+        """What `name` was put on - the first thing a senior read of its situation needs. A
+        wrapped agent's task is still on file (the endings record), because a question about
+        finished work deserves better than "(unknown)"."""
         name = self.resolve(name) or name
         with self._lock:
             entry = self._desked.get(name)
-            return entry.task if entry is not None else None
+            if entry is not None:
+                return entry.task
+        ended = [record for record in self._wrapped_records() if record.get("name") == name]
+        return ended[-1].get("task") if ended else None
+
+    def ended(self, name):
+        """How this agent's thread ENDED - "delivered" or "died" - or None for one still going
+        (or never recorded). The foreman asks before treating a missing agent as a mystery: a
+        landing agent's auto-wrap-up can beat the quiet alarm's question, and the answer then
+        is on file, not a snag to investigate."""
+        name = self.resolve(name) or name
+        with self._lock:
+            if name in self._desked:
+                return None  # still at the desk: its thread has not ended
+        ended = [record for record in self._wrapped_records() if record.get("name") == name]
+        return ended[-1].get("outcome") if ended else None
 
     def recent_log(self, name, limit=3000):
         """The tail of an agent's exchange log - the situation as it actually unfolded, for the
         foreman's senior read. The tail and not the whole file, because a day-long exchange would
-        drown the situation it ends on. Empty when there is nothing to read."""
+        drown the situation it ends on. A wrapped agent's log is read from the archive - the
+        record of finished work is still the record ("that's fucking bullshit, the logs are
+        right there"). Empty when there is nothing to read."""
         name = self.resolve(name) or name
         if self._log_dir is None:
             return ""
+        log = self._log_dir / f"{name}.log"
+        if not log.exists() and self._archive_dir is not None:
+            log = self._archive_dir / f"{name}.log"
         try:
-            text = (self._log_dir / f"{name}.log").read_text(encoding="utf-8")
+            text = log.read_text(encoding="utf-8")
         except OSError:
             return ""
         return text[-limit:]

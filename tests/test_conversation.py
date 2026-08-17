@@ -1646,10 +1646,15 @@ def test_whatever_the_outbox_has_to_say_is_one_utterance_to_stop():
     assert "first agent finished" in spoken[0] and "second agent finished" in spoken[0]
 
 
-def test_news_that_cannot_be_delivered_yet_does_not_wedge_the_loop():
-    # THE FREEZE: an undeliverable message left outbox.arrived latched, and the window's mic yields
-    # an empty turn whenever that flag is set - so the loop spun, their submissions were never read,
-    # and only a restart got them out. Declining to deliver must never leave the flag standing.
+def test_news_deferred_mid_sentence_is_retried_at_the_next_pause():
+    # Two failure modes share this moment, and both are pinned. THE FREEZE: the mic used to
+    # yield an empty turn whenever outbox.arrived was set, talking or not, so a latched flag
+    # spun the loop and ate every submission - the mic now yields on it only at a PAUSE
+    # (dictation.listen), so a standing flag can never wedge dictation. THE SILENT STALL: this
+    # pass drains the flag, and deferring with it down left no way back until his next words -
+    # held news sat unspoken for nine minutes and he had to ask ("I keep having to prompt this
+    # thing for updates"). So a defer puts the flag back up: still waiting to be spoken is
+    # exactly what the flag means.
     outbox = Outbox()
 
     class MidSentenceSTT(FakeSTT):
@@ -1661,7 +1666,8 @@ def test_news_that_cannot_be_delivered_yet_does_not_wedge_the_loop():
 
     convo._deliver_outbox()  # can't speak over them - but must still drain
 
-    assert not outbox.arrived.is_set()  # nothing latched, so listening works normally
+    assert [str(held) for held in convo._waiting] == ["the fixer agent has news"]  # in hand
+    assert outbox.arrived.is_set()  # and flagged, so the next pause yields a delivery turn
 
 
 def test_it_stays_quiet_while_they_are_mid_sentence_then_delivers():

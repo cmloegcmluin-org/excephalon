@@ -348,6 +348,28 @@ def test_listen_yields_empty_when_interrupted_so_agent_news_can_speak():
     assert heard["text"] == ""  # a lull broken for the outbox, not a real turn
 
 
+def test_listen_does_not_break_for_news_while_they_are_mid_sentence():
+    # Yielded mid-sentence, the delivery pass found him talking, deferred, and had no way back
+    # until his next words - so the yield waits for an actual lull. His submission still lands:
+    # a standing news flag must never eat a turn he is composing.
+    interrupt = threading.Event()
+    interrupt.set()
+    ears = Ears()
+    dictation = Dictation(FakeTranscriber(), FakeMic([]), interrupt=interrupt, **ears.kwargs())
+    dictation.is_mid_utterance = lambda: True
+    heard = {}
+
+    def listener():
+        heard["text"] = dictation.listen()
+
+    thread = threading.Thread(target=listener)
+    thread.start()
+    dictation.submit("still my turn")
+    thread.join(2.0)
+
+    assert heard["text"] == "still my turn"
+
+
 def test_a_stop_event_ends_the_pump_mid_stream():
     stop = threading.Event()
     stop.set()

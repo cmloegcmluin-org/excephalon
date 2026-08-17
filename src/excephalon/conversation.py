@@ -587,6 +587,14 @@ class Conversation:
                 self._say_opening()
             return
         if self._they_are_talking():
+            # Deferred, not dropped - and the flag goes back up, or the defer is forever: the
+            # mic only yields a delivery turn when the outbox says something is waiting, this
+            # pass already drained that flag, and news deferred here once sat silent for nine
+            # minutes until he asked for it himself ("I keep having to prompt this thing for
+            # updates. one of its main purposes is to share these updates with me ASAP").
+            still_owed = getattr(self._outbox, "arrived", None)
+            if still_owed is not None:
+                still_owed.set()
             return
         # Unlisted news is not an item to choose between - the errand hand is machinery, not an
         # agent with a tab and a verdict, and reading its tag out as a name beside a real agent
@@ -624,10 +632,12 @@ class Conversation:
             return
         if self._dormant():
             # They are off doing something else; news breaking in "out of nowhere" is a jolt.
-            # One offer names who it is about, and the content waits for them to engage.
+            # One offer names who it is about, and the content waits for them to engage. The
+            # offer counts as MADE only if it began sounding - latched on an utterance a
+            # barge-in silenced, the offer was never heard and never repeated, and the news
+            # behind it sat unreachable.
             if not self._update_offered:
-                self._update_offered = True
-                self._say(UPDATE_OFFER.format(what=self._whose_news()))
+                self._update_offered = bool(self._say(UPDATE_OFFER.format(what=self._whose_news())))
             return
         self._update_offered = False
         if self._announced:

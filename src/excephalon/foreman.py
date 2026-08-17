@@ -83,6 +83,15 @@ class Foreman:
         threading.Thread(target=self._work, args=(agent, question), daemon=True).start()
 
     def _work(self, agent, question):
+        # A question about an agent whose thread already ENDED has its answer on file, not in a
+        # senior model. A landing agent's auto-wrap-up beat the quiet alarm's question here: the
+        # foreman found the desk empty, reasoned "with no log I can't confirm which" about logs
+        # sitting whole in the archive, and its shrug reached the user as a heads-up ("that's
+        # fucking bullshit, the logs are right there"). Delivered work needs no investigation
+        # and no news - the landed narration already said it.
+        over = getattr(self._desk, "ended", None)
+        if over is not None and over(agent) == "delivered":
+            return
         prompt = PROMPT.format(
             agent=agent,
             task=self._desk.task_of(agent) or "(unknown)",
