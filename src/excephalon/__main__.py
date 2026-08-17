@@ -315,7 +315,10 @@ def _greeting(brain, booted_at, previous_boot, was_seen=0.0, waiting=(), note=No
     except Exception:
         return STOCK_GREETING
     said = said.strip()
-    refused = unfit(said, fleet)
+    # An update genuinely waiting makes "want to hear it?" a true sentence rather than a stage
+    # claim - and the greeting was told to end on exactly that question, since it is the only
+    # thing he hears until he chooses.
+    refused = unfit(said, fleet, owed=bool(waiting))
     if not said or refused:
         _retract(brain, said)  # written, never spoken: off its record, or it holds a false memory
         return STOCK_GREETING

@@ -266,25 +266,6 @@ class _PastedReportGate:
 # gate drops is dropped from the kept reply too (and from a non-streamed one wholesale).
 _PASTED_LINE = re.compile(r"(?m)^[ \t]*>[^\n]*\n?")
 
-_SMALL_WORDS = frozenset(("this", "that", "with", "your", "here", "there", "still", "back",
-                          "ready", "look", "open", "click", "when", "what", "have"))
-
-
-def _content_words(text):
-    return {word for word in re.findall(r"[a-z]+", str(text).lower())
-            if len(word) >= 4 and word not in _SMALL_WORDS}
-
-
-def _retells(opening, news):
-    """Does this greeting already SAY the news it is about to precede? The brain is told not to
-    name what is waiting, and named it anyway: "Agent naming is still waiting for your verdict -
-    ready to look at it?" welded straight onto a walkthrough opening "Agent naming is waiting
-    for your verdict" - the same sentence twice in one message ("it repeats ... twice in a row
-    like an insane person"). The news is the authoritative copy; a greeting that paraphrases it
-    is the redundant one, and a first line is a first line or nothing."""
-    return len(_content_words(opening) & _content_words(news)) >= 3
-
-
 def _without_pasted_report(said):
     kept = _PASTED_LINE.sub("", said)
     return kept if kept.strip() else said  # a reply that was ALL paste still answers with itself
@@ -709,6 +690,20 @@ class Conversation:
             if still_owed is not None:
                 still_owed.set()
             return
+        if self._opening:
+            # The first line is a thread of its own and it ends by ASKING him something. Welded to
+            # a held update he got the question AND the other thread's whole walkthrough in one
+            # breath, so neither could be answered: "it insanely asks me if I'd like to continue
+            # with a calendar demo, then in the same breath tells me that a demo for a feature an
+            # agent has been working on in the background is ready for my review, and moreover, it
+            # just goes straight into the detailed information about that feature." What he asked
+            # for instead is the choice - pick the thread back up, or hear the update - and the
+            # greeting is composed knowing news waits and ends on exactly that question
+            # (homecoming_note). So the first line goes out alone, and it IS the offer: what is
+            # waiting stays waiting until he says which he wants.
+            if self._say_opening():
+                self._update_offered = True
+            return
         # Unlisted news is not an item to choose between - the errand hand is machinery, not an
         # agent with a tab and a verdict, and reading its tag out as a name beside a real agent
         # cost him five turns trying to close a "task" that never existed ("I don't even know
@@ -811,26 +806,12 @@ class Conversation:
         named = bool(name_the_rest and listed
                      and not (about is not None and self._review_opens(about)))
         said = f"{news}\n\n{roll_call(listed)}" if named else str(news)
-        # The session's first line rides the front of the FIRST delivery whatever its shape -
-        # `_announce` carries it for a list, this for a single item. Left behind here, a boot
-        # with exactly one piece of held news spoke the news alone and the welcome sat pending
-        # for seven minutes, surfacing after he had approved the very demo it invited him to
-        # look at ("this message makes no sense. why was this sent?").
-        opening, self._opening = self._opening, ""
-        if opening and _retells(opening, said):
-            self._console.evidence(f"(opening dropped - it retells the news it precedes: "
-                                   f"{opening})")
-            self._retract(opening)  # written and never spoken: off the brain's record
-            opening = ""
-        if opening:
-            said = f"{opening}\n\n{said}"
         self._console.heads_up(said)
         # Known only when the whole utterance is the brain's own sentence; with a roll call
         # appended, part of what they hear is app-authored and the ledger must carry it.
         if not self._say(said, record=False,
                          known=getattr(news, "composed", False) and said == str(news)):
             self._waiting.insert(place, news)  # never sounded: still owed, back where it stood
-            self._opening = opening            # and the first line is still unsaid
             return ""
         # What has been READ OUT, which is only ever a roll call that actually went out. Recorded
         # after an errand's answer instead, it would mark the agents' list announced and that list
@@ -839,8 +820,6 @@ class Conversation:
         self._delivered(news)
         if getattr(news, "composed", False):
             self._remember_spoken(str(news))  # its own words, now actually in his ears
-        if opening:
-            self._remember_spoken(opening)
         return said
 
     def _hand_over(self, heard, place=0):
@@ -887,31 +866,33 @@ class Conversation:
         return roll_call([held for held in self._waiting if getattr(held, "listed", True)])
 
     def _say_opening(self):
-        """Say the session's first line, once, if there is one and nothing carried it already."""
+        """Say the session's first line, once - and answer whether it reached him.
+
+        It is the whole of its own utterance: the one line at the boot boundary, never a header
+        welded onto a piece of news. Its answer is what tells the caller an offer now stands,
+        because with news waiting the greeting itself is what asked him to choose."""
         opening, self._opening = self._opening, ""
-        if opening:
-            self._console.reply(opening)
-            if self._say(opening, record=False, known=True):
-                self._remember_spoken(opening)
-            else:
-                self._opening = opening  # never sounded: still unsaid, still owed
+        if not opening:
+            return UNSAID
+        self._console.reply(opening)
+        sounded = self._say(opening, record=False, known=True)
+        if sounded:
+            self._remember_spoken(opening)
+        else:
+            self._opening = opening  # never sounded: still unsaid, still owed
+        return sounded
 
     def _announce(self):
-        """Read out who is waiting, numbered, so one of them can be named. The session's opening
-        line rides on the front of it when there is one, so a restart with news waiting is ONE
-        message rather than a welcome and a menu thirteen seconds apart - one recorded message
-        too, since a separate reply record showed the same welcome twice in the window."""
+        """Read out who is waiting, numbered, so one of them can be named.
+
+        Never with the session's first line on the front of it: that line is its own thread and
+        ends by asking him something, and welded to a menu he was asked two questions in one
+        breath. The greeting goes out alone and IS the offer (see `_deliver_outbox`); this is what
+        he hears once he has said he wants them."""
         roll = self._roll()
-        line = roll
-        opening, self._opening = self._opening, ""
-        if opening:
-            line = f"{opening}\n\n{line}"
-        self._console.heads_up(line)
-        if not self._say(line, record=False):
-            self._opening = opening  # never sounded: the first line is still unsaid, still owed
+        self._console.heads_up(roll)
+        if not self._say(roll, record=False):
             return
-        if opening:
-            self._remember_spoken(opening)  # its own first line, now actually heard
         self._announced = roll
 
     def _take_pick(self, heard):

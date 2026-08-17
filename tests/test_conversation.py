@@ -1029,23 +1029,26 @@ def test_the_list_is_read_again_only_when_it_would_come_out_different():
     assert len([line for line in tts.spoken if line.startswith("Two updates waiting.")]) == 1
 
 
-def test_the_opening_line_and_the_waiting_list_go_out_as_one_message():
+def test_the_boot_says_one_thing_and_the_list_waits_for_his_answer():
     # "I just opened Excephalon and then it quickly sent me two messages. it should only have sent
-    # me one." The welcome-back was spoken outside the loop and the roll call by the loop thirteen
-    # seconds later - two mouths at the boot boundary, one asking about a single update and one
-    # offering all of them. One opening, one utterance.
+    # me one." That was fixed by welding them - and the weld was the next failure: a greeting that
+    # asked him something with an unrelated menu on its back is two questions in one breath. The
+    # first line goes out alone and IS the offer; the list is what he hears once he says yes.
     outbox = Outbox()
     outbox.push("fixer: the drive link is fixed", about="fixer")
     outbox.push("docs-sidebar: needs your call on the width", about="docs-sidebar")
     tts = FakeTTS()
-    convo = Conversation(FakeSTT(["goodbye entity"]), FakeBrain(), tts, outbox=outbox,
-                         opening="Welcome back. Where were we?")
+    convo = Conversation(FakeSTT(["yes", "goodbye entity"]), FakeBrain(), tts, outbox=outbox,
+                         opening="Welcome back. Want to pick the drive work back up, or hear "
+                                 "what's waiting?")
 
-    convo.turn()
+    convo.turn()  # the first line goes out alone; his "yes" then brings the news
 
-    said = tts.spoken[0]
-    assert said.startswith("Welcome back. Where were we?")
-    assert "Two updates waiting. One, fixer. Two, docs-sidebar. Which first?" in said
+    first, *rest = tts.spoken
+    assert first == ("Welcome back. Want to pick the drive work back up, or hear "
+                     "what's waiting?")
+    assert "fixer" not in first and "docs-sidebar" not in first  # nothing rode its back
+    assert any("the drive link is fixed" in line for line in rest)
     assert len([line for line in tts.spoken if "Welcome back" in line]) == 1
 
 
@@ -1070,23 +1073,25 @@ def test_the_opening_is_said_once_and_never_again():
     assert len([line for line in tts.spoken if "I'm ready" in line]) == 1
 
 
-def test_the_opening_rides_the_single_held_update():
-    # The welcome-back rode the roll call when SEVERAL updates waited, but a boot with exactly ONE
-    # spoke the news alone and left the welcome pending. It surfaced seven minutes later, inviting
-    # him to look at a demo he had already approved ("this message makes no sense. why was this
-    # sent?"). The first line rides the first delivery whatever its shape.
+def test_the_first_line_goes_out_first_and_never_waits_behind_the_news():
+    # A boot with exactly one update once spoke the news alone and left the welcome pending; it
+    # surfaced seven minutes later, inviting him to look at a demo he had already approved ("this
+    # message makes no sense. why was this sent?"). Riding the news fixed that and broke the other
+    # side - the walkthrough arrived welded to a question about something else. The first line is
+    # simply FIRST, and alone, so it can never be left behind and never carries another thread.
     outbox = Outbox()
     outbox.push("robot-icon-ui: the demo is ready - open localhost:8770", about="robot-icon-ui")
     tts = FakeTTS()
-    convo = Conversation(FakeSTT(["okay ship it", "goodbye entity"]), FakeBrain(), tts,
-                         outbox=outbox, opening="Back with you. The robot icon work landed.")
+    convo = Conversation(FakeSTT(["yeah", "goodbye entity"]), FakeBrain(), tts,
+                         outbox=outbox,
+                         opening="Back with you. Carry on where we were, or hear the update?")
 
-    convo.turn()
-    convo.turn()
+    convo.turn()  # the first line alone, then his "yeah" brings the one held update
 
-    said = tts.spoken[0]
-    assert said.startswith("Back with you. The robot icon work landed.")
-    assert "localhost port 8770" in said  # the news, in the same utterance
+    first, *rest = tts.spoken
+    assert first == "Back with you. Carry on where we were, or hear the update?"
+    assert "8770" not in first  # the walkthrough did not ride the greeting
+    assert any("localhost port 8770" in line for line in rest)
     assert len([line for line in tts.spoken if "Back with you" in line]) == 1
 
 
@@ -2394,12 +2399,12 @@ def test_a_held_update_about_other_work_does_not_ride_his_reply_mid_review():
     convo.turn()
 
 
-def test_a_greeting_that_retells_the_news_is_dropped_for_the_news_itself():
-    # The brain was told not to name the waiting news and named it anyway: "Agent naming is
-    # still waiting for your verdict-ready to look at it?" welded straight onto a walkthrough
-    # opening "Agent naming is waiting for your verdict" - the same sentence twice in one
-    # message ("it repeats ... twice in a row like an insane person"). The news is the
-    # authoritative copy; the paraphrase of it is not a greeting.
+def test_a_greeting_can_no_longer_say_the_same_thing_as_the_news_behind_it():
+    # "Agent naming is still waiting for your verdict-ready to look at it?" welded straight onto a
+    # walkthrough opening "Agent naming is waiting for your verdict" - the same sentence twice in
+    # one message ("it repeats ... twice in a row like an insane person"). A similarity check used
+    # to drop the greeting when it happened. Nothing to check now: the greeting and the news are
+    # never in one utterance at all, so a repeat cannot be built.
     outbox = Outbox()
     outbox.push("Agent naming is waiting for your verdict - names now get the project prefix.",
                 about="namer")
@@ -2410,9 +2415,8 @@ def test_a_greeting_that_retells_the_news_is_dropped_for_the_news_itself():
 
     convo.turn()
 
-    said = tts.spoken[0]
-    assert said.count("waiting for your verdict") == 1
-    assert "Back with you" not in said  # the retelling greeting was dropped whole
+    assert tts.spoken[0] == "Back with you. Agent naming is still waiting for your verdict."
+    assert not any("project prefix" in line for line in tts.spoken)  # the news is still owed
 
 
 def test_a_brain_that_answers_his_words_with_nothing_is_asked_again():

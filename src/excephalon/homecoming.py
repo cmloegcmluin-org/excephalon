@@ -34,19 +34,24 @@ _REVIEW_CLAIMS = ("approv", "review", "verdict", "ready for your eyes", "ready f
                   "take a look", "waiting on your", "waiting for your")
 
 
-def unfit(greeting, fleet=""):
+def unfit(greeting, fleet="", owed=False):
     """Why this composed greeting may not be spoken, or None when it may.
 
     The greeting is one model-written sentence with no conversation behind it yet, so the two
     failure shapes it keeps finding are both checkable: promising work instead of greeting, and
     inviting a verdict when nothing is in review. The stage phrase is delivery.IN_REVIEW, the
     same constant the briefing renders - matched anywhere in the fleet text, so the check and
-    the record cannot drift apart."""
+    the record cannot drift apart.
+
+    `owed` says an update really is waiting to be spoken, and the greeting was ASKED to end by
+    offering it. Inviting him to hear it is then a true sentence about a real thing, not a stage
+    claim - and refusing it would drop the offer for the stock line and leave the news with
+    nothing to arrive behind."""
     lowered = greeting.lower()
     promise = next((phrase for phrase in _PROMISES if phrase in lowered), None)
     if promise:
         return f"promises an action ('{promise.strip()}…') instead of greeting"
-    if IN_REVIEW not in fleet.lower():
+    if not owed and IN_REVIEW not in fleet.lower():
         claim = next((phrase for phrase in _REVIEW_CLAIMS if phrase in lowered), None)
         if claim:
             return f"invites approval ('{claim}…') while nothing is in review"
@@ -156,11 +161,18 @@ def homecoming_note(turns, changes, away, waiting=(), fleet="", busy=False):
                     "landed. Work not marked delivered is never called shipped.")
     owed = ""
     if waiting:
-        owed = (f"\n\nThere are already {len(waiting)} update(s) waiting to be spoken to him, and "
-                "the app reads that list out itself the moment your greeting ends. So do NOT ask "
-                "about any one of them and do not list them - two messages thirteen seconds "
-                "apart, one asking about a single update and one offering all of them, is what "
-                "he called unnatural.")
+        owed = (f"\n\nThere are already {len(waiting)} update(s) from his agents waiting to be "
+                "spoken to him. Your greeting is the ONLY thing he will hear until he answers, "
+                "so it must END by offering him the choice, in one short either/or question: "
+                "pick the thread above back up, or hear what is waiting. Say nothing about WHAT "
+                "is waiting - not the work, not the agent, not the steps: he chooses first, and "
+                "the update is spoken in full the moment he does. Welded behind a greeting that "
+                "asked him something else, the whole walkthrough arrived in the same breath as "
+                "the question and he could answer neither: \"it insanely asks me if I'd like to "
+                "continue with a calendar demo, then in the same breath tells me that a demo for "
+                "a feature an agent has been working on in the background is ready for my review, "
+                "and moreover, it just goes straight into the detailed information about that "
+                "feature.\"")
     if over:
         # The conversation is done - he closed it, or real time has passed - but the work is
         # not, and the work is what the greeting is about. The stale exchange stays out of the
