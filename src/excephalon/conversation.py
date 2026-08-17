@@ -245,6 +245,24 @@ class _PastedReportGate:
 # gate drops is dropped from the kept reply too (and from a non-streamed one wholesale).
 _PASTED_LINE = re.compile(r"(?m)^[ \t]*>[^\n]*\n?")
 
+_SMALL_WORDS = frozenset(("this", "that", "with", "your", "here", "there", "still", "back",
+                          "ready", "look", "open", "click", "when", "what", "have"))
+
+
+def _content_words(text):
+    return {word for word in re.findall(r"[a-z]+", str(text).lower())
+            if len(word) >= 4 and word not in _SMALL_WORDS}
+
+
+def _retells(opening, news):
+    """Does this greeting already SAY the news it is about to precede? The brain is told not to
+    name what is waiting, and named it anyway: "Agent naming is still waiting for your verdict -
+    ready to look at it?" welded straight onto a walkthrough opening "Agent naming is waiting
+    for your verdict" - the same sentence twice in one message ("it repeats ... twice in a row
+    like an insane person"). The news is the authoritative copy; a greeting that paraphrases it
+    is the redundant one, and a first line is a first line or nothing."""
+    return len(_content_words(opening) & _content_words(news)) >= 3
+
 
 def _without_pasted_report(said):
     kept = _PASTED_LINE.sub("", said)
@@ -701,6 +719,10 @@ class Conversation:
         # for seven minutes, surfacing after he had approved the very demo it invited him to
         # look at ("this message makes no sense. why was this sent?").
         opening, self._opening = self._opening, ""
+        if opening and _retells(opening, said):
+            self._console.evidence(f"(opening dropped - it retells the news it precedes: "
+                                   f"{opening})")
+            opening = ""
         if opening:
             said = f"{opening}\n\n{said}"
         self._console.heads_up(said)

@@ -76,8 +76,9 @@ def bare_path(target):
     return path[1:] if re.match(r"/[A-Za-z]:[\\/]", path) else path
 
 # Excephalon writes these inside sentences, so the full stop after a filename is the sentence's and
-# the bracket around an address is the sentence's too.
-_LEADING, _TRAILING = "\"'<([{", ".,;:!?\"'>)]}"
+# the bracket around an address is the sentence's too. The backtick is an agent's code-formatting
+# glyph: print markup, never part of the name it wraps.
+_LEADING, _TRAILING = "\"'<([{`", ".,;:!?\"'>)]}`"
 
 
 def link_in(word):
@@ -258,6 +259,10 @@ def as_spoken(text):
     # dropped ("▶" is a button glyph, not a word). Before any splitting, because the label holds
     # spaces and the construct read piecewise is the address read raw.
     text = _MARKDOWN.sub(lambda found: _spoken_label(found["label"]), text)
+    # A backtick is code formatting an agent writes; spoken, the voice rendered it as a syllable
+    # of its own ("it pronounced the backtick like some Chinese word"). The name inside is still
+    # said - the glyph alone is dropped.
+    text = text.replace("`", "")
     # An em- or en-dash glued to an address ("...5210/—drag the notes") rides inside the matched
     # word, and the voice read the raw address out with "drag" welded on. The dashes are the
     # sentence's, never the address's, so they get their own space before words are judged - the

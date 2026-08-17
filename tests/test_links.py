@@ -352,3 +352,12 @@ def test_a_markdown_link_mid_sentence_keeps_the_words_around_it():
 
     assert [p["text"] for p in parts] == ["Open ", "the demo", " and click around."]
     assert [p["link"] for p in parts] == ["", "http://localhost:5599/x", ""]
+
+
+def test_backticks_are_print_formatting_never_speech():
+    # "it pronounced the backtick like some Chinese word" - an agent's code-formatting glyph
+    # reached the voice raw. The name inside is still said; the glyph alone is dropped - and it
+    # never hides a link either.
+    assert as_spoken("names like `highdeas-scrub-tracking` instead of task titles.") == \
+        "names like highdeas-scrub-tracking instead of task titles."
+    assert link_in("`localhost:5200`") == "localhost:5200"

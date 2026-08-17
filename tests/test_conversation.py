@@ -2291,3 +2291,24 @@ def test_a_held_update_about_other_work_does_not_ride_his_reply_mid_review():
     assert "spinner" not in reply
     assert [getattr(h, "about", None) for h in convo._waiting] == ["spinner"]
     convo.turn()
+
+
+def test_a_greeting_that_retells_the_news_is_dropped_for_the_news_itself():
+    # The brain was told not to name the waiting news and named it anyway: "Agent naming is
+    # still waiting for your verdict-ready to look at it?" welded straight onto a walkthrough
+    # opening "Agent naming is waiting for your verdict" - the same sentence twice in one
+    # message ("it repeats ... twice in a row like an insane person"). The news is the
+    # authoritative copy; the paraphrase of it is not a greeting.
+    outbox = Outbox()
+    outbox.push("Agent naming is waiting for your verdict - names now get the project prefix.",
+                about="namer")
+    tts = FakeTTS()
+    convo = Conversation(
+        FakeSTT(["goodbye entity"]), FakeBrain(), tts, outbox=outbox,
+        opening="Back with you. Agent naming is still waiting for your verdict.")
+
+    convo.turn()
+
+    said = tts.spoken[0]
+    assert said.count("waiting for your verdict") == 1
+    assert "Back with you" not in said  # the retelling greeting was dropped whole
