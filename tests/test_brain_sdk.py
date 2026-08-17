@@ -81,6 +81,79 @@ def test_a_remember_false_turn_stays_out_of_the_recent_window():
     assert "HEARTBEAT poll" not in carried  # the poll didn't enter the carried-forward memory
 
 
+class _Echoing:
+    """A session that answers, and keeps every prompt it was asked."""
+
+    def __init__(self, options):
+        self.asked = []
+        self.last_context_tokens = 0
+
+    def ask(self, message, on_text=None):
+        self.asked.append(message)
+        return "sure"
+
+    def close(self):
+        pass
+
+
+def test_a_draft_that_was_never_spoken_is_taken_back_on_the_next_ask():
+    # Composing is not delivering, and the live session cannot tell the difference: every line it
+    # writes sits in its own history, where the only reading available is that it was said. The
+    # app throws finished lines away routinely - a narration that claimed unlanded work was live,
+    # one the deadline gave up waiting for, a greeting `unfit` refused - and each one left the
+    # model holding a sentence he never heard. Worse where it counts: a draft dropped FOR a plain
+    # notice leaves it holding the draft and hearing the notice, which is "it repeats it twice in
+    # a row like an insane person" manufactured inside one turn's memory.
+    sessions = []
+    brain = SdkBrain(session_factory=lambda options: sessions.append(_Echoing(options)) or sessions[-1])
+
+    brain.retract("The spinner fix is live in Highdeas now.")
+    brain.respond("how's it going")
+
+    [asked] = sessions[-1].asked
+    assert "The spinner fix is live in Highdeas now." in asked
+    assert "never reached the user" in asked
+    assert asked.endswith("how's it going")
+
+
+def test_a_retraction_is_made_once_and_not_again():
+    sessions = []
+    brain = SdkBrain(session_factory=lambda options: sessions.append(_Echoing(options)) or sessions[-1])
+
+    brain.retract("a line nobody heard")
+    brain.respond("first")
+    brain.respond("second")
+
+    first, second = sessions[-1].asked
+    assert "a line nobody heard" in first
+    assert "a line nobody heard" not in second  # said once; a standing note would be its own noise
+
+
+def test_what_it_remembers_saying_is_what_actually_sounded():
+    # The window a compaction or a restart rebuilds the conversation from used to be filled at
+    # COMPOSITION. Agent news is composed minutes before it is spoken and sometimes never spoken
+    # at all, so that window carried lines he never heard across the reset - and the model went on
+    # reasoning from them. It is filled from the delivery now, and an app-authored turn has no
+    # words of his in front of it, because he did not ask for it.
+    brain = SdkBrain(session_factory=_Echoing, user="Ada")
+
+    brain.spoke("The drive link is fixed - want to look?")
+
+    assert brain._recent[-1] == (None, "The drive link is fixed - want to look?")
+    assert "Ada:" not in brain._render_recent()
+    assert "You: The drive link is fixed - want to look?" in brain._render_recent()
+
+
+def test_nothing_is_remembered_or_retracted_for_an_empty_line():
+    brain = SdkBrain(session_factory=_Echoing)
+
+    brain.spoke("   ")
+    brain.retract("")
+
+    assert list(brain._recent) == []
+    assert brain._with_retractions("his words") == "his words"
+
+
 def test_a_brain_seeded_with_past_turns_starts_mid_conversation():
     # A restart used to greet them as a stranger five minutes after they'd been mid-task - that is
     # the "breaking the current session" half of their reload ticket. Seeded, the FIRST session opens

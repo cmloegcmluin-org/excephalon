@@ -728,7 +728,22 @@ answered with the door already open - `open_sign_in` pops a terminal at the clau
 the reply matching whether it actually opened, the signing in staying his - never with the
 generic "give me a moment, then ask me again": that was said about an expired sign-in, he
 restarted on that advice, and met the same wall ("Something is broken in Excephalon's head right
-now, even after a restart"). `memory.py` is the profile, what Excephalon has learned, and the lexicon - and `StandingWatch`,
+now, even after a restart"). What it remembers saying is written from the DELIVERY, never from the composing: `spoke`
+records a line once it has actually sounded and `retract` takes back one the app will never
+speak, because composing is not delivering and this app throws finished lines away all the time
+— a narration swallowed as a kick to the agent, one dropped for claiming unlanded work was live,
+one the deadline gave up waiting for, a greeting `unfit` refused, a first line he spoke over,
+news overtaken before its lull came. Every one of those sat in the session's own history, where
+the only reading available is that it was said, and rode the carried window across a compaction
+or a restart as something it had told him. The sharp end is the duplicate class from the inside:
+a draft dropped FOR a plain notice leaves it holding the draft AND hearing the notice, which is
+"it repeats it twice in a row like an insane person" manufactured inside one turn's memory. So
+every compose-and-maybe-discard path asks with `remember=False`, the retraction rides the next
+ask once (`RETRACTED_NOTICE`), and an app-authored turn carries no words of his in front of it in
+the carried window, because he did not ask for it. This is the unwritten-lines ledger's other
+half: that one tells the brain about lines the app SPOKE and it did not write; this one tells it
+about lines it WROTE and the app did not speak.
+`memory.py` is the profile, what Excephalon has learned, and the lexicon - and `StandingWatch`,
 which is why none of it can go stale again: every turn it re-reads his standing context, compares
 it whole against what the brain has been told, and puts whatever MOVED in front of the brain,
 then recomposes the persona so the next session starts from the current world. Nothing in it names

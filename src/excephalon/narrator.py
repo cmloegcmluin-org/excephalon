@@ -178,6 +178,15 @@ class Narrator:
         # same finished turn is presentation news while building, wrap-up news while landing.
         self._stage_of = stage_of or (lambda agent: None)
 
+    def _retract(self, draft):
+        """Take a composed line back off the brain's own record - it will never be spoken.
+
+        Guarded, because a brain fake need not carry the method; a retraction that cannot be made
+        must never be what stops the news."""
+        take_back = getattr(self._brain, "retract", None)
+        if take_back is not None and str(draft or "").strip():
+            take_back(draft)
+
     def tell(self, kind, agent, report):
         """Narrate one event. Returns at once; the composed line lands in the outbox when ready.
 
@@ -211,17 +220,26 @@ class Narrator:
                 return True
 
         def compose():
+            # NOT remembered as a turn of the conversation: composing is not delivering, and this
+            # is the one place in the app that routinely throws a finished line away - swallowed
+            # as a kick to the agent, dropped for over-claiming, beaten by the deadline. Carried
+            # into the window that survives a compaction or a restart, every one of those drafts
+            # came back as something the model believed it had told him. What it actually said is
+            # written from the delivery instead (SdkBrain.spoke), and what it wrote and nobody
+            # heard is taken back (SdkBrain.retract).
+            said = ""
             try:
-                said = self._brain.respond(prompt, remember=True)
+                drafted = self._brain.respond(prompt, remember=False)
             except Exception:
-                said = ""
+                drafted = ""
             else:
-                stripped = _HANDLED_LEAD.sub("", said.strip())
-                if said.strip() and not stripped:
+                stripped = _HANDLED_LEAD.sub("", drafted.strip())
+                if drafted.strip() and not stripped:
                     # The brain kicked the agent onward itself; there is no news to deliver.
                     # Claimed, so a timed-out waiter doesn't ship a notice about it either way -
                     # composing finished in time or it didn't, and the brain chose silence.
                     take()
+                    self._retract(drafted)
                     composed.set()
                     return
                 said = stripped
@@ -229,6 +247,7 @@ class Narrator:
                 if said.strip() and _claims_deployed(said, stage):
                     # It said the work is out there when it is not. The plain notice carries the
                     # news without the claim; a sentence he would act on must not be a guess.
+                    self._retract(said)
                     self._outbox.push(notice(agent, report), about=agent, listed=listed, kind=kind)
                 elif said.strip():
                     self._outbox.push(said.strip(), about=agent, composed=True, listed=listed,
@@ -237,6 +256,11 @@ class Narrator:
                     # The brain could not answer; the capped plain notice still carries the news,
                     # marked app-authored so the ledger reads it back to the brain next turn.
                     self._outbox.push(notice(agent, report), about=agent, listed=listed, kind=kind)
+            else:
+                # The deadline shipped the plain notice while this was still being written. The
+                # late answer is dropped - and taken back, or the model holds a sentence he never
+                # heard beside the notice he did, which reads as having said it twice.
+                self._retract(said)
             composed.set()
 
         threading.Thread(target=compose, daemon=True).start()

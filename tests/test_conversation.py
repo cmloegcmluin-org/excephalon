@@ -690,6 +690,83 @@ def test_a_delivery_that_never_began_sounding_is_still_owed():
     assert any("fixer: the drive link is fixed" in line for line in tts.spoken)
 
 
+class RememberingBrain(FakeBrain):
+    """A brain that keeps its own record of what it said and what it took back."""
+
+    def __init__(self):
+        super().__init__()
+        self.said = []
+        self.retracted = []
+
+    def spoke(self, text):
+        self.said.append(str(text))
+
+    def retract(self, draft):
+        self.retracted.append(str(draft))
+
+
+def test_its_own_news_enters_its_memory_only_once_he_has_heard_it():
+    # Agent news is composed minutes before it is spoken, and the composing call used to write the
+    # model's memory then and there. So the window a compaction or a restart rebuilds from carried
+    # lines he had never heard, and the model reasoned from them as things it had told him. It is
+    # written from the delivery now.
+    outbox = Outbox()
+    outbox.push("The drive link is fixed.", about="fixer", composed=True)
+    brain = RememberingBrain()
+    convo = Conversation(FakeSTT(["what time is it"]), brain, FakeTTS(), outbox=outbox)
+
+    convo.turn()
+
+    assert brain.said == ["The drive link is fixed."]
+
+
+def test_a_line_overtaken_before_it_was_ever_spoken_is_taken_back():
+    # Newer news about the same agent replaces the older, which is right - but the older sentence
+    # was the model's own and is still sitting in its session history, where the only reading is
+    # that it was said. Holding the overtaken line AND speaking the newer one is the same news
+    # twice from the inside.
+    outbox = Outbox()
+    outbox.push("The drive work is being built.", about="fixer", composed=True)
+    outbox.push("The drive work is ready for your eyes.", about="fixer", composed=True)
+    brain = RememberingBrain()
+    convo = Conversation(FakeSTT(["what time is it"]), brain, FakeTTS(), outbox=outbox)
+
+    convo.turn()
+
+    assert brain.retracted == ["The drive work is being built."]
+    assert brain.said == ["The drive work is ready for your eyes."]
+
+
+def test_a_first_line_he_never_heard_is_taken_back_rather_than_remembered():
+    # A first line is a first line or nothing: he spoke before it could be said, so it is dropped.
+    # Remembered anyway, a welcome nobody heard came back after the next restart as the line the
+    # model believed it had opened with.
+    class TalkingSTT(FakeSTT):
+        def is_mid_utterance(self):
+            return True  # he is already speaking, so nothing unprompted may break in
+
+    brain = RememberingBrain()
+    convo = Conversation(TalkingSTT(["what time is it"]), brain, FakeTTS(), outbox=Outbox(),
+                         opening="Back with you - where were we?")
+
+    convo.turn()
+
+    assert brain.retracted == ["Back with you - where were we?"]
+    assert brain.said == []
+
+
+def test_a_first_line_that_did_sound_is_remembered_as_said():
+    outbox = Outbox()
+    outbox.push("The drive link is fixed.", about="fixer", composed=True)
+    brain = RememberingBrain()
+    convo = Conversation(FakeSTT(["what time is it"]), brain, FakeTTS(), outbox=outbox,
+                         opening="Back with you.")
+
+    convo.turn()  # the opening rides the front of the one held update
+
+    assert "Back with you." in brain.said
+
+
 def test_a_mouth_that_receipts_its_own_silence_is_believed(tmp_path):
     # The gap the loop could not see. Its own interrupt was never set, so every check it makes
     # says the line went out - but the voice knows better: a barge-in landed while the engine was
