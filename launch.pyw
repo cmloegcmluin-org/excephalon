@@ -90,11 +90,38 @@ def failure_message(exc, log=None):
     return "\n\n".join(said)
 
 
+def name_this_process():
+    """Leave the shortcut an interpreter that says "Excephalon" next time.
+
+    Windows takes what it shows about a process from the file it was started
+    from - the Details tab's name, the Processes tab's description, the icon
+    beside it - so a plain pythonw.exe puts Excephalon in the task list as one
+    more anonymous "Python", beside every other Python app on the machine. That
+    costs nothing until something strands a process, and then the task list is
+    the only way back and cannot say which row is safe to end.
+
+    This process cannot be named on the way in: writing the copy takes the very
+    interpreter being named. So each run makes it for the run after and the
+    shortcut points at it once it exists.
+
+    Wrapped like everything else above it: naming a process must never become
+    the thing that stops the app from starting.
+    """
+    try:
+        from app_support.process_identity import ProcessNamer
+
+        ProcessNamer("Excephalon", icon=REPO / "assets" / "excephalon.ico").prepare_launcher(
+            "Excephalon")
+    except Exception:
+        pass
+
+
 def run(argv=(), *, enter=None, log=FAILURE_LOG, tell=show):
     """Start the app in its window and answer with an exit code. `enter` and `tell` are injected
     so the reporting can be exercised without launching anything or putting a box on a screen."""
     if enter is None:
         sys.path.insert(0, str(REPO / "src"))  # a checkout with no editable install still runs
+        name_this_process()
     try:
         if enter is None:
             from excephalon.__main__ import main as enter
