@@ -23,6 +23,13 @@ class Transcript:
         self._last_day = None  # the date the last line was written under, to mark day rollovers
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
+    def ensure(self):
+        """Create the file now, empty, if nothing is there yet - so a reader that lists the folder
+        of logs sees it before the first line is written. An agent's tab is drawn one per *.log, so
+        this is what puts the tab there the instant the agent is desked, rather than a beat later
+        when its first line lands."""
+        self.path.touch(exist_ok=True)
+
     def write(self, text, *, prefix=""):
         # The date lives in the filename and in a header written once per day; the lines themselves
         # carry only the time, and a fresh header marks a session that runs past midnight.

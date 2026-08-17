@@ -322,6 +322,17 @@ def test_the_roster_on_disk_says_who_is_live_and_what_they_are_doing(tmp_path):
     desk.close()
 
 
+def test_a_started_agents_log_exists_at_once_so_its_tab_is_there_to_navigate_to(tmp_path):
+    # The Projects-tab robot goes green on the name start() hands back, and a green robot is a
+    # promise the agent's log is there to open - the Agents tab is drawn one tab per *.log. So the
+    # log FILE must exist the instant start() returns, not a beat later off the work thread, which
+    # raced the click and all but always lost (the log was missing right after start() in 19 of 20
+    # starts, measured), turning a task green before its tab had been drawn.
+    desk, _, _ = _desk(log_dir=tmp_path)
+    desk.start("cap", "/tmp/wt", "live captions in the window")
+    assert (tmp_path / "cap.log").exists()
+
+
 def test_every_exchange_is_written_to_a_timestamped_per_agent_log(tmp_path):
     # "still no timestamps in the logs": the tailable record of what Excephalon and an agent said
     # to each other, stamped, written by the desk itself as it happens - not left to the brain to
