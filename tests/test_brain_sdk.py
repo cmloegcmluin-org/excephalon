@@ -96,6 +96,60 @@ class _Echoing:
         pass
 
 
+def test_an_ask_busy_with_tool_calls_is_not_shed_as_a_wedge():
+    # The shed exists for a stream that has ALREADY died without raising. Bounded on elapsed time
+    # instead, it also killed the asks that were doing real work: reading his calendar is minutes
+    # of tool calls with no words in them, and the app declared the session dead mid-errand. Every
+    # message the model sends resets the clock, so only silence is read as death.
+    import time as _time
+
+    class Working:
+        def __init__(self, options):
+            self.last_context_tokens = 0
+
+        def ask(self, message, on_message=None, on_text=None):
+            for _ in range(8):  # eight round-trips, each well inside the quiet bound
+                _time.sleep(0.02)
+                on_message("a tool call")
+            return "You've got three things today."
+
+        def close(self):
+            raise AssertionError("a working session must never be shed")
+
+    brain = SdkBrain(session_factory=Working)
+
+    assert brain.respond("walk me through my day", deadline=0.1) == "You've got three things today."
+
+
+def test_a_session_that_says_nothing_at_all_is_still_shed():
+    # The other half of the same rule: a stream that sends NOTHING - no words, no tool calls - has
+    # died without raising, and one of those held the brain's lock for a whole evening. Silence is
+    # still the test, and the session is still let go.
+    import threading as _threading
+
+    let_go = _threading.Event()
+    built, closed = [], []
+
+    class Dead:
+        def __init__(self, options):
+            built.append(True)
+            self.last_context_tokens = 0
+
+        def ask(self, message, on_message=None, on_text=None):
+            let_go.wait(2.0)
+            return "an answer at last"
+
+        def close(self):
+            closed.append(True)
+            let_go.set()
+
+    brain = SdkBrain(session_factory=Dead)
+
+    assert brain.respond("ship it", deadline=0.1) == "an answer at last"
+    assert closed        # the silent session was let go rather than waited on
+    assert len(built) == 2  # ...and the answer came from the fresh one built in its place
+
+
 def test_a_draft_that_was_never_spoken_is_taken_back_on_the_next_ask():
     # Composing is not delivering, and the live session cannot tell the difference: every line it
     # writes sits in its own history, where the only reading available is that it was said. The

@@ -2568,6 +2568,32 @@ def test_a_reply_still_arriving_is_never_cut_off_by_that_bound():
     assert not turn.error
 
 
+def test_a_turn_busy_with_his_own_errand_is_never_mistaken_for_a_wedge():
+    # "Can we go through a demo of your ability to manage my day based on a calendar that you've
+    # prepared." Ninety seconds later: "Something's broken in my head." Nothing was broken - it
+    # was reading his calendar, which is minutes of tool calls and not one word until the answer.
+    # Measured on WORDS, doing what he asked looked exactly like having died. Every message the
+    # model sends is the turn moving, so only real silence ends the wait.
+    clock = [0.0]
+    tts = StreamingTTS()
+
+    class ReadingHisCalendar(StreamingBrain):
+        def respond(self, utterance, *, on_text=None, on_activity=None):
+            for _ in range(6):  # six tool round-trips, 20s apart, no words at all
+                clock[0] += 20.0
+                on_activity("a tool call and its result")
+            on_text("You've got three things today.")
+            return "You've got three things today."
+
+    convo = Conversation(FakeSTT(["walk me through my day"]), ReadingHisCalendar(""), tts,
+                         answer_within=30.0, clock=lambda: clock[0], sleep=lambda s: None)
+
+    turn = convo.turn()
+
+    assert turn.said == "You've got three things today."
+    assert not turn.error
+
+
 def test_a_reply_that_stops_part_way_ends_the_wait_like_any_other_silence():
     # "I give my approval for a feature for the 4th time and Excephalon is still not responding
     # at all" - measured on total silence, the bound never fired: the brain had written one

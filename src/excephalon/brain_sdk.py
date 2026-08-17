@@ -29,7 +29,9 @@ facts from older turns are preserved separately by the memory system, not here.
 The async plumbing lives in SdkSession; SdkBrain just supplies the options and the compaction policy.
 """
 
+import inspect
 import threading
+import time
 from collections import deque
 
 from claude_agent_sdk import ClaudeAgentOptions
@@ -40,12 +42,21 @@ from excephalon.models import FAMILIES
 from excephalon.sdk_session import BrainUnavailable, SdkSession
 
 
-# How long one ask may sit unanswered before the session is declared dead and shed. Generous -
-# real turns think for under half a minute - because a false positive throws away a working
-# session mid-answer, while the failure this bounds is a stream that has ALREADY died without
-# raising: one such hang held the brain's lock from 21:24 one evening, and everything after -
-# the merged report, a direct question at 21:46, every later submission - waited on it forever.
+# How long one ask may go with NOTHING AT ALL arriving from the model before the session is
+# declared dead and shed. Not how long the ask may take: a turn that goes to his calendar or his
+# tasks is minutes of real work, and every second of it arrives as messages. Measured as a total
+# instead, a turn doing exactly what he asked was indistinguishable from one that had died, and
+# the app killed the live one - "Can we go through a demo of your ability to manage my day based
+# on a calendar that you've prepared" was answered, ninety seconds later, with the broken-head
+# line. What this bounds is a stream that has ALREADY died without raising: one such hang held
+# the brain's lock from 21:24 one evening, and everything after - the merged report, a direct
+# question at 21:46, every later submission - waited on it forever. A dead stream sends nothing,
+# so silence is the test and work is never mistaken for it.
 RESPOND_DEADLINE = 180.0
+
+# How often the wait wakes to check whether anything has arrived. Short enough that a genuinely
+# dead stream is still caught within a breath of its deadline.
+_QUIET_CHECK = 1.0
 
 
 def _wedge_evidence():
@@ -228,6 +239,15 @@ def _is_usage_limit(text):
     return any(sign in low for sign in _USAGE_LIMIT_SIGNS)
 
 
+def _takes(call, keyword):
+    """Whether `call` accepts this keyword - asked rather than tried, so a TypeError raised from
+    inside the call is never mistaken for the wrong signature."""
+    try:
+        return keyword in inspect.signature(call).parameters
+    except (TypeError, ValueError):
+        return False
+
+
 def _make_options(persona, model, actions=None):
     # Approvals are bypassed because there is nowhere to approve: this is a spoken conversation with
     # no terminal in front of it, so a tool waiting on a yes/no would simply hang forever. The
@@ -324,17 +344,21 @@ class SdkBrain:
         if self._session is not None:
             self._session.interrupt()
 
-    def respond(self, utterance, *, remember=True, on_text=None, deadline=RESPOND_DEADLINE):
+    def respond(self, utterance, *, remember=True, on_text=None, on_activity=None,
+                deadline=RESPOND_DEADLINE):
         """Ask the brain. `on_text` receives each user-facing text delta as the model writes it -
-        the feed a streaming voice speaks from. `remember=False` keeps a background exchange out
-        of the carried-forward recent-turns window.
+        the feed a streaming voice speaks from. `on_activity` receives every message the model
+        sends, text or not: it is the proof-of-life a turn spent inside a long tool call has, and
+        what keeps a working turn from being mistaken for a dead one. `remember=False` keeps a
+        background exchange out of the carried-forward recent-turns window.
 
         Bounded twice over, because a stream can die without ever raising and one that did held
         the whole evening hostage: a turn that cannot even ACQUIRE the one-session lock within
         `deadline` closes the session out from under the stuck ask - which makes that ask raise
-        in its own thread and free the lock - and a turn whose own ask answers nothing within
-        `deadline` sheds the session the same way and fails fast, so the loop lives to speak an
-        error instead of sitting at "(thinking…)" forever.
+        in its own thread and free the lock - and a turn whose ask goes QUIET for `deadline`
+        sheds the session the same way and fails fast, so the loop lives to speak an error
+        instead of sitting at "(thinking…)" forever. Quiet, not slow: a turn that is reading his
+        calendar is minutes of real work arriving as messages the whole time.
 
         And when even the shed does not free the lock - the holder is stuck somewhere no session
         close reaches - the lock itself is ABANDONED: the stranded thread keeps the old object,
@@ -354,7 +378,7 @@ class SdkBrain:
                 self._compact()
             utterance = self._with_retractions(utterance)
             try:
-                reply = self._bounded_ask(utterance, on_text, deadline)
+                reply = self._bounded_ask(utterance, on_text, deadline, on_activity)
             except Exception:
                 # A barge-in aborts the stream too; that's a cancel, not a wedged session, so don't
                 # retry - re-asking would re-run the very work we just cancelled.
@@ -363,7 +387,7 @@ class SdkBrain:
                 # Otherwise the session may be wedged (a dropped connection strands every later turn
                 # as a "glitch"). Rebuild it and try once more; only give up if that also fails.
                 self._reconnect()
-                reply = self._bounded_ask(utterance, on_text, deadline)
+                reply = self._bounded_ask(utterance, on_text, deadline, on_activity)
             if self._interrupting.is_set():
                 raise BrainInterrupted  # a reply may have landed, but it was cut off - drop it unspoken
             if _is_usage_limit(reply):
@@ -371,7 +395,7 @@ class SdkBrain:
                 # try once more: a fresh session recovers the moment usage is back, instead of
                 # parroting the notice forever. If still gone, the retry says so once - not in a loop.
                 self._reconnect()
-                reply = self._bounded_ask(utterance, on_text, deadline)
+                reply = self._bounded_ask(utterance, on_text, deadline, on_activity)
             self._observe(self._session.last_context_tokens)
             if remember:
                 self._recent.append((utterance, reply))
@@ -391,26 +415,45 @@ class SdkBrain:
         return RETRACTED_NOTICE.format(
             lines="\n".join(f"- {draft}" for draft in drafts)) + utterance
 
-    def _bounded_ask(self, utterance, on_text, deadline):
-        """One ask that cannot hang: past the deadline the session is closed - the stranded ask
-        raises inside its worker and is dropped - and the caller sees the wedge as an exception,
-        which its own retry-once path already knows how to handle."""
+    def _bounded_ask(self, utterance, on_text, deadline, on_activity=None):
+        """One ask that cannot hang: once it has gone quiet for `deadline` the session is closed -
+        the stranded ask raises inside its worker and is dropped - and the caller sees the wedge as
+        an exception, which its own retry-once path already knows how to handle.
+
+        QUIET, not slow. Bounded on elapsed time instead, an ask doing exactly what he asked for
+        was indistinguishable from one that had died: a turn that goes to his calendar or his
+        tasks spends minutes in tool calls, and the app killed it and told him something was
+        broken in its head. Every message the model sends is proof it is alive - text, a tool
+        call, a tool's result - so the clock is reset by any of them, and only genuine silence
+        ends the wait."""
         session = self._live_session()
         outcome = {}
         answered = threading.Event()
+        stirred = [time.monotonic()]
+
+        def alive(message):
+            stirred[0] = time.monotonic()
+            if on_activity is not None:
+                on_activity(message)
+
+        # A session that cannot report its messages simply does not; the wait then falls back to
+        # what it always was, bounded on total silence with nothing to reset it.
+        watched = {"on_message": alive} if _takes(session.ask, "on_message") else {}
 
         def work():
             try:
-                outcome["reply"] = session.ask(utterance, on_text=on_text)
+                outcome["reply"] = session.ask(utterance, on_text=on_text, **watched)
             except BaseException as exc:
                 outcome["raised"] = exc
             finally:
                 answered.set()
 
         threading.Thread(target=work, daemon=True).start()
-        if not answered.wait(deadline):
-            self._shed(session)
-            raise _AskWedged(f"no answer in {deadline:.0f}s - the session was shed")
+        while not answered.wait(min(_QUIET_CHECK, deadline)):
+            if time.monotonic() - stirred[0] > deadline:
+                self._shed(session)
+                raise _AskWedged(f"nothing from the model in {deadline:.0f}s - the session "
+                                 "was shed")
         if "raised" in outcome:
             raise outcome["raised"]
         return outcome["reply"]
