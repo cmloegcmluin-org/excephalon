@@ -249,7 +249,11 @@ FIRST delivery whatever its shape — the roll call, or the lone held update, wh
 exactly one piece of news once left it behind for: the welcome sat pending for seven minutes and
 surfaced inviting him to look at a demo he had already approved ("this message makes no sense") —
 and a first line that misses its moment dies the instant he speaks, because it is a first line or
-nothing. What landed is offered
+nothing. A greeting that RETELLS the news it precedes is dropped for the news itself
+(`_retells`, shared content words): told not to name the waiting news, the brain named it anyway,
+and "Agent naming is still waiting for your verdict" welded onto a walkthrough opening "Agent
+naming is waiting for your verdict" reached him as the same sentence twice ("like an insane
+person"). What landed is offered
 to him only if he could NOTICE it: the same note warns that most commits are internal machinery,
 after the brain turned two of them into "a voice safety layer caught some things before they
 reached you... you're still driving", which meant nothing to him — but work the desk's briefing
@@ -463,7 +467,9 @@ character and stays. A markdown link - `[label](url)`, the shape every coding ag
 lifted out whole before any word-splitting (its label holds spaces), drawn as its label opening
 its address, and SPOKEN as the label with the glyphs dropped: unparsed, the launcher link drew
 as plain text and was read aloud character by character ("it's still sending links that aren't
-clickable, and still trying to read them aloud"). `link_parts` judges each LINE on its own: split on spaces alone, a newline
+clickable, and still trying to read them aloud"); a backtick is code formatting, stripped from
+speech whole ("it pronounced the backtick like some Chinese word") and stepped over when a link
+is recognized. `link_parts` judges each LINE on its own: split on spaces alone, a newline
 stayed inside a word, and the address ending a numbered demo step arrived welded to the next
 line's "2." - unmatchable, so the one address the message existed to hand over was drawn as
 plain text ("link not rendering"). A path wearing the `file://` scheme an agent writes for Claude's own app is
