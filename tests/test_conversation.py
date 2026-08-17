@@ -2401,3 +2401,63 @@ def test_a_review_nobody_ever_ruled_on_stops_holding_the_fleet():
 
     assert any("naming layer" in line for line in tts.spoken)
     convo.turn()
+
+
+def test_his_wait_is_bounded_even_when_the_brain_never_answers():
+    # "it seems to be stuck again. I said ship it then it never said anything" - the turn sat
+    # twelve minutes with no word. The brain bounds each of its own asks, but one turn can spend
+    # several (lock, shed, reconnect, ask again); HIS silence is bounded here, and the turn's
+    # existing brain-failure path keeps the update owed and says a plain line.
+    import threading as _threading
+
+    let_go = _threading.Event()
+    clock = [0.0]
+
+    class Hanging(FakeBrain):
+        def respond(self, utterance):
+            super().respond(utterance)
+            let_go.wait(2.0)
+            return "far too late to be an answer"
+
+        def interrupt(self):
+            let_go.set()
+
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["ship it", "goodbye entity"]), Hanging(), tts,
+                         answer_within=30.0, clock=lambda: clock[0], sleep=lambda s: None)
+    original = convo._interrupted
+
+    def tick():  # the wall clock runs while the brain does not
+        clock[0] += 20.0
+        return original()
+
+    convo._interrupted = tick
+
+    turn = convo.turn()
+
+    assert turn.error is True
+    assert tts.spoken and tts.spoken[0] == convo.error_reply  # he hears something, not silence
+    convo._interrupted = original
+    convo.turn()
+
+
+def test_a_reply_already_sounding_is_never_cut_off_by_that_bound():
+    # The bound is on SILENCE, not on the turn: a brain that is writing is a brain doing its job,
+    # however long the whole answer takes.
+    clock = [0.0]
+    tts = StreamingTTS()
+
+    class SlowButSpeaking(StreamingBrain):
+        def respond(self, utterance, *, on_text=None):
+            on_text("Working on it - ")
+            clock[0] += 500.0  # long past the bound, but it has already said something
+            on_text("here is the answer.")
+            return "Working on it - here is the answer."
+
+    convo = Conversation(FakeSTT(["ship it"]), SlowButSpeaking(""), tts,
+                         answer_within=30.0, clock=lambda: clock[0], sleep=lambda s: None)
+
+    turn = convo.turn()
+
+    assert turn.said == "Working on it - here is the answer."
+    assert not turn.error

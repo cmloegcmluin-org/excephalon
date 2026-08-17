@@ -147,6 +147,13 @@ DEFAULT_INTERRUPT_POLL = 0.05
 # moving on - so the loop never starts a second brain call overlapping a half-cancelled one.
 DEFAULT_CANCEL_WAIT = 10.0
 
+# The longest he may be left in SILENCE after speaking. The brain bounds each of its own asks at
+# 180s, but one turn can spend several - lock, shed, reconnect, ask again - and his turn went
+# twelve minutes with no word at all ("it seems to be stuck again"). This bound is his, not the
+# brain's: past it the turn stops waiting and says so. It only ever fires while nothing has
+# reached the air, so a reply already sounding is never cut off. 0 disables it.
+DEFAULT_ANSWER_WITHIN = 90.0
+
 # After a reply, wait this long before listening again, so they get a beat to read it rather than the
 # mic reopening the instant the voice stops. 0 disables (default; the app turns it on for voice runs).
 DEFAULT_READ_PAUSE = 0.0
@@ -287,6 +294,12 @@ class _ThinkInterrupted(Exception):
     loop goes straight back to listening, with no reply and no error spoken."""
 
 
+class _ThinkTooSlow(Exception):
+    """His wait ran out with nothing said. Deliberately an ordinary exception: the turn's existing
+    brain-failure path already keeps the update owed, records the cause and speaks a plain line -
+    which is exactly what a silent wedge deserves."""
+
+
 def _cause(exc, depth=3):
     """What broke, and what broke underneath that.
 
@@ -402,6 +415,7 @@ class Conversation:
         interrupt_poll=DEFAULT_INTERRUPT_POLL,
         cancel_wait=DEFAULT_CANCEL_WAIT,
         read_pause=DEFAULT_READ_PAUSE,
+        answer_within=DEFAULT_ANSWER_WITHIN,
         dormant_after=DEFAULT_DORMANT_AFTER,
         console=None,
         sleep=time.sleep,
@@ -456,6 +470,7 @@ class Conversation:
         self._interrupt_poll = interrupt_poll
         self._cancel_wait = cancel_wait
         self._read_pause = read_pause  # a beat after a reply so they can read it before listening resumes
+        self._answer_within = answer_within  # how long he may be left in silence before the app speaks
         self._console = console or Console()
         self._sleep = sleep
         self._timings = timings  # --timings: show how long each turn spent thinking vs. speaking
@@ -899,11 +914,18 @@ class Conversation:
         talking = getattr(self._stt, "is_mid_utterance", None)
         return bool(talking and talking())
 
-    def _think(self, heard, on_text=None):
+    def _think(self, heard, on_text=None, silent=None):
         """Ask the brain off the main thread so the interrupt stays answerable the whole time. If
         they barge in while it's thinking, the call is cancelled and `_ThinkInterrupted` is raised
         so the loop drops the turn. Re-raises whatever the brain raised, so the caller's error
-        handling is unchanged. `on_text` streams the reply's text out as it is written."""
+        handling is unchanged. `on_text` streams the reply's text out as it is written.
+
+        And HIS wait is bounded here, whatever the brain is doing underneath. The brain bounds
+        each of its own asks, but it may spend several of them - lock, shed, reconnect, ask
+        again - and a turn of his went twelve minutes with no word at all ("it seems to be stuck
+        again. I said ship it then it never said anything"). The bound is on SILENCE, not on the
+        turn: `silent` answers whether nothing has reached the air yet, so a reply that has begun
+        sounding is never cut off mid-thought."""
         outcome = {}
         done = threading.Event()
 
@@ -919,10 +941,16 @@ class Conversation:
                 done.set()
 
         threading.Thread(target=work, daemon=True).start()
+        started = self._clock()
         while not done.wait(self._interrupt_poll):
             if self._interrupted():  # they cut in - cancel the call and abandon the turn
                 self._cancel_think(done)
                 raise _ThinkInterrupted
+            if (self._answer_within and self._clock() - started > self._answer_within
+                    and (silent is None or silent())):
+                self._cancel_think(done)
+                raise _ThinkTooSlow(f"nothing said in {self._answer_within:.0f}s - the turn "
+                                    "stopped waiting on the brain")
         if "error" in outcome:
             raise outcome["error"]
         return outcome["reply"]
@@ -1069,7 +1097,8 @@ class Conversation:
         think_start = time.monotonic()
         try:
             said = self._think(self._with_system_notes(heard, offered),
-                               on_text=paste.feed if paste is not None else None)
+                               on_text=paste.feed if paste is not None else None,
+                               silent=lambda: not "".join(spoken_parts).strip())
         except _ThinkInterrupted:  # they cut the thinking off - no reply, straight back to listening
             self._keep_for_later(offered)  # nothing was said, so the update is still owed
             self._settle(reply)

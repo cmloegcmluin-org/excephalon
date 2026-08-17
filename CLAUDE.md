@@ -282,7 +282,12 @@ turns with no verdict — a verdict that never got RECORDED once held the whole 
 behind a review nobody could close. A turn of HIS that the brain answers with no words at all is
 asked once more, told what happened (`SILENT_TURN_NOTICE`), and failing that answered in the
 app's own error line: he said "ship it", heard dead air, and waited half an hour for a landing
-report nobody had recorded. His words are read as a PICK only
+report nobody had recorded. His SILENCE is bounded here too (`DEFAULT_ANSWER_WITHIN`), whatever
+the brain is doing underneath: the brain bounds each of its own asks at 180s but one turn can
+spend several — lock, shed, reconnect, ask again — and a turn of his ran twelve minutes with no
+word at all ("it seems to be stuck again. I said ship it then it never said anything"). Bounded
+on the silence, not on the turn: a reply that has begun sounding is never cut off, and the
+brain-failure path it raises into already keeps the held update owed. His words are read as a PICK only
 while a roll call or an offer actually stands - with no list read out, a short sentence that
 happens to contain "one" is his own words, not a choice off a menu he never heard - and a pick
 SPENDS the offer: left standing, the leftover item rode his next, unrelated words ("The ship it
