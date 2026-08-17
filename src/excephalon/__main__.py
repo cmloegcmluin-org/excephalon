@@ -35,6 +35,7 @@ from excephalon.memory import (
     complete_enhancement_anywhere,
     complete_enhancement_by_id,
     compose_persona,
+    enhancement_id,
     lexicon_terms,
     load_learned,
     load_lexicon,
@@ -507,7 +508,11 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
                      # starts, and a number does not drift the way the brain's
                      # retyping of his sentence does.
                      tick_by_id=complete_enhancement_by_id,
-                     tick_anywhere=complete_enhancement_anywhere)
+                     tick_anywhere=complete_enhancement_anywhere,
+                     # And what turns an item's words into that number, at the one
+                     # place every start passes through - the brain's tool and a
+                     # robot click alike.
+                     resolve_item=enhancement_id)
     newsroom["desk"] = desk  # so an event can ask whether its agent is still a going concern
     # The senior layer: engaged only when the brain hands it a stuck agent (ask_foreman), so its
     # bigger model is paid for per snag, never per turn.

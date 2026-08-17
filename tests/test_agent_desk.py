@@ -1881,3 +1881,38 @@ def test_a_tick_that_misses_rides_the_landing_message_rather_than_being_eaten_by
     [landed] = [e for e in events if e[0] == "landed"]
     assert "did not get checked off" in landed[2]  # one message, carrying both facts
     desk.close()
+
+
+def test_every_door_gets_the_items_number_even_a_robot_click(tmp_path):
+    # "Excephalon still failed to check off the task in the Projects tab." The number was being
+    # resolved in the brain's tool alone, so an agent started by a Projects-tab robot click
+    # carried none - and its finished work left the item open exactly as before. The resolution
+    # lives at the desk now, the one place every start passes through.
+    ticked = []
+    logs = tmp_path / "agent-logs"
+    desk, outbox, _ = _desk(log_dir=logs)
+    desk._resolve_item = lambda words: ((136, "Enhancements") if "scroll positions" in words
+                                        else (None, None))
+    desk._complete_enhancement = lambda item, **where: False  # only the number can land it
+    desk._tick_by_id = lambda item_id, **where: ticked.append(item_id) or True
+    # A robot click passes the task's own words and nothing else - no item_id.
+    desk.start("scroll-fix", "/tmp/wt", "tabs should remember their scroll positions",
+               enhancement="tabs should remember their scroll positions")
+    assert _wait_for(lambda: bool(outbox))
+    _approved(desk, "scroll-fix")
+
+    assert desk.retire("scroll-fix") is True
+
+    assert ticked == [136]
+    desk.close()
+
+
+def test_a_start_whose_words_match_no_item_carries_no_number(tmp_path):
+    # Most work is not a listed item, and a number guessed onto it would tick somebody else's ask.
+    desk, outbox, _ = _desk()
+    desk._resolve_item = lambda words: (None, None)
+
+    desk.start("oneoff", "/tmp/wt", "a one-off fix")
+
+    assert desk._desked["oneoff"].item_id is None
+    desk.close()
