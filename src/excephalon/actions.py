@@ -12,6 +12,7 @@ The tools run in-process (an SDK MCP server), so acting is one round trip with n
 every one of them returns in well under a second - the desk does agent work on its own threads.
 """
 
+import asyncio
 import os.path
 import re
 import time
@@ -20,6 +21,7 @@ from pathlib import Path
 from claude_agent_sdk import create_sdk_mcp_server, tool
 
 from excephalon.delivery import DeliveryError
+from excephalon.naming import distill_name
 from excephalon.memory import (PROJECT_PREFIX, append_enhancement, append_learned,
                            complete_enhancement_anywhere, drop_persona_instruction,
                            forget_learned, save_persona_instruction,
@@ -71,16 +73,17 @@ def take_care_spec(project, task_text, *, selves=SELF_NAMES):
 
     A click starts an agent on the task then and there - the deterministic half of "please take care
     of this task". The task's own words are the task and the enhancement it ticks off when the work
-    lands, and the seed of the agent's name; the card's project rides along so the tick lands on the
-    right card - except Excephalon's own card (the Enhancements roadmap), which the desk names by
-    project=None, the same None its own tasks tick against."""
+    lands; the card's project rides along so the tick lands on the right card - except Excephalon's
+    own card (the Enhancements roadmap), which is project=None, the same None its own tasks tick
+    against. The NAME is not decided here: a robot click has no brain in the loop, so the caller
+    hands the task to the namer (see excephalon.naming) rather than slugifying it - "agent names
+    shouldn't be the name of the task with hyphens"."""
     text = (task_text or "").strip()
     if not text:
         return None
     proj = (project or "").strip()
     proj = None if proj.lower() in selves else (proj or None)
-    return {"name": safe_name(text) or "task-agent", "task": text,
-            "enhancement": text, "project": proj}
+    return {"task": text, "enhancement": text, "project": proj}
 
 
 def names_another_app(item, others, selves=SELF_NAMES):
@@ -109,7 +112,7 @@ def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement
                   drop_instruction=drop_persona_instruction,
                   remember_fact=append_learned, forget_fact=forget_learned,
                   resolve=_resolve, prepare=prepare_worktree_for, default_task=DEFAULT_TASK,
-                  other_apps=(), clock=time.strftime):
+                  namer=distill_name, other_apps=(), clock=time.strftime):
     """The action tools, wired to this desk and foreman: (server config for the options, the
     tools themselves).
 
@@ -123,26 +126,36 @@ def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement
           "an item from one of the user's lists, pass that item's exact text so it ticks itself "
           "off when the work lands - and when the item lives on a Projects-tab card rather than "
           "the Enhancements card, pass that card's name as `project` (e.g. 'Highdeas'). Leave "
-          "both out for any other work.",
+          "both out for any other work. You do NOT name the agent: the app distills a short, "
+          "project-prefixed label from the task itself. Pass `name` ONLY when the user asks for a "
+          "specific one ('call it the auto-play fix'); otherwise leave it out.",
           {"path": str, "task": str, "enhancement": str, "project": str, "name": str})
     async def start_agent(args):
         paths = resolve(str(args["path"]))
         if not paths:
             return _say("I couldn't find any sessions to drive there.")
+        task = str(args.get("task") or default_task)
         enhancement = str(args.get("enhancement") or "").strip() or None
         project = str(args.get("project") or "").strip() or None
+        single = len(paths) == 1
         # The name he asked for, when he asked for one: "call it the auto-play fix". Only for a
         # single agent - one name cannot cover a fan-out - and it labels the agent, never the
         # worktree, which is git's to name.
-        asked = safe_name(str(args.get("name") or "")) if len(paths) == 1 else ""
+        asked = safe_name(str(args.get("name") or "")) if single else ""
         started = []
         for path in paths:
             if not Path(path).exists():  # new work means a new worktree, cut from current origin/main
                 prepare(path)
-            name = asked or Path(path).name
-            desk.start(name, path, str(args.get("task") or default_task),
-                       enhancement=enhancement, project=project)
-            started.append(name)
+            if asked:
+                name = asked
+            elif single:
+                # No explicit name for fresh work: the thinking namer reads the task and the project
+                # and distills a short, prefixed label. Run off the event loop (it may reach a
+                # model) so a name can never stall the turn.
+                name = await asyncio.to_thread(namer, task, project)
+            else:
+                name = Path(path).name  # a fan-out re-attaches to existing worktrees, each own name
+            started.append(desk.start(name, path, task, enhancement=enhancement, project=project))
         return _say(f"Started {', '.join(started)} on {desk.running_on()}.")
 
     @tool("rename_agent", "Call a running agent something else - the name the user gives it, used "

@@ -27,6 +27,7 @@ from pathlib import Path
 from excephalon.delivery import LADDER, Delivery, DeliveryError
 from excephalon.memory import PROJECT_PREFIX
 from excephalon.models import DEFAULT_EFFORT, DEFAULT_MODEL, describe
+from excephalon.naming import unique_name
 from excephalon.relay import notice
 from excephalon.steps import SAID, render
 from excephalon.tailing import archive_dir, safe_name
@@ -287,23 +288,53 @@ class AgentDesk:
         self._model, self._effort = DEFAULT_MODEL, DEFAULT_EFFORT
         self._clock = clock
         self._desked = {}
+        # Names a start has settled on but not yet inserted (the agent's session is still
+        # connecting, which happens off the lock so the digest stays snappy). Held so a concurrent
+        # start cannot hand out the same name in that window and clobber the one being born.
+        self._reserved = set()
         self._lock = threading.Lock()
         self._threads = []
 
     def start(self, name, cwd, task, enhancement=None, project=None):
-        """Put a fresh agent on `task` in `cwd`. Returns immediately; the agent's reply arrives in
-        the Outbox when it lands. `enhancement`, when given, is the list item this agent is
-        completing - ticked off its card when the agent is retired - and `project` names the
-        Projects-tab card that item lives on ("Highdeas"), with None meaning his Enhancements card.
+        """Put a fresh agent on `task` in `cwd`. Returns the name the agent was actually given -
+        `name` unless it collided with a running agent or an open tab and had to be bumped. The
+        reply arrives in the Outbox when it lands, so this still returns without waiting on work.
+
+        `enhancement`, when given, is the list item this agent is completing - ticked off its card
+        when the agent is retired - and `project` names the Projects-tab card that item lives on
+        ("Highdeas"), with None meaning his Enhancements card.
+
+        The name is made unique HERE because the caller's namer distills it to a short, project-
+        prefixed label (see excephalon.naming), and short labels collide where the old task-length
+        names never did - a collision on this key used to silently REPLACE a live agent. The
+        session is connected off the lock (a connect takes real time, and holding the lock would
+        stall the digest), so the settled name is RESERVED across that gap.
 
         The standing rule rides along with the task itself - not with every later message, since
         the session keeps it, and repeating it would be most of what the agent's tab is made of."""
-        agent = self._factory(name, cwd, self._decide, model=self._model, effort=self._effort)
         with self._lock:
-            self._desked[name] = _Desked(agent, cwd, task, self._open_log(name),
-                                         model=self._model, effort=self._effort,
-                                         enhancement=enhancement, project=project)
+            name = unique_name(name, self._taken_names())
+            self._reserved.add(name)  # held from now until it is desked, so no concurrent start takes it
+        try:
+            agent = self._factory(name, cwd, self._decide, model=self._model, effort=self._effort)
+            with self._lock:
+                self._desked[name] = _Desked(agent, cwd, task, self._open_log(name),
+                                             model=self._model, effort=self._effort,
+                                             enhancement=enhancement, project=project)
+        finally:
+            with self._lock:
+                self._reserved.discard(name)  # now it lives in _desked, or the start failed
         self._dispatch(name, task + STANDING_RULE + self._law_note())
+        return name
+
+    def _taken_names(self):
+        """Names not free for a newcomer - read under the lock: the agents at the desk, the tabs
+        still open in the log folder (the window draws one per file), and any name a concurrent
+        start has reserved but not yet inserted."""
+        names = set(self._desked) | self._reserved
+        if self._log_dir is not None and self._log_dir.exists():
+            names |= {path.stem for path in self._log_dir.glob("*.log")}
+        return names
 
     def _law_note(self):
         """The machine-wide engineering law, pointed at rather than pasted: one source, no size
