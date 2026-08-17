@@ -936,7 +936,13 @@ class AgentDesk:
         # dead session at a glance.
         if self._log_dir is None:
             return None
-        return Transcript(self._log_dir / f"{name}.log", timefmt="%Y-%m-%d %H:%M:%S")
+        log = Transcript(self._log_dir / f"{name}.log", timefmt="%Y-%m-%d %H:%M:%S")
+        # The file exists from the moment the agent is desked, so its tab is there to open before the
+        # first line lands. The Projects-tab robot goes green on start()'s return, and green is a
+        # promise the log is there to navigate to - written first by the work thread instead, it
+        # raced the click and all but always lost.
+        log.ensure()
+        return log
 
     def _dispatch(self, name, message):
         thread = threading.Thread(target=self._carry, args=(name, message), daemon=True)
