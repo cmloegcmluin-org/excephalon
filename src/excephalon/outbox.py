@@ -8,6 +8,11 @@ until they happen to say something.
 import threading
 from collections import deque
 
+# The kinds that END a work thread from where he sits: it merged, it came back from the landing
+# saying what stopped it, or it died. These are the answers to "did my thing ship?", and they are
+# the one class of news that may never be held back and may never be dropped unspoken.
+CONCLUSIONS = frozenset(("landed", "landing", "died"))
+
 
 class News(str):
     """One thing waiting to be said, and which agent it is about.
@@ -48,9 +53,14 @@ class News(str):
 
     @property
     def concluding(self):
-        """Is this a thread's last word - it landed, or it died? Never held back for anything:
-        holding one is the black hole this project has already sat through once."""
-        return self.kind in ("landed", "died")
+        """Is this a thread's last word - it landed, it did not, or it died? Never held back and
+        never dropped: holding one is the black hole this project has already sat through once.
+
+        A LANDING report counts. It is what an agent says when it was sent to land work he had
+        already approved, so it is the answer to "did my thing ship?" either way - and one of
+        those was thrown away at a boot, so a merged feature was never announced to him at all
+        and he heard about it days later inside a greeting."""
+        return self.kind in CONCLUSIONS
 
     @property
     def alarm(self):
@@ -126,9 +136,15 @@ class Outbox:
                     held["about"] = to
             self._write(kept)
 
-    def drop(self, about):
+    def drop(self, about, keep_conclusions=False):
         """Forget every item about one agent - it is finished with, or the user has moved past it,
         and news about work already closed lands as a surprise rather than an update.
+
+        `keep_conclusions` spares the one class that is never stale: what a thread ENDED as. A
+        boot that found an agent already wrapped up dropped everything it was still owed, which
+        is right for a progress note and was catastrophic for a merge report - the scroll-position
+        fix landed, its report was never spoken because the session closed first, and the next
+        launch threw it away, so he was never told at all.
 
         The queue and the spool are only two of the three places news waits: the conversation
         drains items and holds them in hand for a lull. Those are out of reach from here, so the
@@ -136,13 +152,20 @@ class Outbox:
         hand - without that, a drop cleaned the queue while the stale copy in hand was still
         offered ("surely there's no update for smart grouping. You just sent off the latest
         message to it.")."""
+        def stale(kind, item_about):
+            if item_about != about:
+                return False
+            return not (keep_conclusions and kind in CONCLUSIONS)
+
         with self._lock:
             self._items = deque(item for item in self._items
-                                if getattr(item, "about", None) != about)
+                                if not stale(getattr(item, "kind", ""),
+                                             getattr(item, "about", None)))
             if not self._items:
                 self.arrived.clear()
             self._dropped.add(about)
-            self._write([held for held in self._spooled() if held.get("about") != about])
+            self._write([held for held in self._spooled()
+                         if not stale(held.get("kind", ""), held.get("about"))])
 
     def take_dropped(self):
         """Collect (and clear) the agents dropped since last asked - the holder of drained news

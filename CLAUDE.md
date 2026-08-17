@@ -561,7 +561,10 @@ pestered about"). It records the fleet in
 `runtime/agents.json` and revives it on startup — an agent whose log is already in the archive is
 NOT brought back (the record is written on the way down, so one wrapped up from outside the app
 would otherwise rise from the dead and have its old news re-raised: "this is the third time it's
-pestered me"), each surviving agent resumed by CLI session id, one caught
+pestered me"), and that boot sweep spares what a thread ENDED as (`outbox.CONCLUSIONS`, kept by
+`drop(keep_conclusions=True)`): the scroll-position fix merged, its report was offered at a lull
+he never answered, the session closed with it still owed, and the next launch threw it away — so
+he was never told the feature had shipped and heard it later as a clause inside a greeting, each surviving agent resumed by CLI session id, one caught
 mid-task told to pick back up, one recorded mid-landing told to settle the merge NOW and watch it
 in the foreground (a backgrounded watch once ended the turn, nothing re-engages an idle agent, and
 the merged report never existed). An agent that CRASHES is restarted by the desk itself - a fresh
@@ -618,7 +621,11 @@ name the same way. A tick whose named card misses falls back to whichever card h
 (`complete_enhancement_anywhere`) — but only when exactly ONE does, since ids are per-card and
 #2 exists three times: the brain guessed a project for an item in plain sight on the
 Enhancements card, and "the tool can't find it" reached him ("please fix whatever is wrong with
-it so that it can't find what is in plain sight"). `retire` also REFUSES an agent holding work he has not ruled on -
+it so that it can't find what is in plain sight"). `retire` REFUSES a landing agent whose merge is not a FACT (`entry.landed`, written only where
+the desk asks git): "landing" is the ORDER, and a wrap-up that trusted the stage raced the very
+thread carrying that order out — two seconds after his "ship it" an agent was recorded DELIVERED,
+its Highdeas item ticked off his list and its tab closed, while its work sat unpushed on his
+machine, and he was then twice told the feature had landed and was live. `retire` also REFUSES an agent holding work he has not ruled on -
 a tab was once closed over a finished feature and he met it as a fait accompli ("are you saying
 you delivered a feature without me verifying it first?"), so a verdict is the only state a
 wrap-up is legal from, exactly as it is for the push - and it REFUSES a desked agent whose news
