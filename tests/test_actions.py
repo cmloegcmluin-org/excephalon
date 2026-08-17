@@ -28,7 +28,7 @@ def test_take_care_spec_has_nothing_to_start_for_an_empty_task():
 
 
 class FakeDesk:
-    def __init__(self, known=("gdoc-export",)):
+    def __init__(self, known=("gdoc-export",), number=None):
         self.started = []
         self.item_ids = []
         self.told = []
@@ -39,12 +39,20 @@ class FakeDesk:
         self.renamed = []
         self.presented = []
         self.verdicts = []
+        self.numbered = []  # (enhancement, task) each time a door asked for the item's number
+        self._number = number
         self._known = set(known)
 
     def start(self, name, cwd, task, enhancement=None, project=None, item_id=None):
         self.started.append((name, cwd, task, enhancement, project))
         self.item_ids.append(item_id)
         return name  # the real desk returns the name it settled on (unique); the fake keeps it as-is
+
+    def item_number(self, enhancement, task):
+        # The doors read the item's number off the desk (the one resolver) to put it in the NAME;
+        # the real desk resolves it again for the tick. The fake answers with a canned number.
+        self.numbered.append((enhancement, task))
+        return self._number
 
     def send(self, name, message):
         self.told.append((name, message))
@@ -124,8 +132,8 @@ def test_start_agent_distills_a_name_from_the_task_not_the_worktree_folder(tmp_p
     worktree.mkdir()
     seen = []
 
-    def namer(task, project=None):
-        seen.append((task, project))
+    def namer(task, project=None, item_id=None):
+        seen.append((task, project, item_id))
         return "highdeas-drive-link"
 
     tools = _tools(desk, resolve=lambda target: [str(worktree)], prepare=lambda path: None,
@@ -134,10 +142,35 @@ def test_start_agent_distills_a_name_from_the_task_not_the_worktree_folder(tmp_p
     said = _call(tools["start_agent"], path=str(worktree), task="fix the drive link",
                  project="Highdeas")
 
-    assert seen == [("fix the drive link", "Highdeas")]  # the namer read the task AND the project
+    # The namer read the task, the project AND the number (None here - this task is on no list).
+    assert seen == [("fix the drive link", "Highdeas", None)]
     assert desk.started == [("highdeas-drive-link", str(worktree), "fix the drive link", None,
                              "Highdeas")]
     assert "highdeas-drive-link" in said
+
+
+def test_start_agent_puts_the_items_number_in_the_distilled_name(tmp_path):
+    # The distilled label carries the item's number ("highdeas-7-...") so a tab and the roll call
+    # tie the agent to the exact card item, not just the project. The number is read off the desk -
+    # the one resolver - and handed to the namer; the desk resolves it again for the end tick.
+    desk = FakeDesk(number=7)
+    worktree = tmp_path / "wt-drive"
+    worktree.mkdir()
+    seen = []
+
+    def namer(task, project=None, item_id=None):
+        seen.append((task, project, item_id))
+        return f"highdeas-{item_id}-drive-link"
+
+    tools = _tools(desk, resolve=lambda target: [str(worktree)], prepare=lambda path: None,
+                   namer=namer)
+
+    _call(tools["start_agent"], path=str(worktree), task="fix the drive link",
+          project="Highdeas", enhancement="fix the drive link")
+
+    assert seen == [("fix the drive link", "Highdeas", 7)]  # the number reached the namer
+    assert desk.numbered == [("fix the drive link", "fix the drive link")]  # read off the desk
+    assert desk.started[0][0] == "highdeas-7-drive-link"
 
 
 def test_start_agent_tags_the_agent_with_the_enhancement_it_takes_on(tmp_path):

@@ -149,15 +149,19 @@ def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement
             if asked:
                 name = asked
             elif single:
-                # No explicit name for fresh work: the thinking namer reads the task and the project
-                # and distills a short, prefixed label. Run off the event loop (it may reach a
-                # model) so a name can never stall the turn.
-                name = await asyncio.to_thread(namer, task, project)
+                # No explicit name for fresh work: the thinking namer reads the task, the project
+                # and the item's NUMBER, and distills a short, prefixed label ("highdeas-7-..."),
+                # so a tab and the roll call tie the agent to the exact card item. The number is
+                # read off the desk - the one resolver - and the desk resolves it again for the tick
+                # below. Run the namer off the event loop (it may reach a model) so a name can never
+                # stall the turn.
+                item_id = desk.item_number(enhancement, task)
+                name = await asyncio.to_thread(namer, task, project, item_id)
             else:
                 name = Path(path).name  # a fan-out re-attaches to existing worktrees, each own name
-            # The item's NUMBER is resolved by the desk (agent_desk._item_number), the one
-            # place every start passes through - resolved here instead, a Projects-tab robot
-            # click carried no number and its finished work left the item open.
+            # The item's NUMBER for the TICK is resolved by the desk itself (agent_desk.item_number),
+            # the one place every start passes through - resolved at a door alone, a Projects-tab
+            # robot click carried none and its finished work left the item open.
             started.append(desk.start(name, path, task, enhancement=enhancement, project=project))
         return _say(f"Started {', '.join(started)} on {desk.running_on()}.")
 

@@ -9,10 +9,12 @@ in a sentence.
 A name here is DISTILLED instead. A small, fast model reads the task, understands it, and hands
 back one to three words for it (`AgentNamer`); the project it belongs to is prefixed, so a Highdeas
 task is "highdeas-<words>" and Excephalon's own work is "excephalon-<words>" (SELF_PROJECT, for a
-task with no project card of its own), so the roll call groups by project at a glance. The distillation is the
-one part that can be slow or fail, so it is bounded and ALWAYS has a mechanical fallback - the
-task's own first few meaningful words (`distill_name`). The app never blocks forever on a name, and
-never fails to start an agent because a name could not be thought up.
+task with no project card of its own), so the roll call groups by project at a glance. When the task
+is a numbered item off one of his cards, that number rides between the project and the words -
+"highdeas-7-<words>" - so the label ties the agent to the exact card item at a glance too. The
+distillation is the one part that can be slow or fail, so it is bounded and ALWAYS has a mechanical
+fallback - the task's own first few meaningful words (`distill_name`). The app never blocks forever
+on a name, and never fails to start an agent because a name could not be thought up.
 
 `unique_name` is the other half: distilled names are short enough to collide, and a collision on
 the desk's key silently REPLACED a running agent, so a taken name is bumped rather than reused.
@@ -57,23 +59,27 @@ def _words(phrase):
     return (meaningful or tokens)[:MAX_NAME_WORDS]
 
 
-def compose(project, phrase):
-    """The final agent name: "<project>-<1-3 words>", trimmed to what a filename and a URL segment
-    can carry. A missing or unusable `project` is Excephalon's own work, prefixed "excephalon-"
-    (SELF_PROJECT). Never returns "": an empty phrase still yields the prefix, so an agent always
-    has a name."""
+def compose(project, phrase, item_id=None):
+    """The final agent name: "<project>-<item#>-<1-3 words>", trimmed to what a filename and a URL
+    segment can carry. A missing or unusable `project` is Excephalon's own work, prefixed
+    "excephalon-" (SELF_PROJECT). `item_id`, when the task is a numbered item off one of his cards,
+    rides between the project and the words - so a tab reads "highdeas-7-smart-grouping" and the
+    roll call ties the agent to the exact card item; work that is on no list omits it. Never returns
+    "": an empty phrase still yields the prefix, so an agent always has a name."""
     prefix = (safe_name(project).lower() if project else "") or SELF_PROJECT
+    if item_id is not None:
+        prefix = f"{prefix}-{item_id}"
     body = "-".join(_words(phrase))
     name = f"{prefix}-{body}" if body else prefix
     return safe_name(name) or SELF_PROJECT
 
 
-def distill_name(task, project=None):
+def distill_name(task, project=None, item_id=None):
     """A name WITHOUT the model: the task's own first few meaningful words, prefixed by the project
-    (or "excephalon-" when it has none of its own). This is the default namer the tools carry, and
-    the fallback the thinking namer drops to when the model cannot be reached. Better than the whole
-    task hyphenated; a plain string, no I/O."""
-    return compose(project, task)
+    (or "excephalon-" when it has none of its own) and by its card number when it has one. This is
+    the default namer the tools carry, and the fallback the thinking namer drops to when the model
+    cannot be reached. Better than the whole task hyphenated; a plain string, no I/O."""
+    return compose(project, task, item_id)
 
 
 def unique_name(candidate, taken):
@@ -126,14 +132,17 @@ class AgentNamer:
         self._deadline = deadline
         self._options = options if options is not None else _name_options()
 
-    def name(self, task, project=None):
-        """A distilled "<project>-<1-3 words>" label for an agent about to work on `task`."""
+    def name(self, task, project=None, item_id=None):
+        """A distilled "<project>-<item#>-<1-3 words>" label for an agent about to work on `task`.
+        `item_id`, when the task is a numbered card item, ties the label to it on both paths."""
         try:
             phrase = self._distilled(str(task or ""))
         except Exception:
             phrase = ""
         # Only trust the model's words if there are any; otherwise the task's own words distill it.
-        return compose(project, phrase) if _words(phrase) else distill_name(task, project)
+        if _words(phrase):
+            return compose(project, phrase, item_id)
+        return distill_name(task, project, item_id)
 
     def _distilled(self, task):
         """The model's one-to-three words for the task, or "" - bounded so a hung session cannot

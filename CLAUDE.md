@@ -556,7 +556,11 @@ When he does NOT name it - the usual case, and every Projects-tab robot click - 
 distills one rather than slugifying the task: a small model reads the task down to one-to-three
 words and the project is prefixed ("highdeas-smart-grouping"), with its own work - a task carrying
 no project card of its own - prefixed "excephalon-" (naming.SELF_PROJECT), because a tab and a
-spoken roll call cannot carry "agent-names-shouldn-t-be-the-name-of-the-task-with-hyphens". A slow or dead
+spoken roll call cannot carry "agent-names-shouldn-t-be-the-name-of-the-task-with-hyphens". When the
+task is a numbered item off one of his cards, that item's NUMBER rides between the project and the
+words too ("highdeas-7-smart-grouping"), read off the desk's one resolver (`AgentDesk.item_number` -
+the same number the end-of-work tick lands on) so both doors decorate the name without a second,
+drifting copy of the resolve logic, and work on no list omits it. A slow or dead
 model falls back to the task's own first meaningful words, so an agent-start never blocks on a
 name; and a distilled label that collides with a live agent or an open tab is bumped
 (`unique_name`), never reused, since a short name landing on the desk's key would silently
