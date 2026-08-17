@@ -164,6 +164,37 @@ def test_changing_the_model_leaves_an_agent_already_working_where_it_is():
     assert desk.running_on() == "Fable on high"  # effort left alone, since they only named a model
 
 
+def test_start_returns_the_name_the_agent_was_actually_given():
+    # The name is now decided by the caller's namer and made unique HERE, so start hands back what
+    # it settled on - the page turns that task green under it, and the tool reports it.
+    desk, _, _ = _desk()
+    assert desk.start("fixer", "/tmp/wt", "a task") == "fixer"
+
+
+def test_a_newcomer_wanting_a_running_agents_name_is_bumped_not_a_clobber():
+    # Distilled names are short enough that two tasks can land the same one, and a collision on the
+    # desk's key silently REPLACED the running agent - its handle lost. The newcomer is bumped; the
+    # first keeps its name and its session.
+    desk, _, made = _desk()
+
+    first = desk.start("highdeas-audio-fix", "/tmp/a", "one")
+    second = desk.start("highdeas-audio-fix", "/tmp/b", "two")
+
+    assert (first, second) == ("highdeas-audio-fix", "highdeas-audio-fix-2")
+    assert set(desk._desked) == {"highdeas-audio-fix", "highdeas-audio-fix-2"}
+
+
+def test_a_name_a_leftover_log_tab_still_holds_is_bumped_too(tmp_path):
+    # The window draws a tab per log file, so a name whose tab is still open is taken even with no
+    # agent behind it - reusing it would mix two agents' lines into one tab.
+    logs = tmp_path / "agent-logs"
+    logs.mkdir()
+    (logs / "highdeas-audio-fix.log").write_text("an old tab's lines", encoding="utf-8")
+    desk, _, _ = _desk(log_dir=logs)
+
+    assert desk.start("highdeas-audio-fix", "/tmp/wt", "a task") == "highdeas-audio-fix-2"
+
+
 def test_starting_an_agent_does_not_block_the_caller():
     # The conversation loop must never wait on agent work - that's what left them talking to a wall.
     hold = threading.Event()

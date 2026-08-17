@@ -488,6 +488,14 @@ answers to the name HE gives it (`rename` moves the desk's key, the log the wind
 draws a tab from, the survival record and the tag on any queued news - the worktree and branch
 keep their own names, which are git's; `start_agent` takes a name up front, so "call it the
 auto-play fix" works from the first word, and `safe_name` is what makes his words a filename).
+When he does NOT name it - the usual case, and every Projects-tab robot click - `naming.py`
+distills one rather than slugifying the task: a small model reads the task down to one-to-three
+words and the project is prefixed ("highdeas-smart-grouping"), because a tab and a spoken roll
+call cannot carry "agent-names-shouldn-t-be-the-name-of-the-task-with-hyphens". A slow or dead
+model falls back to the task's own first meaningful words, so an agent-start never blocks on a
+name; and a distilled label that collides with a live agent or an open tab is bumped
+(`unique_name`), never reused, since a short name landing on the desk's key would silently
+REPLACE a running agent where the old task-length names never collided.
 Every door that takes a name resolves it first (`resolve`: exact, then safe_name prefix either
 way - which is what a truncation is - then shared words, only ever a UNIQUE winner, never a
 guess between two): the desk itself truncates his words to make a key, the brain and foreman

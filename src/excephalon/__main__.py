@@ -17,6 +17,7 @@ from pathlib import Path
 from excephalon import machine
 from excephalon.actions import fleet_actions, take_care_spec
 from excephalon.agent_desk import AgentDesk
+from excephalon.naming import AgentNamer, unique_name
 from excephalon.brain_sdk import DEFAULT_PERSONA, SdkBrain
 from excephalon.sdk_session import open_sign_in
 from excephalon.console import Console
@@ -505,6 +506,12 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
         for name, why in sorted(_SERVICE_FAULTS.items()):
             announce(f"({name} is set up but not answering: {why})")
     errands = ErrandRunner(RUNTIME_DIR, agent_events, services=services)
+    # The naming layer: a small model reads a task and distills a short, project-prefixed label for
+    # the agent that takes it on, so a tab reads "highdeas-smart-grouping" instead of the task with
+    # its spaces turned to hyphens. Both doors into the fleet use it - the brain's start_agent and a
+    # Projects-tab robot click - and every failure falls back to the task's own first words, so an
+    # agent-start is never blocked on a name.
+    namer = AgentNamer()
     if hooks is not None:
         # His name for an agent, from the page's own heading - the desk owns the key, the log and
         # the record, so the window asks it rather than moving files behind its back.
@@ -513,25 +520,27 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
         def _take_care(project, task_text):
             """A Projects-tab robot clicked: start an agent on that task right now - the
             deterministic half of "please take care of this task", the same work start_agent does
-            when the brain is told to, with no brain in the loop to decide. A fresh worktree per
-            task, cut from current origin/main; the agent's name goes back so the page turns that
-            task green at once."""
+            when the brain is told to, with no brain in the loop to decide. The task is distilled
+            into a short, project-prefixed name (excephalon.naming) rather than slugified; a fresh
+            worktree per task under that name, cut from current origin/main; the agent's name (as
+            the desk finally settled it) goes back so the page turns that task green at once."""
             spec = take_care_spec(project, task_text)
             if spec is None:
                 return None
-            path = REPO / ".claude" / "worktrees" / spec["name"]
-            if not path.exists():  # new work means a new worktree, cut from current origin/main
-                prepare_worktree_for(str(path))
-            desk.start(spec["name"], str(path), spec["task"],
-                       enhancement=spec["enhancement"], project=spec["project"])
-            return spec["name"]
+            worktrees = REPO / ".claude" / "worktrees"
+            taken = {child.name for child in worktrees.glob("*")} if worktrees.exists() else set()
+            name = unique_name(namer.name(spec["task"], spec["project"]), taken)
+            prepare_worktree_for(str(worktrees / name))  # a fresh worktree, cut from origin/main
+            return desk.start(name, str(worktrees / name), spec["task"],
+                              enhancement=spec["enhancement"], project=spec["project"])
 
         hooks["take_care"] = _take_care
     # The other apps he has, by their folder names - the same scan that teaches the ear his
     # project names. file_improvement refuses a feature request naming one of them: the
     # Enhancements list is for changes to Excephalon itself, and a request for another app
     # belongs to an agent in that app's own repo.
-    actions_server, _ = fleet_actions(desk, foreman, errands, other_apps=_other_apps())
+    actions_server, _ = fleet_actions(desk, foreman, errands, namer=namer.name,
+                                      other_apps=_other_apps())
     # Seeded with the tail of the last session's transcript, so a restart - their only way of picking
     # up a fix - resumes the conversation instead of greeting them as a stranger.
     brain = SdkBrain(persona=_persona(), user=user_name(load_profile()), actions=actions_server,

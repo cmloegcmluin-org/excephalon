@@ -5,11 +5,12 @@ from pathlib import Path
 from excephalon.actions import _resolve, fleet_actions, take_care_spec
 
 
-def test_take_care_spec_makes_an_agent_from_the_task_words():
-    # A Projects-tab robot clicked: the task's own words are the task, the enhancement it ticks off,
-    # and the seed of the agent's name; the card's project rides along so the tick lands right.
+def test_take_care_spec_carries_the_task_its_enhancement_and_the_project():
+    # A Projects-tab robot clicked: the task's own words are the task and the enhancement it ticks
+    # off, and the card's project rides along so the tick lands right. The NAME is NOT slugified
+    # here - a robot click has no brain in the loop, so the caller distills it through the namer.
     spec = take_care_spec("Highdeas", "smart grouping of ideas")
-    assert spec == {"name": "smart-grouping-of-ideas", "task": "smart grouping of ideas",
+    assert spec == {"task": "smart grouping of ideas",
                     "enhancement": "smart grouping of ideas", "project": "Highdeas"}
 
 
@@ -41,6 +42,7 @@ class FakeDesk:
 
     def start(self, name, cwd, task, enhancement=None, project=None):
         self.started.append((name, cwd, task, enhancement, project))
+        return name  # the real desk returns the name it settled on (unique); the fake keeps it as-is
 
     def send(self, name, message):
         self.told.append((name, message))
@@ -111,47 +113,58 @@ def _tools(desk, foreman=None, errands=None, **kwargs):
     return {tool.name: tool for tool in tools}
 
 
-def test_start_agent_puts_a_fresh_agent_on_the_task(tmp_path):
-    # The brain used to act by writing [SUPERVISE] into its own reply for a scanner to fish out -
-    # fumbled phrasing silently did nothing, and the code-words leaked into what was spoken. A
-    # typed call cannot be half-written and cannot be heard.
+def test_start_agent_distills_a_name_from_the_task_not_the_worktree_folder(tmp_path):
+    # "agent names shouldn't be the name of the task with hyphens... distilled to 1-3 words, with
+    # the Project prefixed." The name comes from the namer reading the task and the project - the
+    # worktree keeps its own (git's) name, which the label no longer copies.
     desk = FakeDesk()
-    worktree = tmp_path / "fix-drive-link"
+    worktree = tmp_path / "wt-2f9c1a"  # git's name for the tree, deliberately unlike the label
     worktree.mkdir()
-    tools = _tools(desk, resolve=lambda target: [str(worktree)], prepare=lambda path: None)
+    seen = []
 
-    said = _call(tools["start_agent"], path=str(worktree), task="fix the drive link")
+    def namer(task, project=None):
+        seen.append((task, project))
+        return "highdeas-drive-link"
 
-    assert desk.started == [("fix-drive-link", str(worktree), "fix the drive link", None, None)]
-    assert "fix-drive-link" in said
+    tools = _tools(desk, resolve=lambda target: [str(worktree)], prepare=lambda path: None,
+                   namer=namer)
+
+    said = _call(tools["start_agent"], path=str(worktree), task="fix the drive link",
+                 project="Highdeas")
+
+    assert seen == [("fix the drive link", "Highdeas")]  # the namer read the task AND the project
+    assert desk.started == [("highdeas-drive-link", str(worktree), "fix the drive link", None,
+                             "Highdeas")]
+    assert "highdeas-drive-link" in said
 
 
 def test_start_agent_tags_the_agent_with_the_enhancement_it_takes_on(tmp_path):
     # When the agent is taking an item off the Enhancements list, that item rides along verbatim so
-    # it ticks itself off the list when the work lands (agent_desk.retire).
+    # it ticks itself off the list when the work lands (agent_desk.retire). The name is the default
+    # (mechanical) distillation of the task - "wire the neural voice" -> "wire-neural-voice".
     desk = FakeDesk()
-    worktree = tmp_path / "better-voice"
+    worktree = tmp_path / "wt-neural"
     worktree.mkdir()
     tools = _tools(desk, resolve=lambda target: [str(worktree)], prepare=lambda path: None)
 
     _call(tools["start_agent"], path=str(worktree), task="wire the neural voice",
           enhancement="Better voice")
 
-    assert desk.started == [("better-voice", str(worktree), "wire the neural voice", "Better voice",
-                             None)]
+    assert desk.started == [("wire-neural-voice", str(worktree), "wire the neural voice",
+                             "Better voice", None)]
 
 
 def test_start_agent_leaves_the_tag_empty_when_no_enhancement_is_named(tmp_path):
     # Most work is not a listed enhancement; a blank tag must become no tag, never an empty-string
     # item the wrap-up then tries to tick off nothing with.
     desk = FakeDesk()
-    worktree = tmp_path / "one-off"
+    worktree = tmp_path / "wt-oneoff"
     worktree.mkdir()
     tools = _tools(desk, resolve=lambda target: [str(worktree)], prepare=lambda path: None)
 
     _call(tools["start_agent"], path=str(worktree), task="a one-off fix", enhancement="  ")
 
-    assert desk.started == [("one-off", str(worktree), "a one-off fix", None, None)]
+    assert desk.started == [("one-off-fix", str(worktree), "a one-off fix", None, None)]
 
 
 def test_start_agent_makes_the_worktree_when_the_path_is_new(tmp_path):
@@ -601,14 +614,15 @@ def test_start_agent_carries_the_project_card_its_item_lives_on(tmp_path):
     # The card rides with the agent from the start, like the item itself, so the wrap-up's tick
     # lands where the task actually lives.
     desk = FakeDesk()
-    worktree = tmp_path / "spinner-fix"
+    worktree = tmp_path / "wt-spinner"
     worktree.mkdir()
     tools = _tools(desk, resolve=lambda target: [str(worktree)], prepare=lambda path: None)
 
     _call(tools["start_agent"], path=str(worktree), task="hold the spinner",
           enhancement="#7 the spinner holds", project="Highdeas")
 
-    assert desk.started == [("spinner-fix", str(worktree), "hold the spinner",
+    # The default namer distills "hold the spinner" and prefixes the project card it lives on.
+    assert desk.started == [("highdeas-hold-spinner", str(worktree), "hold the spinner",
                              "#7 the spinner holds", "Highdeas")]
 
 
@@ -667,15 +681,32 @@ def test_an_agent_can_be_started_under_the_name_he_asks_for(tmp_path):
     assert "the-auto-play-fix" in said
 
 
-def test_without_a_name_an_agent_is_still_called_after_its_worktree(tmp_path):
+def test_without_an_explicit_name_the_task_is_distilled_into_one(tmp_path):
+    # The old behavior - an agent named after its worktree folder - is exactly what this feature
+    # replaces. With no name asked for, the task itself is distilled into the label.
     desk = FakeDesk()
-    worktree = tmp_path / "fix-drive-link"
+    worktree = tmp_path / "wt-7c3"
     worktree.mkdir()
     tools = _tools(desk, resolve=lambda target: [str(worktree)], prepare=lambda path: None)
 
-    _call(tools["start_agent"], path=str(worktree), task="fix it")
+    _call(tools["start_agent"], path=str(worktree), task="fix the drive link")
 
-    assert desk.started[0][0] == "fix-drive-link"
+    assert desk.started[0][0] == "fix-drive-link"  # from the task, not the "wt-7c3" folder
+
+
+def test_a_fan_out_over_several_worktrees_keeps_each_ones_own_name(tmp_path):
+    # Driving several existing worktrees at once (a directory that globs to many) is re-attachment,
+    # not fresh work: one shared task can't distill distinct names, so each keeps its folder's name.
+    desk = FakeDesk()
+    one, two = tmp_path / "voice-fix", tmp_path / "spinner-fix"
+    one.mkdir()
+    two.mkdir()
+    tools = _tools(desk, resolve=lambda target: [str(one), str(two)], prepare=lambda path: None,
+                   namer=lambda task, project=None: "should-not-be-used")
+
+    _call(tools["start_agent"], path=str(tmp_path), task="pick up where each left off")
+
+    assert [row[0] for row in desk.started] == ["voice-fix", "spinner-fix"]
 
 
 def test_renaming_an_agent_by_voice_goes_through_the_desk():
