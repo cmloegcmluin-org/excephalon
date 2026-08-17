@@ -30,6 +30,7 @@ def test_take_care_spec_has_nothing_to_start_for_an_empty_task():
 class FakeDesk:
     def __init__(self, known=("gdoc-export",)):
         self.started = []
+        self.item_ids = []
         self.told = []
         self.news_dropped = []
         self.handed = []
@@ -40,8 +41,9 @@ class FakeDesk:
         self.verdicts = []
         self._known = set(known)
 
-    def start(self, name, cwd, task, enhancement=None, project=None):
+    def start(self, name, cwd, task, enhancement=None, project=None, item_id=None):
         self.started.append((name, cwd, task, enhancement, project))
+        self.item_ids.append(item_id)
         return name  # the real desk returns the name it settled on (unique); the fake keeps it as-is
 
     def send(self, name, message):

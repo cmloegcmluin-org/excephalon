@@ -889,6 +889,36 @@ def complete_enhancement_by_id(item_id, path=DEFAULT_PROFILE_PATH, heading=ENHAN
     return False
 
 
+def enhancement_id(text, path=DEFAULT_PROFILE_PATH):
+    """The (#id, card) of the open item these words are, or (None, None).
+
+    An agent's list item used to travel with it as TEXT the brain had retyped, and the tick at
+    the end was a substring match of that text against the file - so any drift in the retyping,
+    or a card the brain guessed wrong, and the item silently stayed open: two finished features
+    left their items unticked and their robots simply went grey again. A number does not drift.
+    Resolved when the agent STARTS, while the item is in front of whoever is asking.
+
+    Matched either direction (his line contains what was typed, or the typing contains his
+    line), across the Enhancements card and every Projects card, and only ever a UNIQUE winner -
+    ids repeat between cards, and a wrong tick would corrupt his record of ask and answer."""
+    wanted = " ".join(str(text or "").lower().split())
+    if not wanted:
+        return (None, None)
+    sections = profile_sections(_read(Path(path)))
+    cards = [find_heading(sections, ENHANCEMENTS_HEADING)]
+    cards += [heading for heading in sections
+              if heading.lower().startswith(PROJECT_PREFIX.lower()) and heading not in cards]
+    found = []
+    for card in cards:
+        for item in checklist_items(sections.get(card, "")):
+            if item["done"] or item.get("id") is None:
+                continue
+            line = " ".join(item["text"].lower().split())
+            if wanted in line or line in wanted:
+                found.append((item["id"], card))
+    return found[0] if len(found) == 1 else (None, None)
+
+
 def complete_enhancement_anywhere(item_id, path=DEFAULT_PROFILE_PATH):
     """Tick #id on whichever card holds it - when exactly ONE does - and name that card, or None.
 

@@ -216,7 +216,7 @@ class _Desked:
     """One agent and what it's doing, so the roster can say more than just a name."""
 
     def __init__(self, agent, cwd, task, log, *, model, effort, delivery=None, enhancement=None,
-                 project=None):
+                 project=None, item_id=None):
         self.agent = agent
         self.cwd = cwd
         self.task = task
@@ -232,6 +232,9 @@ class _Desked:
         # only the Enhancements card could ever be ticked.
         self.enhancement = enhancement
         self.project = project
+        # The item's NUMBER, when it could be resolved at start. A number does not drift the way
+        # the brain's retyping of his sentence does, and the tick goes by it first.
+        self.item_id = item_id
         self.state = "starting"
         self.last_heard = None  # when it last said anything at all, step or reply
         self.last_word = None  # the last thing it said back, trimmed for the roster
@@ -250,7 +253,8 @@ class _Desked:
 class AgentDesk:
     def __init__(self, outbox, *, agent_factory=None, roster_path=None, log_dir=None,
                  monitor=None, clock=time.strftime, events=None, run=None, state_path=None,
-                 law_path=None, complete_enhancement=None, wrapped_path=None, now=time.time):
+                 law_path=None, complete_enhancement=None, tick_by_id=None, tick_anywhere=None,
+                 wrapped_path=None, now=time.time):
         from excephalon.worktrees import run_hidden
 
         self._run = run or run_hidden  # how retire removes a finished agent's worktree
@@ -258,6 +262,11 @@ class AgentDesk:
         # or None to skip it. Injected so the desk needn't know where the profile lives, and so a
         # desk with no profile behind it (most tests) simply does not tick.
         self._complete_enhancement = complete_enhancement
+        # The same tick, by the item's NUMBER (memory.complete_enhancement_by_id) and by number
+        # on whichever card holds it (complete_enhancement_anywhere). A number is what survives
+        # the brain's retyping of his sentence, which is what the text match depended on.
+        self._tick_by_id = tick_by_id
+        self._tick_anywhere = tick_anywhere
         # What happened - finished, died - goes to the events sink as (kind, agent, report); the
         # narrator words it in the brain's own voice. Undirected, the desk speaks the old way:
         # a capped notice (or the death line) straight to the outbox.
@@ -295,14 +304,17 @@ class AgentDesk:
         self._lock = threading.Lock()
         self._threads = []
 
-    def start(self, name, cwd, task, enhancement=None, project=None):
+    def start(self, name, cwd, task, enhancement=None, project=None, item_id=None):
         """Put a fresh agent on `task` in `cwd`. Returns the name the agent was actually given -
         `name` unless it collided with a running agent or an open tab and had to be bumped. The
         reply arrives in the Outbox when it lands, so this still returns without waiting on work.
 
         `enhancement`, when given, is the list item this agent is completing - ticked off its card
         when the agent is retired - and `project` names the Projects-tab card that item lives on
-        ("Highdeas"), with None meaning his Enhancements card.
+        ("Highdeas"), with None meaning his Enhancements card. `item_id` is that item's NUMBER,
+        resolved while it was in front of whoever started the agent: the tick goes by number
+        because the text is whatever the brain retyped, and a retyping that drifted left two
+        finished features with their items still open and their robots simply grey again.
 
         The name is made unique HERE because the caller's namer distills it to a short, project-
         prefixed label (see excephalon.naming), and short labels collide where the old task-length
@@ -320,7 +332,8 @@ class AgentDesk:
             with self._lock:
                 self._desked[name] = _Desked(agent, cwd, task, self._open_log(name),
                                              model=self._model, effort=self._effort,
-                                             enhancement=enhancement, project=project)
+                                             enhancement=enhancement, project=project,
+                                             item_id=item_id)
         finally:
             with self._lock:
                 self._reserved.discard(name)  # now it lives in _desked, or the start failed
@@ -436,7 +449,8 @@ class AgentDesk:
                                                    entry.get("steps"),
                                                    entry.get("rejections") or 0),
                                  enhancement=entry.get("enhancement"),
-                                 project=entry.get("project"))
+                                 project=entry.get("project"),
+                                 item_id=entry.get("item_id"))
                 desked.recorded_session = session  # what the next persist writes until it speaks
                 desked.state = "idle"
                 # A crash streak survives the app's own restart, or a task that kills its agents
@@ -807,7 +821,7 @@ class AgentDesk:
             known = set(self._desked)
         return sorted(path.stem for path in self._log_dir.glob("*.log") if path.stem not in known)
 
-    def retire(self, name):
+    def retire(self, name, report=None):
         """Wrap a finished agent up in one gesture: close its tab (the log moves into the archive),
         tick off the Enhancements item it was completing, let the session go, and remove its
         worktree.
@@ -818,7 +832,12 @@ class AgentDesk:
         user's view into work still happening. An agent the desk never had (yesterday's, before a
         restart) is just its leftover log, and the move alone closes it. A worktree that refuses
         removal (dirty, locked) is left for a maintenance sweep - the wrap-up itself never fails
-        over it. Only a cleanly finished agent ticks its item: a DIED one never marks its ask done."""
+        over it. Only a cleanly finished agent ticks its item: a DIED one never marks its ask done.
+
+        `report` takes a tick that could not land, instead of it being pushed as news of its own -
+        for the caller that is already sending one utterance about this wrap-up, since news of
+        the landing would otherwise supersede the miss on arrival and the item would stay open
+        with nobody told."""
         name = self.resolve(name) or name
         held = getattr(self._outbox, "owed_about", None)
         owed = held() if held is not None else set()
@@ -880,7 +899,7 @@ class AgentDesk:
                 self._run(["git", "-C", entry.cwd, "worktree", "remove", entry.cwd], check=True)
             except Exception:
                 pass  # dirty or locked: the sweep's business later, not a failed retirement
-            if entry.enhancement:
+            if entry.enhancement or entry.item_id:
                 # The tick's own miss report used to be thrown away, and the user met the result
                 # cold: work merged, log archived, and the ticket still open with nobody told -
                 # "as far as I know it's still open work." A tick that cannot land (or is
@@ -888,17 +907,36 @@ class AgentDesk:
                 # to the card the item RIDES FROM - a Projects-tab card as readily as the
                 # Enhancements card, since a whole afternoon's Highdeas tasks were delivered and
                 # left standing open ("it did not check them off in the Projects tab").
-                where = {"heading": PROJECT_PREFIX + entry.project} if entry.project else {}
-                ticked = (finished_cleanly and self._complete_enhancement is not None
-                          and self._complete_enhancement(entry.enhancement, **where))
+                ticked = finished_cleanly and self._tick(entry)
                 if not ticked:
-                    self._outbox.push(
-                        f"{name} is wrapped up, but its list item did not get checked "
-                        "off - settle that item by hand (check_off_enhancement by its number "
-                        "and card, or tell the user why it stays open).", about=name)
+                    missed = (f"{name} is wrapped up, but its list item did not get checked "
+                              "off - settle that item by hand (check_off_enhancement by its "
+                              "number and card, or tell the user why it stays open).")
+                    if report is not None:
+                        report(missed)  # the caller folds it into the one utterance it is sending
+                    else:
+                        self._outbox.push(missed, about=name)
             self._finished(name)  # a landing agent's clock runs until here; a retired one is off it
             self._persist()
         return True
+
+    def _tick(self, entry):
+        """Check this agent's list item off - by its NUMBER first, which is what it was resolved
+        to when the agent started. The tick used to be a substring match of the item text as the
+        BRAIN had retyped it, so a paraphrase, a dropped backtick or a guessed card silently
+        missed: two delivered features left their items open and their robots simply went grey
+        again. The text match stays as the fallback for an agent started before a number could
+        be found."""
+        if self._complete_enhancement is None:
+            return False
+        where = {"heading": PROJECT_PREFIX + entry.project} if entry.project else {}
+        if entry.item_id and self._tick_by_id is not None:
+            if self._tick_by_id(entry.item_id, **where):
+                return True
+            if self._tick_anywhere is not None and self._tick_anywhere(entry.item_id):
+                return True  # the card it was filed under moved; the number did not
+        return bool(entry.enhancement) and bool(self._complete_enhancement(entry.enhancement,
+                                                                          **where))
 
     def close(self):
         # The survival record is written BEFORE the fleet is let go: it is what the next process
@@ -986,8 +1024,14 @@ class AgentDesk:
             # while his ticket sat open ("make sure that tasks are designed to be
             # automatically checked off when the work gets finished").
             self.drop_news(name)  # its own prose reports are superseded by the fact of landing
-            if self.retire(name):
-                self._events("landed", name, reply)
+            missed = []
+            if self.retire(name, report=missed.append):
+                # A tick that could not land rides the SAME utterance as the landing. Pushed as
+                # news of its own it was destroyed on arrival: the landed narration is newer
+                # news about the same agent, so the collapse ate the miss and the item stayed
+                # open with nobody told - "instead of the tasks getting checked off at the end,
+                # the robot icons just went grey again".
+                self._events("landed", name, reply + ("\n\n" + missed[0] if missed else ""))
                 return
         if entry.delivery.stage != "landing":
             # A landing agent still owes a merge report, so its silence clock keeps running - the
@@ -1101,7 +1145,7 @@ class AgentDesk:
                  "state": entry.state, "model": entry.model, "effort": entry.effort,
                  "delivery": entry.delivery.stage, "steps": entry.delivery.steps,
                  "rejections": entry.delivery.rejections, "deaths": entry.deaths,
-                 "enhancement": entry.enhancement,
+                 "enhancement": entry.enhancement, "item_id": entry.item_id,
                  "project": entry.project}
                 for name, entry in self._desked.items()
             ]
