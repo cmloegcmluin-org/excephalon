@@ -58,6 +58,7 @@ from excephalon.stt_console import ConsoleSTT
 from excephalon.tailing import safe_name
 from excephalon.homecoming import (
     OFFER_GREETING,
+    RECALL_TURNS,
     STOCK_GREETING,
     changes_since,
     homecoming_note,
@@ -298,7 +299,11 @@ def _greeting(brain, booted_at, previous_boot, was_seen=0.0, waiting=(), note=No
     shipped, and he had to answer "Dude, what the fuck? No."."""
     if note is None:
         note = homecoming_note(
-            turns=recent_turns(TRANSCRIPTS, keep=1),
+            # The last few exchanges, not the last one: a topic he raised and never got - the
+            # walk through his day from a calendar - sat several turns back, so a greeting built
+            # from the final exchange alone could not see it and offered him everything except
+            # the thing he was waiting on ("it didn't mention the calendar topic that is live").
+            turns=recent_turns(TRANSCRIPTS, keep=RECALL_TURNS),
             changes=changes_since(REPO, previous_boot.get("commit", "")),
             # How long he was WITHOUT it: from the last thing the old process wrote, not from
             # when that process started - which is the length of the conversation he just had.

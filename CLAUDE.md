@@ -258,11 +258,20 @@ held news is spoken in full the moment he answers — the offer latch the app al
 greeting may never CHOOSE for him: asked for in the note alone, the shape simply was not
 produced — "So, about that calendar demo you wanted - where should we start?" named four things
 and picked one ("strangely assuming that we're starting on the calendar thing, rather than
-including it as one of the potential things for us to do") — so `offers_a_choice` checks for the
-"or" inside the question itself, `unfit` refuses a first line that lacks it while something
-waits, the draft is asked again with the fault named, and the fallback is `OFFER_GREETING` rather
-than the stock line, which asks a different question and would strand the update behind a choice
-he was never given. The conversation latches the offer only on a first line that actually asked. First
+including it as one of the potential things for us to do") — so `offers_a_choice` checks that
+the question ASKS (an "or", or a whether-form, inside the question itself), `unfit` refuses a
+first line that does not while something waits, the draft is asked again with the fault named,
+and the fallback is `OFFER_GREETING` rather than the stock line, which asks a different question
+and would strand the update behind a choice he was never given. An "or" is not required, because
+it is not always true: told only a COUNT of what waited, a greeting offered the one waiting
+thread against itself — "it said 'or hear what's waiting from the agents' as if the naming
+prefix work is not stuff from an agent, but that's not true; there is no other work waiting from
+agents" — so the note NAMES the threads holding an update and says that is all of them, and one
+thread deserves "want to hear it?" rather than an invented alternative. The note carries the
+last `RECALL_TURNS` exchanges rather than the last one, because a topic he raised and never got
+sat several turns back and a greeting built from the final exchange could not see it at all
+("it didn't mention the calendar topic that is live"); an unresolved topic in there is named as
+still open. The conversation latches the offer only on a first line that actually asked. First
 and alone also means it can never be left behind: a boot with exactly one piece of news once
 spoke the news and left the welcome pending for seven minutes, surfacing to invite him to a demo
 he had already approved ("this message makes no sense"); and a first line that misses its moment

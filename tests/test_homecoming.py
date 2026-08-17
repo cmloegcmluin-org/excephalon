@@ -97,20 +97,32 @@ def test_a_change_he_cannot_see_is_not_something_to_tell_him_about():
     assert "INTERNAL" in note
 
 
-def test_the_note_makes_the_greeting_offer_the_choice_and_name_none_of_it():
-    # He opened it and got two messages thirteen seconds apart: a welcome asking about the
-    # scrubber fix, then "Three updates waiting. One... Two... Three... Which first?" Then the
-    # other end of the same failure, once they were welded into one: a welcome asking whether to
-    # pick the calendar work back up, with an unrelated walkthrough behind it in the same breath,
-    # so neither question could be answered. The greeting is the only thing he hears until he
-    # chooses, so it ends by offering the choice - and says nothing about what is waiting.
+def test_the_note_names_whose_updates_wait_and_says_that_is_all_of_them():
+    # "it said 'or hear what's waiting from the agents' as if the naming prefix work is not stuff
+    # from an agent, but that's not true; there is no other work waiting from agents." Told only
+    # a COUNT, the greeting invented a second bucket and offered the one waiting thread against
+    # itself. The threads are named, and named as the whole of it.
     note = homecoming_note(
         turns=[("what about the scrubber?", "It's ready for your eyes.")],
         changes=[], away=95.0, waiting=["highdeas-scrubber-fix", "robot-icon-ui"])
 
     assert "2 update" in note
-    assert "either/or" in note
-    assert "Say nothing about WHAT is waiting" in note
+    assert "highdeas-scrubber-fix, robot-icon-ui" in note
+    assert "nothing else waiting from any agent" in note
+    assert "Say nothing about WHAT any update SAYS" in note
+
+
+def test_a_topic_he_never_got_an_answer_to_is_still_on_the_table():
+    # "it didn't mention the calendar topic that is live." He had asked for a walk through his
+    # day and never got it; several turns later the session ended on a different thread, and a
+    # note built from the last exchange alone could not see the calendar at all.
+    note = homecoming_note(
+        turns=[("walk me through my day from that calendar", "Something's broken in my head."),
+               ("any update on the naming prefix?", "Still being worked on.")],
+        changes=[], away=95.0, waiting=["excephalon-agent-naming-prefix"])
+
+    assert "walk me through my day from that calendar" in note
+    assert "never got resolved is still OPEN" in note
 
 
 def test_a_session_he_said_goodbye_to_is_not_the_middle_of_anything():
@@ -236,12 +248,25 @@ def test_a_greeting_that_picks_a_thread_for_him_is_unfit_while_something_waits()
 
 
 def test_an_or_in_an_earlier_clause_is_not_an_offer():
-    # The choice has to be IN the question, or "nothing changed, or nothing you'd notice." counts
+    # The offer has to be IN the question, or "nothing changed, or nothing you'd notice." counts
     # as offering him something - and he is asked nothing at all.
     from excephalon.homecoming import offers_a_choice
 
     assert offers_a_choice("Nothing changed, or nothing you'd notice. Where were we?") is False
     assert offers_a_choice("Carry on there, or hear what's waiting?") is True
+
+
+def test_one_thread_is_asked_about_rather_than_split_into_a_false_choice():
+    # "it said 'or hear what's waiting from the agents' as if the naming prefix work is not stuff
+    # from an agent, but that's not true; there is no other work waiting from agents." Where the
+    # only update belongs to the thread being resumed, an either/or invents a second thread - so
+    # asking WHETHER is an offer too, and requiring an "or" would have forced the invention.
+    from excephalon.homecoming import offers_a_choice, unfit
+
+    assert offers_a_choice("The naming prefix work has an update - want to hear it?") is True
+    assert unfit("The naming prefix work has an update - want to hear it?", owed=True) is None
+    assert offers_a_choice("So, about that calendar demo you wanted - where should we start?") \
+        is False
 
 
 def test_the_fallback_first_line_offers_when_something_is_waiting():
@@ -390,4 +415,4 @@ def test_a_genuine_resume_still_carries_the_broken_off_exchange():
         changes=[], away=95.0, fleet="scrubber-fix: idle - in review", busy=True)
 
     assert "what about the scrubber?" in note
-    assert "pick the conversation back up" in note
+    assert "pick it back up" in note

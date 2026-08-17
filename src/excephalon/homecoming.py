@@ -34,10 +34,17 @@ _PROMISES = ("let me ", "i'm going to ", "i am going to ", "give me a moment", "
 _REVIEW_CLAIMS = ("approv", "review", "verdict", "ready for your eyes", "ready for you to look",
                   "take a look", "waiting on your", "waiting for your")
 
-# An offer is an "or" inside the question itself - "...pick that back up, or hear the update?"
-# The alternative has to sit in the same sentence as the question mark, so an "or" that belongs
-# to some earlier clause ("nothing changed, or nothing you'd notice. Ready?") is not a choice.
-_A_CHOICE = re.compile(r"\bor\b[^.?!]*\?")
+# Asking WHETHER, rather than deciding how to proceed. Either an alternative inside the question
+# itself ("...pick that back up, or hear the update?") or a form that offers rather than assumes.
+# Both have to sit in the same sentence as the question mark, so an "or" belonging to an earlier
+# clause ("nothing changed, or nothing you'd notice. Ready?") is not an offer.
+_ASKS = re.compile(r"(\bor\b|want to|wanna|would you like|do you want|shall i|ready to hear"
+                   r"|ready for|interested in)[^.?!]*\?", re.IGNORECASE)
+
+# How many recent exchanges the note carries. Enough that a topic he raised and never got - the
+# calendar walk-through sat several turns back - is still in front of the greeting; short enough
+# that the first line is about now rather than a summary of the hour.
+RECALL_TURNS = 6
 
 # The whole first line when the composed one will not do and something is genuinely waiting.
 # STOCK_GREETING cannot stand in here: it asks what it can do, which is not the question, and it
@@ -47,14 +54,19 @@ OFFER_GREETING = ("Welcome back. Do you want to pick up where we left off, or he
 
 
 def offers_a_choice(greeting):
-    """Does this line actually ASK him which he wants, rather than choosing for him?
+    """Does this line ASK him what he wants, rather than deciding it for him?
 
     "So, about that calendar demo you wanted - where should we start?" named four things and then
-    picked one, which is the failure: "strangely assuming that we're starting on the calendar
-    thing, rather than including it as one of the potential things for us to do, and asking me
-    which of the four things I want to work on." Asked for in the note alone, the shape was simply
-    not produced - a rule only the persona carries is a known weakness here, so the app checks."""
-    return bool(_A_CHOICE.search(str(greeting)))
+    picked one: "strangely assuming that we're starting on the calendar thing, rather than
+    including it as one of the potential things for us to do, and asking me which of the four
+    things I want to work on." Asked for in the note alone, the shape was simply not produced - a
+    rule only the persona carries is a known weakness here, so the app checks.
+
+    An "or" is not required, because it is not always true: where the only thing waiting belongs
+    to the very thread being resumed, offering them as alternatives invents a second thread, and
+    a greeting did exactly that - "it said 'or hear what's waiting from the agents' as if the
+    naming prefix work is not stuff from an agent". One thread deserves "want to hear it?"."""
+    return bool(_ASKS.search(str(greeting)))
 
 
 def unfit(greeting, fleet="", owed=False):
@@ -189,24 +201,32 @@ def homecoming_note(turns, changes, away, waiting=(), fleet="", busy=False):
                     "landed. Work not marked delivered is never called shipped.")
     owed = ""
     if waiting:
-        owed = (f"\n\nThere are already {len(waiting)} update(s) from his agents waiting to be "
-                "spoken to him. Your greeting is the ONLY thing he will hear until he answers, "
-                "so it must END by offering him the choice, in one short either/or question "
-                "containing the word 'or': pick the thread above back up, or hear what is "
-                "waiting. NEVER choose for him. Naming a thread and then asking where to start "
-                "on it is choosing - \"So, about that calendar demo you wanted, where should we "
-                "start?\" was answered with \"strangely assuming that we're starting on the "
-                "calendar thing, rather than including it as one of the potential things for us "
-                "to do, and asking me which of the four things I want to work on.\" The thread "
-                "above is ONE option, never the plan. Say nothing about WHAT is waiting - not the "
-                "work, not the agent, not the steps: he chooses first, and the update is spoken "
-                "in full the moment he does. Welded behind a greeting that asked him something "
-                "else, the whole walkthrough arrived in the same breath as the question and he "
-                "could answer neither: \"it insanely asks me if I'd like to continue with a "
-                "calendar demo, then in the same breath tells me that a demo for a feature an "
-                "agent has been working on in the background is ready for my review, and "
-                "moreover, it just goes straight into the detailed information about that "
-                "feature.\"")
+        whose = ", ".join(str(name) for name in waiting)
+        owed = (f"\n\nSomething is waiting to be spoken to him, and this is ALL of it: "
+                f"{len(waiting)} update(s), belonging to exactly these threads - {whose}. There "
+                "is nothing else waiting from any agent. Never imply there is more, and never "
+                "offer 'what's waiting from the agents' as a DIFFERENT thing from a thread you "
+                "have just named: if the waiting update belongs to the work you named, those are "
+                "one thread and not two, and a greeting that split them read as inventing an "
+                "agent - \"it said 'or hear what's waiting from the agents' as if the naming "
+                "prefix work is not stuff from an agent, but that's not true; there is no other "
+                "work waiting from agents.\" So NAME the threads that are actually open - the "
+                "topics he raised above that never got resolved, and the thread(s) holding an "
+                "update - and end by asking WHICH he wants, or, where there is only one, "
+                "whether he wants it. Your greeting is the ONLY thing he will hear until he "
+                "answers, so it must END on that question - phrased as asking whether ('want "
+                "to...?', 'would you like...?'), never as choosing for him: naming a thread and "
+                "then asking how to proceed on it is choosing, and \"So, about that calendar "
+                "demo you wanted, where should we start?\" was answered with \"strangely "
+                "assuming that we're starting on the calendar thing, rather than including it "
+                "as one of the potential things for us to do.\" Say nothing about WHAT any "
+                "update SAYS - not the steps, not the outcome: he chooses first, and it is "
+                "spoken in full the moment he does. Welded behind the question instead, the "
+                "whole walkthrough arrived in the same breath and he could answer neither: \"it "
+                "insanely asks me if I'd like to continue with a calendar demo, then in the same "
+                "breath tells me that a demo for a feature an agent has been working on in the "
+                "background is ready for my review, and moreover, it just goes straight into the "
+                "detailed information about that feature.\"")
     if over:
         # The conversation is done - he closed it, or real time has passed - but the work is
         # not, and the work is what the greeting is about. The stale exchange stays out of the
@@ -215,11 +235,18 @@ def homecoming_note(turns, changes, away, waiting=(), fleet="", busy=False):
                   "above is still standing, and that is why this is not a plain fresh start: "
                   "say in one clause where the standing work is, from the records above only.")
     else:
-        last_said, last_reply = turns[-1]
-        thread = (f"The exchange you broke off on - he said: {last_said}\n"
-                  f"You answered: {last_reply}\n\n"
-                  "Then pick the conversation back up. Do not ask what you can do for him - "
-                  "you already know what you were doing.")
+        # The last FEW exchanges, not the last one. A topic he raised and never got - he had
+        # asked for a walk through his day from a calendar - sat several turns back, so a note
+        # built from the final exchange alone could not see it, and the greeting offered him
+        # everything except the thing he was actually waiting on ("it didn't mention the
+        # calendar topic that is live").
+        recent = "\n".join(f"He said: {said}\nYou answered: {reply}"
+                           for said, reply in turns[-RECALL_TURNS:])
+        thread = (f"How the conversation was going when it broke off, oldest first:\n{recent}\n\n"
+                  "Then pick it back up. Do not ask what you can do for him - you already know "
+                  "what you were doing. And a topic he raised in there that never got resolved "
+                  "is still OPEN, however many turns ago it was: it is one of the things on the "
+                  "table, and leaving it out is leaving out the thing he may be waiting for.")
     return (
         "[App note, not from him: you have just restarted and this is your FIRST line of the "
         f"session - he is looking at the window now. He was without you for about {away / 60:.0f} "
