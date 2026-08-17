@@ -581,6 +581,8 @@ class AgentDesk:
             entry = self._desked.get(name)
             if entry is None:
                 raise DeliveryError(f"no agent called {name} is at the desk")
+            if approved and entry.delivery.stage == "landing" and not feedback:
+                return  # "The ship it still stands." - agreement with a landing already ordered
             if approved and name in owed:
                 raise DeliveryError(
                     f"{name}'s walkthrough is still waiting to be spoken - the user cannot have "

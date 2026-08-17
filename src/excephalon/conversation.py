@@ -791,6 +791,10 @@ class Conversation:
         place = chosen(heard, listed)
         if place is None:
             return None
+        # The pick ANSWERS the offer, so the offer is spent. Left standing, the leftover item
+        # rode his NEXT words as if they had answered it: "The ship it still stands." - about a
+        # different agent entirely - came back with the spinner walkthrough welded on.
+        self._update_offered = False
         return self._hand_over(heard, self._waiting.index(listed[place]))
 
     def _dormant(self):
@@ -925,9 +929,14 @@ class Conversation:
             # They answered with words of their own, so the held update rides into this turn's
             # prompt and the brain says it once, folded around what they asked. Speaking the stored
             # line as well - after the brain had already covered it - is how he heard it all twice.
-            self._update_offered = False
-            self._announced = ()
-            return self._answer(heard, offered=self._waiting.pop())
+            # Unless his eyes are on OTHER work: mid-review, news about a different thread never
+            # rides his reply - one thing at a time - and waits for the gate instead.
+            about = getattr(self._waiting[0], "about", None)
+            reviewing = set(self._in_review() or ())
+            if not reviewing or about in reviewing:
+                self._update_offered = False
+                self._announced = ()
+                return self._answer(heard, offered=self._waiting.pop())
         if self._waiting and (self._announced or self._update_offered):
             # They may be naming one of the agents the roll call just read out - and ONLY then:
             # picking is answering a list, so with no list read out and no offer standing, a

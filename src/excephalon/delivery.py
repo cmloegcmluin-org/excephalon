@@ -41,6 +41,11 @@ class Delivery:
         self.steps = steps
 
     def verdict(self, approved):
+        if approved and self.stage == "landing":
+            # Re-approving work already landing is agreement, not a transition: "The ship it
+            # still stands." must land as a quiet yes, never as an error the brain then reads
+            # back to him as machinery.
+            return
         if self.stage != "ready":
             raise DeliveryError(
                 "no verdict can be recorded - nothing has been presented for the user's eyes yet"
