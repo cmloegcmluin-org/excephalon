@@ -305,7 +305,15 @@ one stop draining everything — and an engine hands its line over as PIECES rat
 finished clip, so a voice that generates over a network is not held back until its last byte;
 `play_stream` banks a fifth of a second before the first write, because writing the instant the
 first bytes land leaves the device with nothing queued and any hesitation upstream is heard as a
-gap mid-word. `tts_neural.py` is the Kokoro engine behind it plus the
+gap mid-word. Every mouth answers with a `Receipt` — began, said, cut — which is the ONE answer to
+"did he hear it?" and the only thing anything owed may be spent on. That question used to have
+five answers scattered through the loop (a bare True from a speak that returned nothing, a truthy
+string from a drained stream, a flag latched before the audio started), and the wrong one is how a
+merge report was spent over zero audio: the loop's own interrupt was never set, so every check it
+made said the line went out, while the barge-in had actually landed inside the engine and not one
+sample reached the air. A mid-cut still counts as heard — he heard the start and chose to stop it
+— and `cut` is what the record's "(cut off mid-utterance)" note is written from, so a silenced
+line never reads as fully spoken. `UNSAID` is the receipt for nothing at all. `tts_neural.py` is the Kokoro engine behind it plus the
 one-time model fetch into `runtime/tts/`, with the System.Speech robot voice serving until the
 model is in; local synthesis is faster than speech, so its line is one piece and costs no copy.
 `tts_cloud.py` is ElevenLabs in the same seam — `pcm_24000`, which is signed 16-bit at the rate
@@ -651,7 +659,7 @@ with 'Go check it out then'... that's not an update") while the app marked it de
 retell it, he heard "two versions of the same message in quick succession" thirteen seconds
 apart; and served on a LATER loop pass (deliver_update's old shape), the reply announced an
 update that never followed ("Hm, what do you mean? You didn't get me anything."). And nothing is
-SPENT unless its utterance began sounding (`_say` answers whether it did): a barge-in already
+SPENT unless its utterance began sounding (the mouth's `voice.Receipt`, above): a barge-in already
 down when the words were about to start used to clear the spool over zero audio, and a merged
 report died in that black hole. An agent HOLDS
 its number for as long as it stays on the list: fresh news takes that agent's earliest place,

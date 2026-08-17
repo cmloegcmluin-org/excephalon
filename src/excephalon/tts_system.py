@@ -16,6 +16,7 @@ import shutil
 import subprocess
 
 from excephalon import machine
+from excephalon.voice import UNSAID, Receipt
 
 _SPEAK_SCRIPT = (
     "Add-Type -AssemblyName System.Speech; "
@@ -86,10 +87,15 @@ def _default_run(rate, text, interrupt=None):
 
 
 class NullTTS:
-    """Speaks nothing - for muted / text-only runs."""
+    """Speaks nothing - for muted / text-only runs.
+
+    It still RECEIPTS the line, because in those runs the screen is the mouth: the reply is
+    printed and the user reads it, so what it carried has been delivered. Receipting nothing here
+    would leave every piece of news owed forever in a text-mode run."""
 
     def speak(self, text, *, interrupt=None):
-        pass
+        said = str(text).strip()
+        return Receipt(began=bool(said), said=said)
 
 
 class SystemTTS:
@@ -98,6 +104,9 @@ class SystemTTS:
         self._run = run
 
     def speak(self, text, *, interrupt=None):
-        if not text.strip():
-            return
-        self._run(self._rate, text, interrupt)
+        said = str(text).strip()
+        if not said:
+            return UNSAID
+        self._run(self._rate, said, interrupt)
+        fired = getattr(interrupt, "is_set", None)
+        return Receipt(began=True, said=said, cut=bool(fired and fired()))
