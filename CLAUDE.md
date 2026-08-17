@@ -286,8 +286,14 @@ report nobody had recorded. His SILENCE is bounded here too (`DEFAULT_ANSWER_WIT
 the brain is doing underneath: the brain bounds each of its own asks at 180s but one turn can
 spend several — lock, shed, reconnect, ask again — and a turn of his ran twelve minutes with no
 word at all ("it seems to be stuck again. I said ship it then it never said anything"). Bounded
-on the silence, not on the turn: a reply that has begun sounding is never cut off, and the
-brain-failure path it raises into already keeps the held update owed. His words are read as a PICK only
+on PROGRESS, not on the turn or on silence: each piece that reaches the air resets his wait, so
+a reply still arriving is never cut off — measured on silence alone the bound never fired for
+the turn that mattered, because the brain had written one clause before it hung and "it has said
+something" stayed true while he sat twenty minutes. And the cancel it fires goes on a thread of
+its own, never waited on: the interrupt reaches the CLI by scheduling a coroutine on the
+session's own loop, which a session hung on a dead read never runs — called inline, it defeated
+the very deadline that called it. The brain-failure path it raises into already keeps the held
+update owed. His words are read as a PICK only
 while a roll call or an offer actually stands - with no list read out, a short sentence that
 happens to contain "one" is his own words, not a choice off a menu he never heard - and a pick
 SPENDS the offer: left standing, the leftover item rode his next, unrelated words ("The ship it

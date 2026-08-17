@@ -2441,23 +2441,65 @@ def test_his_wait_is_bounded_even_when_the_brain_never_answers():
     convo.turn()
 
 
-def test_a_reply_already_sounding_is_never_cut_off_by_that_bound():
-    # The bound is on SILENCE, not on the turn: a brain that is writing is a brain doing its job,
-    # however long the whole answer takes.
+def test_a_reply_still_arriving_is_never_cut_off_by_that_bound():
+    # A brain that keeps writing is a brain doing its job, however long the whole answer takes:
+    # each delta resets his wait, so only a STALL ends the turn.
+    import threading as _threading
+
     clock = [0.0]
     tts = StreamingTTS()
+    keep_going = _threading.Event()
 
-    class SlowButSpeaking(StreamingBrain):
+    class SlowButWriting(StreamingBrain):
         def respond(self, utterance, *, on_text=None):
-            on_text("Working on it - ")
-            clock[0] += 500.0  # long past the bound, but it has already said something
-            on_text("here is the answer.")
-            return "Working on it - here is the answer."
+            for piece in ("Working on it - ", "still going - ", "here is the answer."):
+                clock[0] += 20.0  # under the 30s bound each time, so the wait keeps resetting
+                on_text(piece)
+            keep_going.set()
+            return "Working on it - still going - here is the answer."
 
-    convo = Conversation(FakeSTT(["ship it"]), SlowButSpeaking(""), tts,
+    convo = Conversation(FakeSTT(["ship it"]), SlowButWriting(""), tts,
                          answer_within=30.0, clock=lambda: clock[0], sleep=lambda s: None)
 
     turn = convo.turn()
 
-    assert turn.said == "Working on it - here is the answer."
+    assert turn.said == "Working on it - still going - here is the answer."
     assert not turn.error
+
+
+def test_a_reply_that_stops_part_way_ends_the_wait_like_any_other_silence():
+    # "I give my approval for a feature for the 4th time and Excephalon is still not responding
+    # at all" - measured on total silence, the bound never fired: the brain had written one
+    # clause before it hung, so "it has said something" stayed true while he sat for twenty
+    # minutes. Progress is what the wait is measured against, not whether anything was ever said.
+    import threading as _threading
+
+    let_go = _threading.Event()
+    clock = [0.0]
+    tts = StreamingTTS()
+
+    class StopsPartWay(StreamingBrain):
+        def respond(self, utterance, *, on_text=None):
+            on_text("Recording that - ")
+            let_go.wait(2.0)  # and then nothing, ever
+            return "Recording that - too late."
+
+        def interrupt(self):
+            let_go.set()
+
+    convo = Conversation(FakeSTT(["ship it", "goodbye entity"]), StopsPartWay(""), tts,
+                         answer_within=30.0, clock=lambda: clock[0], sleep=lambda s: None)
+    original = convo._interrupted
+
+    def tick():  # the wall clock runs while the brain does not
+        clock[0] += 20.0
+        return original()
+
+    convo._interrupted = tick
+
+    turn = convo.turn()
+
+    assert turn.error is True
+    assert convo.error_reply in tts.spoken  # he hears something, not a stalled half-sentence
+    convo._interrupted = original
+    convo.turn()

@@ -914,7 +914,7 @@ class Conversation:
         talking = getattr(self._stt, "is_mid_utterance", None)
         return bool(talking and talking())
 
-    def _think(self, heard, on_text=None, silent=None):
+    def _think(self, heard, on_text=None, progress=None):
         """Ask the brain off the main thread so the interrupt stays answerable the whole time. If
         they barge in while it's thinking, the call is cancelled and `_ThinkInterrupted` is raised
         so the loop drops the turn. Re-raises whatever the brain raised, so the caller's error
@@ -923,9 +923,9 @@ class Conversation:
         And HIS wait is bounded here, whatever the brain is doing underneath. The brain bounds
         each of its own asks, but it may spend several of them - lock, shed, reconnect, ask
         again - and a turn of his went twelve minutes with no word at all ("it seems to be stuck
-        again. I said ship it then it never said anything"). The bound is on SILENCE, not on the
-        turn: `silent` answers whether nothing has reached the air yet, so a reply that has begun
-        sounding is never cut off mid-thought."""
+        again. I said ship it then it never said anything"). The bound is on PROGRESS, not on the
+        turn: `progress` answers when something last reached the air, so a reply still being
+        written is never cut off, and a reply that stopped mid-way is not mistaken for one."""
         outcome = {}
         done = threading.Event()
 
@@ -946,10 +946,16 @@ class Conversation:
             if self._interrupted():  # they cut in - cancel the call and abandon the turn
                 self._cancel_think(done)
                 raise _ThinkInterrupted
-            if (self._answer_within and self._clock() - started > self._answer_within
-                    and (silent is None or silent())):
+            # The bound is on PROGRESS, not on total silence. Measured on silence alone it
+            # never fired for the turn that mattered: the brain wrote one clause, went into a
+            # tool sequence and hung there, so "it has said something" stayed true while he sat
+            # for twenty minutes ("I give my approval for a feature for the 4th time and
+            # Excephalon is still not responding at all"). Anything that reaches the air resets
+            # the clock; nothing new for the window ends the wait, whatever came before it.
+            since = self._clock() - max(started, progress() if progress else started)
+            if self._answer_within and since > self._answer_within:
                 self._cancel_think(done)
-                raise _ThinkTooSlow(f"nothing said in {self._answer_within:.0f}s - the turn "
+                raise _ThinkTooSlow(f"nothing more said in {self._answer_within:.0f}s - the turn "
                                     "stopped waiting on the brain")
         if "error" in outcome:
             raise outcome["error"]
@@ -958,13 +964,22 @@ class Conversation:
     def _cancel_think(self, done):
         """Tell the brain to drop the in-flight call, then wait for the worker to unwind before
         returning - so the next turn never starts a second brain call overlapping this one. A brain
-        with no `interrupt` (e.g. a fake) can't be cancelled; we still wait out the bounded window."""
+        with no `interrupt` (e.g. a fake) can't be cancelled; we still wait out the bounded window.
+
+        The interrupt itself goes on a thread of its own and is never waited on. It reaches the
+        CLI by scheduling a coroutine on the session's own loop, which runs it "at its next
+        await" - and a session hung on a dead read never reaches one, so that call can block
+        forever. Called inline, it defeated the very deadline that called it: the loop stopped
+        waiting on the brain and then waited on the cancel instead."""
         interrupt = getattr(self._brain, "interrupt", None)
         if interrupt is not None:
-            try:
-                interrupt()
-            except Exception as exc:
-                print(f"[interrupt error] {exc!r}", file=sys.stderr)
+            def cancel():
+                try:
+                    interrupt()
+                except Exception as exc:
+                    print(f"[interrupt error] {exc!r}", file=sys.stderr)
+
+            threading.Thread(target=cancel, daemon=True).start()
         done.wait(self._cancel_wait)
 
     def turn(self):
@@ -1080,9 +1095,13 @@ class Conversation:
         # heard mid-reply is Excephalon's own leak or someone talking over it. Spoken form, since
         # that is what is audible and therefore what a leak transcribes.
         spoken_parts = []
+        # When something last reached the air - what his wait is measured against, so a reply
+        # still arriving is never cut off and one that stopped part-way is not mistaken for it.
+        last_progress = [0.0]
 
         def audible(piece):
             spoken_parts.append(piece)
+            last_progress[0] = self._clock()
             reply.add(piece)
 
         # The gates between the brain and the voice: a pasted document line is dropped before it
@@ -1098,7 +1117,7 @@ class Conversation:
         try:
             said = self._think(self._with_system_notes(heard, offered),
                                on_text=paste.feed if paste is not None else None,
-                               silent=lambda: not "".join(spoken_parts).strip())
+                               progress=lambda: last_progress[0])
         except _ThinkInterrupted:  # they cut the thinking off - no reply, straight back to listening
             self._keep_for_later(offered)  # nothing was said, so the update is still owed
             self._settle(reply)
