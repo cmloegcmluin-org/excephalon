@@ -83,6 +83,18 @@ def _approved(desk, name, steps="look at it"):
     agent = desk._desked[name].agent
     _wait_for(lambda: len(agent.messages) >= 2 and desk._desked[name].state == "idle")
     desk._outbox.drain()  # the landing report reached him; nothing about the agent is still owed
+    _git_confirmed(desk, name)
+
+
+def _git_confirmed(desk, name):
+    """Git, having answered that this agent's branch reached origin/main.
+
+    The desks in these tests answer "not merged" instantly (`_no_git`), because a real subprocess
+    on every landing turn made the whole file wait on the machine. But a wrap-up is legal only
+    once the merge is a FACT - an agent recorded DELIVERED on the strength of the landing ORDER
+    had its item ticked off his list while its work sat unpushed - so tests about the wrap-up
+    itself say here that git answered yes, exactly as `_carry` records it when it does."""
+    desk._desked[name].landed = True
 
 
 def _wait_for(predicate, timeout=2.0):
@@ -682,7 +694,59 @@ def test_an_agent_cannot_be_wrapped_up_over_work_he_has_not_ruled_on(tmp_path):
                      and desk._desked["builder"].state == "idle")
 
     outbox.drain()  # the landing report reached him
-    assert desk.retire("builder") is True  # approved and told: the wrap-up is the last leg
+    assert desk.retire("builder") is False  # sent to land it is not the same as having landed it
+    _git_confirmed(desk, "builder")
+    assert desk.retire("builder") is True  # approved, told, and actually merged
+    desk.close()
+
+
+def test_a_wrap_up_two_seconds_after_the_landing_order_is_refused(tmp_path):
+    # The Asana grouping fix: he approved it at 13:37:32, and two seconds later - before the
+    # agent could act on the order at all - it was recorded DELIVERED, item #19 ticked off his
+    # Highdeas list, its tab closed. It was never pushed and never merged; the code sat on his
+    # machine while he was twice told the feature had landed and was live. "Landing" is the
+    # ORDER; only git saying the branch reached origin/main is the outcome.
+    logs = tmp_path / "agent-logs"
+    ticked = []
+    desk, outbox, _ = _desk(log_dir=logs, complete=lambda item, **where: ticked.append(item))
+    desk.start("shipper", str(tmp_path / "wt"), "keep named groups whole",
+               enhancement="named groups shouldn't be split up")
+    assert _wait_for(lambda: bool(outbox))
+    outbox.drain()
+    desk.present("shipper", "submit the Groceries row and check the capture")
+    desk.verdict("shipper", True)  # his "ship it" - the order goes out on a thread of its own
+    agent = desk._desked["shipper"].agent
+    assert _wait_for(lambda: len(agent.messages) >= 2
+                     and desk._desked["shipper"].state == "idle")
+    outbox.drain()
+
+    assert desk.retire("shipper") is False      # git has not said it merged, so it has not
+    assert ticked == []                         # ...and his list still says the ask is open
+    assert (logs / "shipper.log").exists()      # ...and the tab is still his to look at
+
+    _git_confirmed(desk, "shipper")
+    assert desk.retire("shipper") is True
+    assert ticked == ["named groups shouldn't be split up"]
+    desk.close()
+
+
+def test_a_merge_report_he_never_heard_survives_the_launch_that_finds_its_agent_gone(tmp_path):
+    # The scroll-position fix merged, its report was offered at a lull he never answered, and the
+    # session closed with it still owed. The next launch dropped every piece of news belonging to
+    # an agent with no live tab - which is right for a progress note and threw away the one fact
+    # he was owed. He was never told the feature shipped; he heard it days later as a clause
+    # inside a greeting. A thread's ENDING is never stale.
+    spool = tmp_path / "spool.json"
+    outbox = Outbox(spool=spool)
+    outbox.push("still checking the tab switch", about="scroller", kind="finished")
+    outbox.push("It merged - the tabs keep their scroll now.", about="scroller", kind="landing")
+    outbox.drain()  # drained into a hand that never spoke it, then the process ended
+
+    desk, _, _ = _desk(outbox=Outbox(spool=spool), log_dir=tmp_path / "agent-logs")
+    desk.revive()  # a fresh launch: "scroller" has no tab, so its news is judged finished with
+
+    kept = [str(news) for news in desk._outbox.drain()]
+    assert kept == ["It merged - the tabs keep their scroll now."]
     desk.close()
 
 
@@ -742,6 +806,7 @@ def test_an_agent_cannot_be_wrapped_up_while_its_news_has_not_reached_him(tmp_pa
     assert _wait_for(lambda: len(agent.messages) >= 2
                      and desk._desked["lander"].state == "idle")
 
+    _git_confirmed(desk, "lander")              # the merge is a fact; only the telling is left
     assert desk.retire("lander") is False       # its merge report is still waiting to be spoken
     assert (logs / "lander.log").exists()       # nothing was archived over the debt
 
@@ -1533,7 +1598,8 @@ def test_a_landing_agents_silence_clock_keeps_running():
 
     # It finished its landing TURN but has not merged: the clock must still be running.
     assert monitor.finished == ["lander"]  # done() was NOT called a second time
-    outbox.drain()  # its report reached him, so the wrap-up is legal
+    outbox.drain()  # its report reached him
+    _git_confirmed(desk, "lander")  # and now it has actually merged, so the wrap-up is legal
     assert desk.retire("lander")
     assert monitor.finished == ["lander", "lander"]  # retirement is what stops the clock
     desk.close()

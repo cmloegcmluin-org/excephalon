@@ -216,7 +216,7 @@ class _Desked:
     """One agent and what it's doing, so the roster can say more than just a name."""
 
     def __init__(self, agent, cwd, task, log, *, model, effort, delivery=None, enhancement=None,
-                 project=None, item_id=None):
+                 project=None, item_id=None, landed=False):
         self.agent = agent
         self.cwd = cwd
         self.task = task
@@ -235,6 +235,12 @@ class _Desked:
         # The item's NUMBER, when it could be resolved at start. A number does not drift the way
         # the brain's retyping of his sentence does, and the tick goes by it first.
         self.item_id = item_id
+        # Whether GIT has confirmed this agent's branch actually reached origin/main. Set only
+        # where the desk asks git (`_carry`), never from anybody's claim - "landing" is an order
+        # and this is the outcome, and a wrap-up that trusted the order raced the very thread
+        # carrying it: an agent was recorded DELIVERED two seconds after his "ship it", its item
+        # ticked off his list, while its work sat unpushed on his machine.
+        self.landed = landed
         self.state = "starting"
         self.last_heard = None  # when it last said anything at all, step or reply
         self.last_word = None  # the last thing it said back, trimmed for the roster
@@ -476,7 +482,8 @@ class AgentDesk:
                                                    entry.get("rejections") or 0),
                                  enhancement=entry.get("enhancement"),
                                  project=entry.get("project"),
-                                 item_id=entry.get("item_id"))
+                                 item_id=entry.get("item_id"),
+                                 landed=bool(entry.get("landed")))
                 desked.recorded_session = session  # what the next persist writes until it speaks
                 desked.state = "idle"
                 # A crash streak survives the app's own restart, or a task that kills its agents
@@ -504,14 +511,20 @@ class AgentDesk:
         """Drop held news about any agent with no live log - it has been wrapped up, whatever the
         fleet record says, and an update about closed work arrives as a surprise. The record can
         be empty while the spool still holds four reports, which is how a wrap-up he had twice
-        called finished came back a third time, jargon and all, three seconds after a launch."""
+        called finished came back a third time, jargon and all, three seconds after a launch.
+
+        What a thread ENDED as is spared, because that is never stale and he is owed it exactly
+        once: the scroll-position fix merged, its report was offered at a lull he never answered,
+        the session closed with it still in the spool - and this line threw it away on the next
+        launch. He was never told the feature had shipped; it reached him days later as a clause
+        inside a greeting."""
         held = getattr(self._outbox, "owed_about", None)
         drop = getattr(self._outbox, "drop", None)
         if held is None or drop is None or self._log_dir is None:
             return
         for name in held():
             if name and not (self._log_dir / f"{name}.log").exists():
-                drop(name)
+                drop(name, keep_conclusions=True)
 
     def _already_retired(self, name):
         """Has this agent's log been moved to the archive? That move IS the wrap-up's record, and
@@ -880,6 +893,15 @@ class AgentDesk:
             if (entry is not None and entry.state == "idle"
                     and entry.delivery.stage != "landing"):
                 return False
+            # And "landing" is an ORDER, never an outcome. The order goes out on a thread of its
+            # own, and a wrap-up that trusted the stage raced that very thread: two seconds after
+            # his "ship it" an agent was recorded DELIVERED, its item ticked off his list and its
+            # tab closed, while its work sat unpushed on his machine - and he was then twice told
+            # the feature had landed and was live. Only git saying the branch reached origin/main
+            # makes a wrap-up legal (`entry.landed`, set where the desk asks); a DIED agent has no
+            # merge to wait for and is not held here.
+            if entry is not None and entry.state == "idle" and not entry.landed:
+                return False
             # And a wrap-up is illegal while anything about this agent is still waiting to be
             # spoken. The drop further down is for news he has MOVED PAST - but a merged report
             # he was never told is the loop's last word, and the wrap-up once dropped exactly
@@ -1045,6 +1067,9 @@ class AgentDesk:
         # between idle and the finished event it opens a window where the agent reads as done
         # with nothing owed about it yet.
         landed = entry.delivery.stage == "landing" and self._merged(entry)
+        if landed:
+            with self._lock:
+                entry.landed = True  # git said so; from here a wrap-up is legal, and only from here
         self._set_state(name, "idle", last_word=reply)
         if landed:
             # The loop's last leg is mechanical, so the desk walks it itself: approved work
@@ -1178,7 +1203,7 @@ class AgentDesk:
                  "delivery": entry.delivery.stage, "steps": entry.delivery.steps,
                  "rejections": entry.delivery.rejections, "deaths": entry.deaths,
                  "enhancement": entry.enhancement, "item_id": entry.item_id,
-                 "project": entry.project}
+                 "project": entry.project, "landed": entry.landed}
                 for name, entry in self._desked.items()
             ]
         self._state_path.parent.mkdir(parents=True, exist_ok=True)
