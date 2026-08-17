@@ -1462,6 +1462,26 @@ def test_the_working_robot_glows_green_and_both_states_go_white_on_hover():
     assert "#fff" in hover                                            # white over gray and green both
 
 
+def test_clicking_the_robot_flips_it_to_a_spinner_at_once():
+    # A start takes a beat - a worktree is cut, a session opened - so the click must plainly register
+    # the instant it lands or it reads as a dead click. projects.js flips the gray robot to a spinner
+    # on click; the green working link replaces it once its agent's log is there to open, and if
+    # nothing started the spinner clears so the robot can be clicked afresh.
+    js = _client().get("/static/projects.js").get_data(as_text=True)
+    assert 'classList.add("starting")' in js       # the spinner shows the moment the robot is clicked
+    assert 'classList.remove("starting")' in js    # and clears again if nothing came of the click
+
+
+def test_the_spinner_replaces_the_robot_and_spins():
+    # While its agent comes up the robot steps aside for a spinning ring, so the wait reads as work
+    # in progress rather than a button that did nothing.
+    css = _client().get("/static/app.css").get_data(as_text=True)
+    ring = _rule_for(css, ".checklist .agent-start.starting::after")
+    assert "animation" in ring and "border-radius" in ring   # a spinning ring stands in for the robot
+    aside = _rule_for(css, ".checklist .agent-start.starting .agent-icon")
+    assert "display: none" in aside                          # the robot glyph steps aside while it spins
+
+
 def test_an_agents_log_links_back_to_the_task_it_is_working_on(tmp_path):
     # "Add a link back from each agent's log to the task it worked on in the Projects tab, so
     # navigation is seamless in both directions." Same tie, read the other way.

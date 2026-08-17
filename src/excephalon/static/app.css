@@ -112,6 +112,16 @@ body.page .topbar, body.config .topbar {
 /* The start button is an action, not a control to style: strip the browser's chrome so only the
    robot shows, and answer the pointer. */
 .checklist .agent-start { padding: 0; border: none; background: none; cursor: pointer; }
+/* The click landed and its agent is coming up: the robot steps aside for a spinning ring, so a
+   start that takes a beat plainly registered rather than looking like a dead click. Cleared back to
+   the robot if nothing started, or replaced whole by the green working link once the log is there
+   to open (projects.js). */
+.checklist .agent-start.starting { cursor: default; }
+.checklist .agent-start.starting .agent-icon { display: none; }
+.checklist .agent-start.starting::after { content: ""; width: 11px; height: 11px;
+                                          border: 1.5px solid var(--dim); border-top-color: transparent;
+                                          border-radius: 50%; animation: agent-spin .7s linear infinite; }
+@keyframes agent-spin { to { transform: rotate(360deg); } }
 /* An agent is on this task: the robot glows the accent green, so a working task is legible at a
    glance down the list. */
 .checklist .agent-link.working { color: var(--accent);
