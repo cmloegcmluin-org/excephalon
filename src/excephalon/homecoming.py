@@ -14,6 +14,7 @@ stock greeting again wearing more of them.
 """
 
 import json
+import re
 from pathlib import Path
 
 from excephalon.delivery import IN_REVIEW
@@ -33,6 +34,28 @@ _PROMISES = ("let me ", "i'm going to ", "i am going to ", "give me a moment", "
 _REVIEW_CLAIMS = ("approv", "review", "verdict", "ready for your eyes", "ready for you to look",
                   "take a look", "waiting on your", "waiting for your")
 
+# An offer is an "or" inside the question itself - "...pick that back up, or hear the update?"
+# The alternative has to sit in the same sentence as the question mark, so an "or" that belongs
+# to some earlier clause ("nothing changed, or nothing you'd notice. Ready?") is not a choice.
+_A_CHOICE = re.compile(r"\bor\b[^.?!]*\?")
+
+# The whole first line when the composed one will not do and something is genuinely waiting.
+# STOCK_GREETING cannot stand in here: it asks what it can do, which is not the question, and it
+# leaves the waiting update behind a choice he was never offered.
+OFFER_GREETING = ("Welcome back. Do you want to pick up where we left off, or hear the update "
+                  "that's waiting?")
+
+
+def offers_a_choice(greeting):
+    """Does this line actually ASK him which he wants, rather than choosing for him?
+
+    "So, about that calendar demo you wanted - where should we start?" named four things and then
+    picked one, which is the failure: "strangely assuming that we're starting on the calendar
+    thing, rather than including it as one of the potential things for us to do, and asking me
+    which of the four things I want to work on." Asked for in the note alone, the shape was simply
+    not produced - a rule only the persona carries is a known weakness here, so the app checks."""
+    return bool(_A_CHOICE.search(str(greeting)))
+
 
 def unfit(greeting, fleet="", owed=False):
     """Why this composed greeting may not be spoken, or None when it may.
@@ -46,12 +69,17 @@ def unfit(greeting, fleet="", owed=False):
     `owed` says an update really is waiting to be spoken, and the greeting was ASKED to end by
     offering it. Inviting him to hear it is then a true sentence about a real thing, not a stage
     claim - and refusing it would drop the offer for the stock line and leave the news with
-    nothing to arrive behind."""
+    nothing to arrive behind. It also becomes the third checkable shape: with something waiting,
+    a greeting that does not OFFER has chosen for him, and choosing for him is the failure."""
     lowered = greeting.lower()
     promise = next((phrase for phrase in _PROMISES if phrase in lowered), None)
     if promise:
         return f"promises an action ('{promise.strip()}…') instead of greeting"
-    if not owed and IN_REVIEW not in fleet.lower():
+    if owed:
+        if not offers_a_choice(greeting):
+            return ("picks a thread for him instead of asking which he wants, with an update "
+                    "waiting")
+    elif IN_REVIEW not in fleet.lower():
         claim = next((phrase for phrase in _REVIEW_CLAIMS if phrase in lowered), None)
         if claim:
             return f"invites approval ('{claim}…') while nothing is in review"
@@ -163,15 +191,21 @@ def homecoming_note(turns, changes, away, waiting=(), fleet="", busy=False):
     if waiting:
         owed = (f"\n\nThere are already {len(waiting)} update(s) from his agents waiting to be "
                 "spoken to him. Your greeting is the ONLY thing he will hear until he answers, "
-                "so it must END by offering him the choice, in one short either/or question: "
-                "pick the thread above back up, or hear what is waiting. Say nothing about WHAT "
-                "is waiting - not the work, not the agent, not the steps: he chooses first, and "
-                "the update is spoken in full the moment he does. Welded behind a greeting that "
-                "asked him something else, the whole walkthrough arrived in the same breath as "
-                "the question and he could answer neither: \"it insanely asks me if I'd like to "
-                "continue with a calendar demo, then in the same breath tells me that a demo for "
-                "a feature an agent has been working on in the background is ready for my review, "
-                "and moreover, it just goes straight into the detailed information about that "
+                "so it must END by offering him the choice, in one short either/or question "
+                "containing the word 'or': pick the thread above back up, or hear what is "
+                "waiting. NEVER choose for him. Naming a thread and then asking where to start "
+                "on it is choosing - \"So, about that calendar demo you wanted, where should we "
+                "start?\" was answered with \"strangely assuming that we're starting on the "
+                "calendar thing, rather than including it as one of the potential things for us "
+                "to do, and asking me which of the four things I want to work on.\" The thread "
+                "above is ONE option, never the plan. Say nothing about WHAT is waiting - not the "
+                "work, not the agent, not the steps: he chooses first, and the update is spoken "
+                "in full the moment he does. Welded behind a greeting that asked him something "
+                "else, the whole walkthrough arrived in the same breath as the question and he "
+                "could answer neither: \"it insanely asks me if I'd like to continue with a "
+                "calendar demo, then in the same breath tells me that a demo for a feature an "
+                "agent has been working on in the background is ready for my review, and "
+                "moreover, it just goes straight into the detailed information about that "
                 "feature.\"")
     if over:
         # The conversation is done - he closed it, or real time has passed - but the work is
