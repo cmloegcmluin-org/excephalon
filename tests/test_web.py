@@ -128,10 +128,26 @@ def test_the_restart_says_it_is_updating_instead_of_leaving_him_guessing():
     assert 'id="updating"' in page and "Updating" in page
 
     js = _client().get("/static/closing.js").get_data(as_text=True)
-    restart = js[js.index('getElementById("restart")'):]
-    assert "updating.hidden = false" in restart
-    assert restart.index("veil.hidden = false") < restart.index('fetch("/restart"')  # said first
+    confirmed = js[js.index('getElementById("really-restart")'):]
+    assert confirmed.index("show(updating)") < confirmed.index('fetch("/restart"')  # said first
     assert "leaving" in js and "if (!leaving) veil.hidden = true" in js  # and not dismissable
+
+
+def test_the_restart_button_asks_before_it_takes_his_window_down():
+    # "I think the restart to upgrade button pops open the confirm dialog but skips it. it
+    # shouldn't skip it." The click used to wind the process down on the spot, with only the
+    # Updating notice to show for it. A restart closes his window and takes the conversation on
+    # the screen with it, so it is his to confirm, exactly as a close is.
+    page = _client().get("/").get_data(as_text=True)
+    assert 'id="restarting"' in page and "Restart Excephalon?" in page
+    assert 'id="keep-running"' in page and 'id="really-restart"' in page
+
+    js = _client().get("/static/closing.js").get_data(as_text=True)
+    clicked = js[js.index('getElementById("restart")'):js.index('getElementById("really-restart")')]
+    assert "show(restarting)" in clicked
+    assert 'fetch("/restart"' not in clicked  # the click asks; nothing winds down until he says
+    # Keeping it open is a real answer, on the same door the close question uses.
+    assert 'getElementById("keep-running").addEventListener("click", dismiss)' in js
 
 
 def test_the_tabs_this_page_replaced_still_answer(tmp_path):

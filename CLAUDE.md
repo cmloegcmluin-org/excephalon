@@ -468,9 +468,12 @@ closing event waits on plumbing that needs that same thread, and the inline ask 
 itself) (the native confirm was a
 light-mode box in a dark app; only the dialog's Close, through `Controls.quit`, actually closes),
 and its bar carrying a Restart-to-upgrade button that appears only when the checkout on disk has
-moved past the booted commit (worktrees.head_commit, polled by the page) - the click raises an
-Updating veil, undismissable, BEFORE the request goes out, since the wind-down, the wait on the
-old pid and the fresh launch are otherwise a silent stretch of wondering whether it worked - the relaunch is a
+moved past the booted commit (worktrees.head_commit, polled by the page) - the click ASKS, in the
+same styled dialog the X uses, because a restart closes his window and takes the conversation on
+the screen with it ("it pops open the confirm dialog but skips it. it shouldn't skip it"); only
+its Restart button raises the Updating veil, undismissable, BEFORE the request goes out, since
+the wind-down, the wait on the old pid and the fresh launch are otherwise a silent stretch of
+wondering whether it worked - the relaunch is a
 DETACHED helper (`relauncher.py`) spawned at the moment of the request, which waits for the old
 pid to die however it dies and then starts the new app, because relaunching as the old process's
 last act meant no relaunch at all when teardown misbehaved; window teardown answers the /quit request before

@@ -39,6 +39,19 @@
         <button type="button" class="btn leave" id="really-close">Close</button>
       </div>
     </div>
+    {#- The Restart button asks too, and waits. It used to wind the process down on the click
+        itself, with only the Updating notice to show for it - "it pops open the confirm dialog
+        but skips it. it shouldn't skip it." A restart closes his window and takes the
+        conversation down with it, so it is his to confirm, exactly as a close is. -#}
+    <div class="dialog" id="restarting" role="alertdialog" aria-modal="true"
+         aria-labelledby="restarting-title" hidden>
+      <h3 id="restarting-title">Restart Excephalon?</h3>
+      <p class="note">A fix has landed. This window closes and comes back on the new code.</p>
+      <div class="choices">
+        <button type="button" class="btn" id="keep-running">Keep it open</button>
+        <button type="button" class="btn leave" id="really-restart">Restart</button>
+      </div>
+    </div>
     <div class="dialog" id="updating" role="alertdialog" aria-modal="true"
          aria-labelledby="updating-title" hidden>
       <h3 id="updating-title">Updating…</h3>
