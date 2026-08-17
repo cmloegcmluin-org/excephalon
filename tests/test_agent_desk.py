@@ -1760,3 +1760,27 @@ def test_a_wrapped_agents_log_and_task_are_still_on_file(tmp_path):
     assert desk.task_of("autoplay-fix") == "make the auto-play choice stick"
     assert desk.ended("autoplay-fix") == "delivered"
     desk.close()
+
+
+def test_an_approval_carrying_a_tweak_lands_with_the_tweak_in_one_order(tmp_path):
+    # "'excephalon-' should be the prefix... you do not need to present this to me again for
+    # verification; just ship it with that small tweak." Routed as words alone (tell_agent), no
+    # verdict reached the record, the landing gate refused the agent's push, and he was asked
+    # to approve AGAIN ("I had told it in no uncertain terms that I didn't need to approve the
+    # work further"). Approval-with-a-change is one recorded verdict and one order: fold it in,
+    # then land - no second presentation.
+    desk, outbox, made = _desk()
+    desk.start("namer", "/tmp/wt", "distill agent names")
+    assert _wait_for(lambda: bool(outbox))
+    outbox.drain()
+    desk.present("namer", "open the demo")
+
+    desk.verdict("namer", True, feedback='make "excephalon-" the prefix for its own tasks')
+
+    assert _wait_for(lambda: len(made[0].messages) == 2)
+    order = made[0].messages[1]
+    assert "signed off, with one change" in order
+    assert '"excephalon-" the prefix' in order
+    assert "land it now" in order and "no second presentation" in order
+    assert desk.delivery_stage("namer") == "landing"  # the gate is open: the sign-off is on record
+    desk.close()
