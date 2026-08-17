@@ -103,3 +103,16 @@ def test_rejected_work_reads_as_revision_not_first_drafting():
     work.present("fixed steps")
     work.verdict(approved=True)
     assert work.describe() == "landing - approved, being merged now"
+
+
+def test_re_approving_landing_work_is_agreement_not_an_error():
+    # "The ship it still stands." - said about work already ordered to land, this must be a
+    # quiet yes: raised as an error instead, the brain read the machinery back to him ("The
+    # system needs your formal approval recorded").
+    work = Delivery()
+    work.present("steps")
+    work.verdict(approved=True)
+
+    work.verdict(approved=True)  # again - no error, no change
+
+    assert work.stage == "landing"

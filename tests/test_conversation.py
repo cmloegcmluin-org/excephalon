@@ -2249,3 +2249,45 @@ def test_a_walkthrough_carries_no_menu_on_its_back():
 
     assert "updates waiting" not in picked  # the walkthrough went out alone, review now open
     convo.turn()
+
+
+def test_a_pick_spends_the_offer_so_the_leftover_never_rides_unrelated_words():
+    # He picked one of two offered updates; the offer stayed latched, and his NEXT words - "The
+    # ship it still stands.", about a different agent entirely - came back with the leftover
+    # spinner walkthrough welded on ("it shouldn't be providing information about more than one
+    # different task in a single message").
+    outbox = Outbox()
+    outbox.push("names: the naming layer is ready", about="names")
+    outbox.push("spinner: the spinner is ready", about="spinner")
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["one", "the ship it still stands", "goodbye entity"]),
+                         FakeBrain(), tts, outbox=outbox)
+    convo._update_offered = True  # the offer that read both names out is standing
+
+    convo.turn()  # "one" picks the names update
+    convo.turn()  # unrelated words: the spinner must NOT ride this reply
+
+    reply = next(line for line in tts.spoken if "reply to" in line)
+    assert "spinner" not in reply
+    assert [getattr(h, "about", None) for h in convo._waiting] == ["spinner"]  # still held
+    convo.turn()
+
+
+def test_a_held_update_about_other_work_does_not_ride_his_reply_mid_review():
+    # One thing at a time holds for the offered-rides-the-turn path too: with his eyes on one
+    # piece of work, a leftover update about another waits for the gate, never welds itself to
+    # whatever he says next.
+    outbox = Outbox()
+    outbox.push("spinner: the spinner is ready", about="spinner")
+    tts = FakeTTS()
+    reviewing = {"names"}
+    convo = Conversation(FakeSTT(["the ship it still stands", "goodbye entity"]), FakeBrain(),
+                         tts, outbox=outbox, in_review=lambda: reviewing)
+    convo._update_offered = True
+
+    convo.turn()
+
+    reply = next(line for line in tts.spoken if "reply to" in line)
+    assert "spinner" not in reply
+    assert [getattr(h, "about", None) for h in convo._waiting] == ["spinner"]
+    convo.turn()

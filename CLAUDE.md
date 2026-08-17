@@ -273,7 +273,11 @@ walkthrough OPENS a review, so no roll call rides its back; and the held list is
 moment the verdict closes the review, which is the moment he once had to name by hand ("Now
 would be a good time to ask about the other two updates"). His words are read as a PICK only
 while a roll call or an offer actually stands - with no list read out, a short sentence that
-happens to contain "one" is his own words, not a choice off a menu he never heard. `voice.py` is how a streamed reply
+happens to contain "one" is his own words, not a choice off a menu he never heard - and a pick
+SPENDS the offer: left standing, the leftover item rode his next, unrelated words ("The ship it
+still stands." came back with the spinner walkthrough welded on). The offered-update-rides-the-
+reply path obeys the review gate too: mid-review, a held update about other work waits, welded
+to nothing. `voice.py` is how a streamed reply
 becomes audible — sentences cut the moment they end, synthesized and played while the next forms,
 one stop draining everything — and an engine hands its line over as PIECES rather than one
 finished clip, so a voice that generates over a network is not held back until its last byte;
@@ -569,7 +573,9 @@ with that small tweak" is a sign-off, not notes to re-present over — recorded 
 change riding the one landing order (`APPROVED_WITH_CHANGE`): routed as words alone instead, no
 verdict reached the record, the landing gate refused the push he had ordered, and he was asked to
 approve again ("I had told it in no uncertain terms that I didn't need to approve the work
-further"); `steps.py` decides
+further"). Re-approving work already landing is agreement, a quiet yes - raised as an error
+instead, "The ship it still stands." was answered with what "the system needs", machinery in his
+ears; `steps.py` decides
 what a streamed message becomes there — the agent's words as messages, and its commands, diffs and
 output as the machinery under them, capped at both ends with what was dropped counted in place.
 **A gate that judged whether stored news had been overtaken lived here for two days and was

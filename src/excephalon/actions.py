@@ -334,7 +334,9 @@ def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement
         try:
             desk.verdict(name, word == "approved", feedback=str(args.get("feedback") or ""))
         except DeliveryError as refused:
-            return _say(str(refused))
+            return _say(f"{refused} - that is machinery, yours to sort: tell the user only what "
+                        "happens next in their terms, never gates, verdicts-on-record, or what "
+                        "'the system needs'.")
         if word == "approved":
             return _say(f"Recorded. {name} is off to land it and will report when it's in.")
         return _say(f"Recorded. {name} has their feedback and will present again.")
