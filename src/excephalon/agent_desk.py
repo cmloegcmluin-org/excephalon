@@ -254,7 +254,7 @@ class AgentDesk:
     def __init__(self, outbox, *, agent_factory=None, roster_path=None, log_dir=None,
                  monitor=None, clock=time.strftime, events=None, run=None, state_path=None,
                  law_path=None, complete_enhancement=None, tick_by_id=None, tick_anywhere=None,
-                 wrapped_path=None, now=time.time):
+                 resolve_item=None, wrapped_path=None, now=time.time):
         from excephalon.worktrees import run_hidden
 
         self._run = run or run_hidden  # how retire removes a finished agent's worktree
@@ -267,6 +267,11 @@ class AgentDesk:
         # the brain's retyping of his sentence, which is what the text match depended on.
         self._tick_by_id = tick_by_id
         self._tick_anywhere = tick_anywhere
+        # What turns an item's WORDS into its number (memory.enhancement_id). It lives here, at
+        # the one place every agent start passes through, rather than at each door: resolved in
+        # the brain's tool alone, an agent started by a Projects-tab robot click carried no
+        # number at all, and the delivered work left its item open exactly as before.
+        self._resolve_item = resolve_item
         # What happened - finished, died - goes to the events sink as (kind, agent, report); the
         # narrator words it in the brain's own voice. Undirected, the desk speaks the old way:
         # a capped notice (or the death line) straight to the outbox.
@@ -324,6 +329,7 @@ class AgentDesk:
 
         The standing rule rides along with the task itself - not with every later message, since
         the session keeps it, and repeating it would be most of what the agent's tab is made of."""
+        item_id = item_id if item_id else self._item_number(enhancement, task)
         with self._lock:
             name = unique_name(name, self._taken_names())
             self._reserved.add(name)  # held from now until it is desked, so no concurrent start takes it
@@ -339,6 +345,26 @@ class AgentDesk:
                 self._reserved.discard(name)  # now it lives in _desked, or the start failed
         self._dispatch(name, task + STANDING_RULE + self._law_note())
         return name
+
+    def _item_number(self, enhancement, task):
+        """The list item's NUMBER from whatever words this start was given - the item text as it
+        was retyped, and failing that his own task text, which is passed on faithfully. Resolved
+        HERE so no door can forget it: with the resolution living in the brain's tool alone, an
+        agent started by a Projects-tab robot click carried no number, and the finished work left
+        its item open again ("Excephalon still failed to check off the task in the Projects tab").
+        Never a guess - the resolver answers only on a unique match."""
+        if self._resolve_item is None:
+            return None
+        for words in (enhancement, task):
+            if not words:
+                continue
+            try:
+                found, _ = self._resolve_item(words)
+            except Exception:
+                return None  # an unreadable list costs the tick its number, never the start
+            if found:
+                return found
+        return None
 
     def _taken_names(self):
         """Names not free for a newcomer - read under the lock: the agents at the desk, the tabs
