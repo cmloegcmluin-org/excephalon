@@ -150,7 +150,7 @@ def test_start_agent_tags_the_agent_with_the_enhancement_it_takes_on(tmp_path):
     _call(tools["start_agent"], path=str(worktree), task="wire the neural voice",
           enhancement="Better voice")
 
-    assert desk.started == [("wire-neural-voice", str(worktree), "wire the neural voice",
+    assert desk.started == [("excephalon-wire-neural-voice", str(worktree), "wire the neural voice",
                              "Better voice", None)]
 
 
@@ -164,7 +164,7 @@ def test_start_agent_leaves_the_tag_empty_when_no_enhancement_is_named(tmp_path)
 
     _call(tools["start_agent"], path=str(worktree), task="a one-off fix", enhancement="  ")
 
-    assert desk.started == [("one-off-fix", str(worktree), "a one-off fix", None, None)]
+    assert desk.started == [("excephalon-one-off-fix", str(worktree), "a one-off fix", None, None)]
 
 
 def test_start_agent_makes_the_worktree_when_the_path_is_new(tmp_path):
@@ -691,7 +691,8 @@ def test_without_an_explicit_name_the_task_is_distilled_into_one(tmp_path):
 
     _call(tools["start_agent"], path=str(worktree), task="fix the drive link")
 
-    assert desk.started[0][0] == "fix-drive-link"  # from the task, not the "wt-7c3" folder
+    # From the task, not the "wt-7c3" folder - and projectless, so it is Excephalon's own work.
+    assert desk.started[0][0] == "excephalon-fix-drive-link"
 
 
 def test_a_fan_out_over_several_worktrees_keeps_each_ones_own_name(tmp_path):

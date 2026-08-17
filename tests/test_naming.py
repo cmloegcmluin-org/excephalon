@@ -9,10 +9,11 @@ def test_compose_prefixes_the_project_and_hyphenates_the_words():
     assert compose("Highdeas", "smart grouping of ideas") == "highdeas-smart-grouping-ideas"
 
 
-def test_compose_without_a_project_is_just_the_distilled_words():
-    # Excephalon's own work has no project card (project=None), so no prefix - just the words.
-    assert compose(None, "voice fallback layer") == "voice-fallback-layer"
-    assert compose("", "voice fallback") == "voice-fallback"
+def test_compose_treats_a_missing_project_as_excephalons_own():
+    # A task with no project card of its own is Excephalon's own work, prefixed "excephalon-" -
+    # so "distill-names" reads as "excephalon-distill-names" and a label is never left bare.
+    assert compose(None, "voice fallback layer") == "excephalon-voice-fallback-layer"
+    assert compose("", "voice fallback") == "excephalon-voice-fallback"
 
 
 def test_compose_caps_the_words_at_three():
@@ -21,23 +22,24 @@ def test_compose_caps_the_words_at_three():
 
 
 def test_compose_drops_filler_words_but_never_down_to_nothing():
-    # A short label reads better without the connectives, but an all-filler phrase must still
-    # yield something rather than vanishing.
-    assert compose(None, "fix the drive link") == "fix-drive-link"
+    # A short label reads better without the connectives ("the" is dropped), but an all-filler
+    # phrase must still yield something rather than vanishing.
+    assert compose(None, "fix the drive link") == "excephalon-fix-drive-link"
     assert compose(None, "of the to for") != ""
 
 
 def test_compose_always_yields_a_name_even_from_nothing():
-    # An agent must always have a name: an empty distillation falls back to the project, or to a
-    # last-resort word, never to "".
-    assert compose(None, "") == "agent"
+    # An agent must always have a name: an empty distillation falls back to the project prefix -
+    # "excephalon" for its own work - never to "".
+    assert compose(None, "") == "excephalon"
     assert compose("Highdeas", "") == "highdeas"
 
 
 def test_distill_name_is_the_mechanical_prefixed_fallback():
-    # No model in the loop: the task's own first meaningful words, still prefixed by the project.
+    # No model in the loop: the task's own first meaningful words, still prefixed by the project -
+    # and by "excephalon" when the work is its own.
     assert distill_name("smart grouping of ideas", "Highdeas") == "highdeas-smart-grouping-ideas"
-    assert distill_name("wire the neural voice fallback") == "wire-neural-voice"
+    assert distill_name("wire the neural voice fallback") == "excephalon-wire-neural-voice"
 
 
 def test_unique_name_passes_a_free_name_through():
@@ -95,6 +97,17 @@ def test_the_namer_distills_the_task_through_the_model_and_prefixes_the_project(
 
     assert name == "highdeas-auto-play-toggle"
     assert made[0].closed  # the one-off naming session is let go after use
+
+
+def test_the_namer_prefixes_excephalon_for_its_own_projectless_work():
+    # The model's words for a projectless task still get the "excephalon-" prefix, so its own
+    # roadmap items read "excephalon-<words>" just as a Highdeas item reads "highdeas-<words>".
+    def factory(options):
+        return _FakeSession(options, reply="voice fallback")
+
+    namer = AgentNamer(session_factory=factory)
+
+    assert namer.name("wire the neural voice fallback", None) == "excephalon-voice-fallback"
 
 
 def test_the_namer_falls_back_to_the_task_words_when_the_model_errors():

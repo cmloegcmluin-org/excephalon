@@ -490,8 +490,9 @@ keep their own names, which are git's; `start_agent` takes a name up front, so "
 auto-play fix" works from the first word, and `safe_name` is what makes his words a filename).
 When he does NOT name it - the usual case, and every Projects-tab robot click - `naming.py`
 distills one rather than slugifying the task: a small model reads the task down to one-to-three
-words and the project is prefixed ("highdeas-smart-grouping"), because a tab and a spoken roll
-call cannot carry "agent-names-shouldn-t-be-the-name-of-the-task-with-hyphens". A slow or dead
+words and the project is prefixed ("highdeas-smart-grouping"), with its own work - a task carrying
+no project card of its own - prefixed "excephalon-" (naming.SELF_PROJECT), because a tab and a
+spoken roll call cannot carry "agent-names-shouldn-t-be-the-name-of-the-task-with-hyphens". A slow or dead
 model falls back to the task's own first meaningful words, so an agent-start never blocks on a
 name; and a distilled label that collides with a live agent or an open tab is bumped
 (`unique_name`), never reused, since a short name landing on the desk's key would silently
