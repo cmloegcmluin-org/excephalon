@@ -1392,6 +1392,47 @@ def test_a_task_with_an_agent_on_it_shows_a_glowing_indicator_linking_to_its_log
     assert 'id="task-excephalon-4"' not in page             # only the assigned task gets an anchor
 
 
+def test_a_task_started_from_its_robot_stays_green_when_projects_reloads(tmp_path):
+    # The click turns the robot green in place, but switching to the Agents tab and back reloads
+    # /projects, which must bring the green back from the desk's fleet record - not the click. Start
+    # an agent the way the robot's click does (enhancement = the task's own words) and let the desk
+    # record it, then reload /projects: the task is the green working link to that agent's log, not
+    # the gray start button. The record is written on the desk's work thread, so a reload a moment
+    # later - which is what a tab switch is - is the honest test.
+    import time
+    from types import SimpleNamespace
+    from excephalon.agent_desk import AgentDesk
+    from excephalon.outbox import Outbox
+
+    def factory(name, cwd, decide, **choice):
+        return SimpleNamespace(name=name, cwd=cwd, session_id="s-" + name, messages=[],
+                               work=lambda message, on_message=None: "on it", close=lambda: None)
+
+    logs = tmp_path / "agent-logs"
+    state = tmp_path / "agents.json"
+    desk = AgentDesk(Outbox(), agent_factory=factory, log_dir=logs, state_path=state)
+    desk.start("captions", str(tmp_path / "wt"), "live captions in the window",
+               enhancement="live captions in the window")
+
+    profile = tmp_path / "profile.md"
+    profile.write_text("## Enhancements\n- [ ] #3 live captions in the window\n", encoding="utf-8")
+    client = _client(profile_path=profile, agent_state_path=state, agent_logs_dir=logs)
+
+    def working_row():
+        page = client.get("/projects").get_data(as_text=True)
+        return page.split('id="task-excephalon-3"')[1].split("</li>")[0]
+
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline and "agent-link working" not in working_row():
+        time.sleep(0.02)
+
+    row = working_row()
+    assert 'class="agent-link working"' in row              # green: an agent is on it, after the reload
+    assert 'href="/agents#agent-captions"' in row           # and it links to that agent's log
+    assert 'class="agent-start"' not in row                 # not the gray start button
+    desk.close()
+
+
 def test_every_checklist_row_shows_the_robot_and_reserves_its_gutter(tmp_path):
     # The robot is always there, every task: an agent on it is the green link to its log; no agent
     # is a gray button that starts one. Either way the same fixed-width gutter leads the row, so the
