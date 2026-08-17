@@ -219,6 +219,65 @@ def test_the_note_carries_where_every_work_thread_stands():
     assert "never re-offer it for review" in note
 
 
+def test_a_greeting_that_picks_a_thread_for_him_is_unfit_while_something_waits():
+    # "Back already - barely any time lost. While I was down, the Asana grouping fix, the tab
+    # scroll memory, and the robot icon spinner all landed. So, about that calendar demo you
+    # wanted - where should we start?" It named four things and then chose one: "strangely
+    # assuming that we're starting on the calendar thing, rather than including it as one of the
+    # potential things for us to do, and asking me which of the four things I want to work on."
+    from excephalon.homecoming import unfit
+
+    assert unfit("Back already. So, about that calendar demo - where should we start?", owed=True)
+    assert unfit("Welcome back. Ready to carry on with the scrubber work?", owed=True)
+    assert unfit("Back with you. Want to pick the calendar work back up, or hear the update "
+                 "that's waiting?", owed=True) is None
+    # Nothing waiting, nothing to choose between: an ordinary greeting is still fine.
+    assert unfit("Back already. Where should we start?", owed=False) is None
+
+
+def test_an_or_in_an_earlier_clause_is_not_an_offer():
+    # The choice has to be IN the question, or "nothing changed, or nothing you'd notice." counts
+    # as offering him something - and he is asked nothing at all.
+    from excephalon.homecoming import offers_a_choice
+
+    assert offers_a_choice("Nothing changed, or nothing you'd notice. Where were we?") is False
+    assert offers_a_choice("Carry on there, or hear what's waiting?") is True
+
+
+def test_the_fallback_first_line_offers_when_something_is_waiting():
+    # The stock line asks what it can do, which is a different question, and it would leave the
+    # update sitting behind a choice he was never given. A refused greeting still has to ASK.
+    from excephalon.__main__ import _greeting
+    from excephalon.homecoming import OFFER_GREETING, offers_a_choice
+
+    class Assuming:
+        def respond(self, message, *, remember=True):
+            return "Back already. So, about that calendar demo - where should we start?"
+
+    said = _greeting(Assuming(), 0.0, {}, note="[pick it up]", waiting=["namer"])
+
+    assert said == OFFER_GREETING
+    assert offers_a_choice(said)
+
+
+def test_a_refused_greeting_is_asked_again_with_the_fault_named():
+    from excephalon.__main__ import _greeting
+
+    asked = []
+
+    class LearnsOnTheSecondTry:
+        def respond(self, message, *, remember=True):
+            asked.append(message)
+            if len(asked) == 1:
+                return "Back already. So, about that calendar demo - where should we start?"
+            return "Back with you. Carry on with the calendar, or hear the update waiting?"
+
+    said = _greeting(LearnsOnTheSecondTry(), 0.0, {}, note="[pick it up]", waiting=["namer"])
+
+    assert said == "Back with you. Carry on with the calendar, or hear the update waiting?"
+    assert "picks a thread for him" in asked[1]  # told exactly what was wrong with the first
+
+
 def test_a_greeting_that_promises_work_is_unfit():
     # "Let me finish reading what actually landed..." opened a session by resurrecting a dead
     # errand; he answered "Dude, what the fuck? No. It's already been shipped." A greeting says
@@ -280,7 +339,9 @@ def test_a_refused_greeting_is_taken_off_the_brains_own_record():
 
     brain = Promiser()
     assert _greeting(brain, 0.0, {}, note="[pick it up]") == STOCK_GREETING
-    assert brain.retracted == ["Back with you. Let me finish reading what actually landed."]
+    # Twice: a refused draft is told what was wrong and asked again, and this one refuses the
+    # same way both times. Each attempt is taken back - two false memories, not one.
+    assert brain.retracted == ["Back with you. Let me finish reading what actually landed."] * 2
 
 
 def test_standing_work_makes_a_long_gap_no_fresh_start():

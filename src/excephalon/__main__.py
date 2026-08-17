@@ -57,6 +57,7 @@ from excephalon.shutdown import consolidate, leave_process
 from excephalon.stt_console import ConsoleSTT
 from excephalon.tailing import safe_name
 from excephalon.homecoming import (
+    OFFER_GREETING,
     STOCK_GREETING,
     changes_since,
     homecoming_note,
@@ -305,24 +306,39 @@ def _greeting(brain, booted_at, previous_boot, was_seen=0.0, waiting=(), note=No
             waiting=waiting, fleet=fleet, busy=busy)
     if not note:
         return STOCK_GREETING
-    try:
-        # Not remembered as a turn: this is a draft that may never be spoken at all - `unfit` may
-        # refuse it, the conversation may drop it for retelling the news it precedes, and he may
-        # simply speak first. Carried into the window a restart rebuilds from, a greeting nobody
-        # heard comes back as something the model believes it opened with. What it actually said
-        # is written from the delivery instead (SdkBrain.spoke).
-        said = brain.respond(note, remember=False)
-    except Exception:
-        return STOCK_GREETING
-    said = said.strip()
-    # An update genuinely waiting makes "want to hear it?" a true sentence rather than a stage
-    # claim - and the greeting was told to end on exactly that question, since it is the only
-    # thing he hears until he chooses.
-    refused = unfit(said, fleet, owed=bool(waiting))
-    if not said or refused:
-        _retract(brain, said)  # written, never spoken: off its record, or it holds a false memory
-        return STOCK_GREETING
-    return said
+    # With something waiting, the first line is the only thing he hears until he answers, so the
+    # fallback has to be an OFFER rather than the stock line - which asks what it can do, a
+    # different question, and leaves the update behind a choice he was never given.
+    plainly = OFFER_GREETING if waiting else STOCK_GREETING
+    # Two attempts, because the shape keeps not being produced on the first: "So, about that
+    # calendar demo you wanted - where should we start?" named four things and then picked one for
+    # him. Told what was wrong with the draft, the second attempt usually asks instead; and a rule
+    # only the note carries is a known weakness here, which is why unfit checks rather than hopes.
+    fault = ""
+    for _ in range(2):
+        try:
+            # Not remembered as a turn: this is a draft that may never be spoken at all - `unfit`
+            # may refuse it, and he may simply speak first. Carried into the window a restart
+            # rebuilds from, a greeting nobody heard comes back as something the model believes it
+            # opened with. What it actually said is written from the delivery (SdkBrain.spoke).
+            said = brain.respond(_again(note, fault), remember=False).strip()
+        except Exception:
+            return plainly
+        # An update genuinely waiting makes "want to hear it?" a true sentence rather than a stage
+        # claim - and makes choosing FOR him the thing to refuse.
+        fault = unfit(said, fleet, owed=bool(waiting)) if said else "says nothing at all"
+        if not fault:
+            return said
+        _retract(brain, said)  # written, never spoken: off its record, or it is a false memory
+    return plainly
+
+
+def _again(note, fault):
+    """The same note, with what was wrong with the last draft in front of it."""
+    if not fault:
+        return note
+    return (f"[Your last attempt at this line {fault}, so it was not spoken and he has not heard "
+            "it. Write it again, fixing exactly that.]\n\n") + note
 
 
 def _retract(brain, draft):

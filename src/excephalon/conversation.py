@@ -6,6 +6,7 @@ import time
 from dataclasses import dataclass
 
 from excephalon.console import Console
+from excephalon.homecoming import offers_a_choice
 from excephalon.links import as_spoken
 from excephalon.phrases import canonical as _canonical
 from excephalon.phrases import ends_with_command as _ends_with_command
@@ -701,7 +702,13 @@ class Conversation:
             # greeting is composed knowing news waits and ends on exactly that question
             # (homecoming_note). So the first line goes out alone, and it IS the offer: what is
             # waiting stays waiting until he says which he wants.
-            if self._say_opening():
+            #
+            # The latch is set only if the line actually ASKED. A first line composed before this
+            # news arrived never offered anything, and latching on it would leave the update
+            # sitting behind a choice he was never given - so that one is simply the first line,
+            # and the news takes the next opening as its own utterance.
+            asked = offers_a_choice(self._opening)
+            if self._say_opening() and asked:
                 self._update_offered = True
             return
         # Unlisted news is not an item to choose between - the errand hand is machinery, not an

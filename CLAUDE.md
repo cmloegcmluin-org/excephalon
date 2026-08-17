@@ -254,7 +254,15 @@ feature. in this case, it should have instead asked me: would you like to pick u
 work, or hear an update from that feature work." So with news waiting the note has the greeting
 END on exactly that either/or question and name nothing of what waits, `unfit` lets that
 invitation stand (an update really waiting makes it a true sentence, not a stage claim), and the
-held news is spoken in full the moment he answers — the offer latch the app already had. First
+held news is spoken in full the moment he answers — the offer latch the app already had. The
+greeting may never CHOOSE for him: asked for in the note alone, the shape simply was not
+produced — "So, about that calendar demo you wanted - where should we start?" named four things
+and picked one ("strangely assuming that we're starting on the calendar thing, rather than
+including it as one of the potential things for us to do") — so `offers_a_choice` checks for the
+"or" inside the question itself, `unfit` refuses a first line that lacks it while something
+waits, the draft is asked again with the fault named, and the fallback is `OFFER_GREETING` rather
+than the stock line, which asks a different question and would strand the update behind a choice
+he was never given. The conversation latches the offer only on a first line that actually asked. First
 and alone also means it can never be left behind: a boot with exactly one piece of news once
 spoke the news and left the welcome pending for seven minutes, surfacing to invite him to a demo
 he had already approved ("this message makes no sense"); and a first line that misses its moment
