@@ -193,6 +193,18 @@ APPROVED_LAND_IT = (
     "watcher fires, and the merge report is the one thing still owed. Your reply is the outcome: "
     "it merged, or exactly what stopped it."
 )
+# His sign-off, carrying one change to fold in on the way. A separate tell-then-land lost the
+# sign-off half: "ship it with that small tweak" went to the agent as words alone, no verdict
+# reached the record, the landing gate refused the push, and he was asked to approve AGAIN work
+# he had approved in no uncertain terms.
+APPROVED_WITH_CHANGE = (
+    "The user looked at what you presented and signed off, with one change to fold in first: "
+    "{feedback}\nMake that change, run the full suite green on it, and then land it now - no "
+    "second presentation: push your branch, open the PR, enqueue it on the merge queue, and "
+    "watch it in the FOREGROUND of this same turn, one command that polls until the PR is merged "
+    "or fails. Never hand the watch to a background task and end your turn. Your reply is the "
+    "outcome: it merged, or exactly what stopped it."
+)
 REJECTED_TRY_AGAIN = (
     "The user looked at what you presented and rejected it: {feedback}\n"
     "Address their feedback and present again when it is ready for their eyes."
@@ -576,7 +588,12 @@ class AgentDesk:
             entry.delivery.verdict(approved)
         self._persist()
         if approved:
-            self._dispatch(name, APPROVED_LAND_IT)
+            # An approval may carry one change to fold in on the way - "ship it with that small
+            # tweak" is a sign-off, not feedback to re-present over. Routed as words alone, no
+            # verdict reached the record and the landing gate then refused the very landing he
+            # had ordered.
+            self._dispatch(name, APPROVED_WITH_CHANGE.format(feedback=feedback) if feedback
+                           else APPROVED_LAND_IT)
         else:
             self.drop_news(name)
             self._dispatch(name, REJECTED_TRY_AGAIN.format(feedback=feedback))

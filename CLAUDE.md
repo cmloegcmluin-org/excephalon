@@ -564,7 +564,12 @@ counted so "in revision" reads apart from first drafting, which is a distinction
 APPROVAL while it does: an ambiguous "yes" was once recorded as approval of steps that had never
 been spoken, and the work merged without his eyes ever on it ("I never even accepted it; it was
 never presented to me to be validated"). A rejection stands either way — he often judges from his
-own looking — and drops the now-stale walkthrough; `steps.py` decides
+own looking — and drops the now-stale walkthrough. An approval may CARRY a change — "just ship it
+with that small tweak" is a sign-off, not notes to re-present over — recorded approved with the
+change riding the one landing order (`APPROVED_WITH_CHANGE`): routed as words alone instead, no
+verdict reached the record, the landing gate refused the push he had ordered, and he was asked to
+approve again ("I had told it in no uncertain terms that I didn't need to approve the work
+further"); `steps.py` decides
 what a streamed message becomes there — the agent's words as messages, and its commands, diffs and
 output as the machinery under them, capped at both ends with what was dropped counted in place.
 **A gate that judged whether stored news had been overtaken lived here for two days and was

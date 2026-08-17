@@ -319,7 +319,12 @@ def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement
 
     @tool("record_verdict", "Record the user's verdict on presented work, the moment they give "
           "it. `verdict` is 'approved' or 'rejected'. Approval sends the agent to land the work; "
-          "rejection sends it back with `feedback` - their words on what was wrong.",
+          "rejection sends it back with `feedback` - their words on what was wrong. An approval "
+          "that also asks for a small change ('ship it with that tweak') is STILL an approval: "
+          "record it approved with the change as `feedback`, and the agent folds it in on the "
+          "way to landing. Never route a sign-off through tell_agent - that records no verdict, "
+          "the landing stays blocked, and the user gets asked to approve again what they already "
+          "approved in no uncertain terms.",
           {"name": str, "verdict": str, "feedback": str})
     async def record_verdict(args):
         name = str(args["name"]).strip()
