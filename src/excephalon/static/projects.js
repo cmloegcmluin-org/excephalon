@@ -102,18 +102,24 @@ document.addEventListener("click", async (event) => {
   if (!text) return;   // an empty, not-yet-saved row is nothing to put an agent on yet
   const project = row.closest(".section")?.dataset.project || "";
   button.disabled = true;   // one click is one agent; a double-click must not start two
+  button.classList.add("starting");   // a spinner in the robot's place, so the click plainly took -
+                                       // the start takes a beat, and green waits for the log to be there
   try {
     const answer = await fetch("/task/take-care",
       { method: "POST", body: new URLSearchParams({ project, text }) });
     const agent = answer.ok ? (await answer.json()).agent : null;
     if (agent) {
+      // The desk opens the log before it hands the name back, so by here the tab is there to open:
+      // the spinner gives way to the green working link, which replaces the whole button.
       turnGreen(button, agent);
       announceAsked(`On it — ${agent} is on this now`);
       return;
     }
-    button.disabled = false;   // nothing started; leave it clickable
+    button.disabled = false;   // nothing started; put the gray robot back to try again
+    button.classList.remove("starting");
   } catch {
     button.disabled = false;
+    button.classList.remove("starting");
   }
 });
 
