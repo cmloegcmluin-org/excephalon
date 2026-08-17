@@ -335,7 +335,7 @@ class AgentDesk:
 
         The standing rule rides along with the task itself - not with every later message, since
         the session keeps it, and repeating it would be most of what the agent's tab is made of."""
-        item_id = item_id if item_id else self._item_number(enhancement, task)
+        item_id = item_id if item_id else self.item_number(enhancement, task)
         with self._lock:
             name = unique_name(name, self._taken_names())
             self._reserved.add(name)  # held from now until it is desked, so no concurrent start takes it
@@ -352,13 +352,17 @@ class AgentDesk:
         self._dispatch(name, task + STANDING_RULE + self._law_note())
         return name
 
-    def _item_number(self, enhancement, task):
+    def item_number(self, enhancement, task):
         """The list item's NUMBER from whatever words this start was given - the item text as it
         was retyped, and failing that his own task text, which is passed on faithfully. Resolved
         HERE so no door can forget it: with the resolution living in the brain's tool alone, an
         agent started by a Projects-tab robot click carried no number, and the finished work left
         its item open again ("Excephalon still failed to check off the task in the Projects tab").
-        Never a guess - the resolver answers only on a unique match."""
+        Never a guess - the resolver answers only on a unique match.
+
+        Public because the doors read it too, before the start: the agent's NAME carries the number
+        ("highdeas-7-...") so a tab and the roll call tie it to the exact card item, and reading it
+        off this one resolver keeps a second, drifting copy of the resolve logic out of the doors."""
         if self._resolve_item is None:
             return None
         for words in (enhancement, task):

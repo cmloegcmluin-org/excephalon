@@ -9,6 +9,24 @@ def test_compose_prefixes_the_project_and_hyphenates_the_words():
     assert compose("Highdeas", "smart grouping of ideas") == "highdeas-smart-grouping-ideas"
 
 
+def test_compose_inserts_the_task_number_between_the_project_and_the_words():
+    # The prefix carries the project AND the item's number, so a tab reads "highdeas-7-..." and the
+    # roll call ties the agent to the exact numbered card item it is working off.
+    assert compose("Highdeas", "smart grouping of ideas", 7) == "highdeas-7-smart-grouping-ideas"
+
+
+def test_compose_numbers_excephalons_own_work_too():
+    # Its own roadmap items are numbered on the Enhancements card, so "excephalon-3-voice-fallback"
+    # ties the agent to that item exactly as a Highdeas number does.
+    assert compose(None, "voice fallback", 3) == "excephalon-3-voice-fallback"
+
+
+def test_compose_with_a_number_but_no_words_keeps_the_number():
+    # An empty distillation still leaves the number in the prefix, so the tie to the card item
+    # survives even when the model gave back nothing to distill.
+    assert compose("Highdeas", "", 7) == "highdeas-7"
+
+
 def test_compose_treats_a_missing_project_as_excephalons_own():
     # A task with no project card of its own is Excephalon's own work, prefixed "excephalon-" -
     # so "distill-names" reads as "excephalon-distill-names" and a label is never left bare.
@@ -40,6 +58,12 @@ def test_distill_name_is_the_mechanical_prefixed_fallback():
     # and by "excephalon" when the work is its own.
     assert distill_name("smart grouping of ideas", "Highdeas") == "highdeas-smart-grouping-ideas"
     assert distill_name("wire the neural voice fallback") == "excephalon-wire-neural-voice"
+
+
+def test_distill_name_carries_the_number_through_the_mechanical_fallback():
+    # The fallback still ties the agent to its card item: even with no model, a numbered task
+    # distills to "highdeas-7-...".
+    assert distill_name("smart grouping of ideas", "Highdeas", 7) == "highdeas-7-smart-grouping-ideas"
 
 
 def test_unique_name_passes_a_free_name_through():
@@ -97,6 +121,30 @@ def test_the_namer_distills_the_task_through_the_model_and_prefixes_the_project(
 
     assert name == "highdeas-auto-play-toggle"
     assert made[0].closed  # the one-off naming session is let go after use
+
+
+def test_the_namer_inserts_the_task_number_into_the_distilled_name():
+    # The number rides the model's words too, so a robot-clicked card item reads "highdeas-12-..."
+    # on its tab and in the roll call.
+    def factory(options):
+        return _FakeSession(options, reply="Auto-play toggle")
+
+    namer = AgentNamer(session_factory=factory)
+
+    assert namer.name("add a checkbox that disables auto-play", "Highdeas", 12) == \
+        "highdeas-12-auto-play-toggle"
+
+
+def test_the_namer_keeps_the_number_when_it_falls_back_to_the_task_words():
+    # A model that cannot be reached still ties the agent to its card item: the mechanical fallback
+    # carries the number just as the model path does.
+    def factory(options):
+        return _FakeSession(options, boom=RuntimeError("no model"))
+
+    namer = AgentNamer(session_factory=factory)
+
+    assert namer.name("wire the neural voice fallback", "Highdeas", 5) == \
+        "highdeas-5-wire-neural-voice"
 
 
 def test_the_namer_prefixes_excephalon_for_its_own_projectless_work():

@@ -1982,3 +1982,25 @@ def test_a_start_whose_words_match_no_item_carries_no_number(tmp_path):
 
     assert desk._desked["oneoff"].item_id is None
     desk.close()
+
+
+def test_item_number_hands_a_door_the_same_number_the_tick_uses(tmp_path):
+    # The number rides the agent's NAME too ("highdeas-7-..."), and the doors read it off the SAME
+    # resolver the tick uses - one resolve, no second drifting copy. Item text first, his own task
+    # text failing that, and only ever a unique match.
+    desk, _, _ = _desk()
+    desk._resolve_item = lambda words: ((7, "Highdeas") if "smart grouping" in words
+                                        else (None, None))
+
+    assert desk.item_number("smart grouping of ideas", "the full task text") == 7
+    assert desk.item_number(None, "please do the smart grouping work") == 7  # falls through to task
+    assert desk.item_number("an ad-hoc chore", "an ad-hoc chore") is None
+    desk.close()
+
+
+def test_item_number_is_none_and_never_raises_without_a_resolver():
+    # A bare desk has no resolver: no number, and no crash - a name is never worth failing a start.
+    desk, _, _ = _desk()
+
+    assert desk.item_number("anything", "anything") is None
+    desk.close()

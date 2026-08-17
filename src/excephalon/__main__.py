@@ -563,11 +563,11 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
         for name, why in sorted(_SERVICE_FAULTS.items()):
             announce(f"({name} is set up but not answering: {why})")
     errands = ErrandRunner(RUNTIME_DIR, agent_events, services=services)
-    # The naming layer: a small model reads a task and distills a short, project-prefixed label for
-    # the agent that takes it on, so a tab reads "highdeas-smart-grouping" instead of the task with
-    # its spaces turned to hyphens. Both doors into the fleet use it - the brain's start_agent and a
-    # Projects-tab robot click - and every failure falls back to the task's own first words, so an
-    # agent-start is never blocked on a name.
+    # The naming layer: a small model reads a task and distills a short, project-and-number-prefixed
+    # label for the agent that takes it on, so a tab reads "highdeas-7-smart-grouping" instead of the
+    # task with its spaces turned to hyphens. Both doors into the fleet use it - the brain's
+    # start_agent and a Projects-tab robot click - and every failure falls back to the task's own
+    # first words, so an agent-start is never blocked on a name.
     namer = AgentNamer()
     if hooks is not None:
         # His name for an agent, from the page's own heading - the desk owns the key, the log and
@@ -578,15 +578,18 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
             """A Projects-tab robot clicked: start an agent on that task right now - the
             deterministic half of "please take care of this task", the same work start_agent does
             when the brain is told to, with no brain in the loop to decide. The task is distilled
-            into a short, project-prefixed name (excephalon.naming) rather than slugified; a fresh
-            worktree per task under that name, cut from current origin/main; the agent's name (as
-            the desk finally settled it) goes back so the page turns that task green at once."""
+            into a short, project-and-number-prefixed name (excephalon.naming) rather than
+            slugified - the item's number, read off the desk (the one resolver), ties the tab to
+            the exact card item; a fresh worktree per task under that name, cut from current
+            origin/main; the agent's name (as the desk finally settled it) goes back so the page
+            turns that task green at once. The desk resolves the number again for the end tick."""
             spec = take_care_spec(project, task_text)
             if spec is None:
                 return None
             worktrees = REPO / ".claude" / "worktrees"
             taken = {child.name for child in worktrees.glob("*")} if worktrees.exists() else set()
-            name = unique_name(namer.name(spec["task"], spec["project"]), taken)
+            item_id = desk.item_number(spec["enhancement"], spec["task"])
+            name = unique_name(namer.name(spec["task"], spec["project"], item_id), taken)
             prepare_worktree_for(str(worktrees / name))  # a fresh worktree, cut from origin/main
             return desk.start(name, str(worktrees / name), spec["task"],
                               enhancement=spec["enhancement"], project=spec["project"])
