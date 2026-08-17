@@ -305,13 +305,27 @@ def _greeting(brain, booted_at, previous_boot, was_seen=0.0, waiting=(), note=No
     if not note:
         return STOCK_GREETING
     try:
-        said = brain.respond(note)
+        # Not remembered as a turn: this is a draft that may never be spoken at all - `unfit` may
+        # refuse it, the conversation may drop it for retelling the news it precedes, and he may
+        # simply speak first. Carried into the window a restart rebuilds from, a greeting nobody
+        # heard comes back as something the model believes it opened with. What it actually said
+        # is written from the delivery instead (SdkBrain.spoke).
+        said = brain.respond(note, remember=False)
     except Exception:
         return STOCK_GREETING
     said = said.strip()
-    if not said or unfit(said, fleet):
+    refused = unfit(said, fleet)
+    if not said or refused:
+        _retract(brain, said)  # written, never spoken: off its record, or it holds a false memory
         return STOCK_GREETING
     return said
+
+
+def _retract(brain, draft):
+    """Take a composed line off the brain's own record when the app will not speak it."""
+    take_back = getattr(brain, "retract", None)
+    if take_back is not None and str(draft or "").strip():
+        take_back(draft)
 
 
 def _google_faults(services):

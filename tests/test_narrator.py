@@ -8,10 +8,14 @@ class FakeBrain:
     def __init__(self, reply="The drive work's done - it just needs your eyes."):
         self._reply = reply
         self.asked = []
+        self.retracted = []
 
     def respond(self, utterance, *, remember=True, on_text=None):
         self.asked.append((utterance, remember))
         return self._reply
+
+    def retract(self, draft):
+        self.retracted.append(draft)
 
 
 def _wait_for(outbox, timeout=2.0):
@@ -77,7 +81,12 @@ def test_the_brain_is_told_which_agent_and_what_it_reported():
     [(asked, remembered)] = brain.asked
     assert "fixer" in asked
     assert "621 passing" in asked
-    assert remembered is True  # he will refer to this later; it belongs in the brain's thread
+    # Composed, not yet delivered - and this is the one place in the app that routinely throws a
+    # finished line away: swallowed as a kick to the agent, dropped for over-claiming, beaten by
+    # the deadline. Remembered here, every one of those drafts survived a compaction or a restart
+    # as something the model believed it had told him. What it said is written from the DELIVERY
+    # instead (SdkBrain.spoke, called when the utterance actually sounds).
+    assert remembered is False
 
 
 def test_a_death_is_narrated_as_what_it_is():
@@ -342,3 +351,63 @@ def test_the_same_words_stand_once_the_work_has_landed():
 
     assert _wait_for(outbox)
     assert "deployed" in str(outbox.drain()[0])
+
+
+def test_a_line_dropped_for_over_claiming_is_taken_off_the_brains_own_record():
+    # The plain notice goes out INSTEAD of what it wrote - so it is holding a sentence he never
+    # heard, beside one he did, about the same work. That is the same-thing-twice reading built
+    # from the inside, and it is why the draft is retracted rather than merely unused.
+    brain, outbox = FakeBrain("The auto-play checkbox is deployed - try it in Highdeas."), Outbox()
+    Narrator(brain, outbox, stage_of=lambda agent: "building").tell(
+        "finished", "toggle", "built the checkbox")
+
+    assert _wait_for(outbox)
+    assert brain.retracted == ["The auto-play checkbox is deployed - try it in Highdeas."]
+
+
+def test_a_swallowed_kick_to_the_agent_is_taken_back_too():
+    # "Handled." is protocol, not speech: nothing is pushed and nothing is heard. Left on the
+    # record it is a reply the model believes it gave him about an agent he was never told about.
+    responded = threading.Event()
+
+    class KickingBrain(FakeBrain):
+        def respond(self, utterance, *, remember=True, on_text=None):
+            try:
+                return super().respond(utterance, remember=remember, on_text=on_text)
+            finally:
+                responded.set()
+
+    brain = KickingBrain("Handled.")
+    Narrator(brain, Outbox()).tell("finished", "fixer", "Continuing shortly.")
+
+    assert responded.wait(2.0)
+    for _ in range(50):
+        if brain.retracted:
+            break
+        threading.Event().wait(0.01)
+    assert brain.retracted == ["Handled."]
+
+
+def test_a_draft_the_deadline_beat_is_taken_back_rather_than_left_standing():
+    # One hung narration once held the brain's lock while a merge report queued behind it, so the
+    # wait is bounded and the plain notice ships. The late answer is dropped - and has to be taken
+    # back, or the model holds the sentence it wrote beside the notice he actually heard.
+    started, let_go = threading.Event(), threading.Event()
+
+    class SlowBrain(FakeBrain):
+        def respond(self, utterance, *, remember=True, on_text=None):
+            started.set()
+            let_go.wait(2.0)
+            return "The drive work is ready for your eyes."
+
+    brain, outbox = SlowBrain(), Outbox()
+    Narrator(brain, outbox, deadline=0.05).tell("finished", "fixer", "It merged. Details.")
+
+    assert _wait_for(outbox)          # the plain notice shipped on the deadline
+    assert not outbox.drain()[0].composed
+    let_go.set()
+    for _ in range(200):
+        if brain.retracted:
+            break
+        threading.Event().wait(0.01)
+    assert brain.retracted == ["The drive work is ready for your eyes."]

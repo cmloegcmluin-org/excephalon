@@ -510,6 +510,29 @@ class Conversation:
     def _interrupted(self):
         return self._interrupt is not None and self._interrupt.is_set()
 
+    def _remember_spoken(self, text):
+        """Tell the brain this line of its own actually reached him.
+
+        Composing is not delivering, so the lines it writes for the app to speak - agent news, the
+        session's first line - are kept out of the window a compaction or a restart rebuilds the
+        conversation from until they have sounded. This is what puts them in, and only what
+        sounded goes in: what it remembers saying is then what he remembers hearing."""
+        recorded = getattr(self._brain, "spoke", None)
+        if recorded is not None and str(text or "").strip():
+            recorded(text)
+
+    def _retract(self, text):
+        """Tell the brain this line of its own will never be spoken.
+
+        The live session already holds every draft it wrote, where the only reading available is
+        that it was said - so a line the app drops (overtaken, dropped as stale, a greeting that
+        retold the news behind it) has to be taken back, or the model holds a sentence he never
+        heard and reasons from it. That is the duplicate class from the inside: a draft dropped
+        for a plain notice leaves it holding the draft AND hearing the notice."""
+        take_back = getattr(self._brain, "retract", None)
+        if take_back is not None and str(text or "").strip():
+            take_back(text)
+
     def _say(self, text, *, record=True, known=False):
         """Speak, unless they've cut in. Once the interrupt is set, every later line this turn stays
         unsaid, and a line already in progress is killed by the TTS. While it speaks, a background
@@ -637,6 +660,8 @@ class Conversation:
                       if getattr(held, "about", None) in dropped]:
             self._waiting.remove(stale)
             self._console.evidence(f"(dropped as stale for {stale.about}: {stale})")
+            if getattr(stale, "composed", False):
+                self._retract(str(stale))  # its own sentence, now never to be spoken
         # ALWAYS drain, even when it can't be said yet. The queue's "something is waiting" flag is
         # what makes the window's mic yield an empty turn, and it is only cleared by draining - so
         # returning early with it still set spun the loop forever and swallowed every submission they
@@ -786,6 +811,7 @@ class Conversation:
         if opening and _retells(opening, said):
             self._console.evidence(f"(opening dropped - it retells the news it precedes: "
                                    f"{opening})")
+            self._retract(opening)  # written and never spoken: off the brain's record
             opening = ""
         if opening:
             said = f"{opening}\n\n{said}"
@@ -802,6 +828,10 @@ class Conversation:
         # would then never be spoken, since it re-reads only when it has changed.
         self._announced = self._roll() if named else ()
         self._delivered(news)
+        if getattr(news, "composed", False):
+            self._remember_spoken(str(news))  # its own words, now actually in his ears
+        if opening:
+            self._remember_spoken(opening)
         return said
 
     def _hand_over(self, heard, place=0):
@@ -830,6 +860,11 @@ class Conversation:
         forget = getattr(self._outbox, "superseded", None)
         if forget is not None:
             forget(news)
+        if getattr(news, "composed", False):
+            # It wrote this sentence and nobody will ever hear it. Left on its record, the brain
+            # holds the overtaken line AND hears the newer one, which is the same-thing-twice
+            # reading manufactured from the inside.
+            self._retract(str(news))
 
     def _roll(self):
         """The roll call as it would be SPOKEN right now - the sentence, which is what a re-read
@@ -847,7 +882,10 @@ class Conversation:
         opening, self._opening = self._opening, ""
         if opening:
             self._console.reply(opening)
-            self._say(opening, record=False, known=True)
+            if self._say(opening, record=False, known=True):
+                self._remember_spoken(opening)
+            else:
+                self._opening = opening  # never sounded: still unsaid, still owed
 
     def _announce(self):
         """Read out who is waiting, numbered, so one of them can be named. The session's opening
@@ -863,6 +901,8 @@ class Conversation:
         if not self._say(line, record=False):
             self._opening = opening  # never sounded: the first line is still unsaid, still owed
             return
+        if opening:
+            self._remember_spoken(opening)  # its own first line, now actually heard
         self._announced = roll
 
     def _take_pick(self, heard):
@@ -1037,6 +1077,7 @@ class Conversation:
         # sense... Excephalon had been with me up until just before that").
         if self._opening:
             self._console.evidence(f"(opening dropped unspoken - he spoke first: {self._opening})")
+            self._retract(self._opening)  # a first line it wrote and he never heard
             self._opening = ""
         self._last_engaged = self._clock()  # they spoke: present again, whatever the clock said
         if farewell:
@@ -1228,7 +1269,9 @@ class Conversation:
         if began:
             for extra in extras:
                 self._delivered(extra)
-                if not getattr(extra, "composed", False):
+                if getattr(extra, "composed", False):
+                    self._remember_spoken(str(extra))  # its own words, now actually in his ears
+                else:
                     # He heard it in Excephalon's voice and the brain did not write it - the same
                     # ledger every app-authored line rides, so it is never denied later.
                     self._unwritten.append(str(extra))

@@ -163,14 +163,18 @@ def test_the_first_line_is_the_brains_when_there_is_a_thread_and_stock_when_ther
             self.says = says
             self.asked = []
 
-        def respond(self, message):
-            self.asked.append(message)
+        def respond(self, message, *, remember=True):
+            self.asked.append((message, remember))
             return self.says
 
     brain = Brain()
     said = _greeting(brain, booted_at=0.0, previous_boot={}, note="[pick the thread up]")
     assert said == "Welcome back - your mic can't drop out on me like that again."
-    assert brain.asked == ["[pick the thread up]"]
+    # Asked, and deliberately NOT remembered as a turn: a greeting is a draft until it sounds -
+    # `unfit` may refuse it, the loop may drop it for retelling the news behind it, and he may
+    # speak first. Remembered here, a welcome nobody heard came back after a restart as the line
+    # the model believed it had opened with.
+    assert brain.asked == [("[pick the thread up]", False)]
 
     fresh = Brain()
     assert _greeting(fresh, booted_at=0.0, previous_boot={}, note="") == STOCK_GREETING
@@ -247,10 +251,32 @@ def test_an_unfit_greeting_falls_back_to_the_stock_line():
     from excephalon.__main__ import _greeting
 
     class Promiser:
-        def respond(self, message):
+        def respond(self, message, *, remember=True):
             return "Back with you. Let me finish reading what actually landed."
 
     assert _greeting(Promiser(), 0.0, {}, note="[pick it up]") == STOCK_GREETING
+
+
+def test_a_refused_greeting_is_taken_off_the_brains_own_record():
+    # The stock line goes out INSTEAD of what it wrote, so the model is holding an opening he
+    # never heard while he heard a different one. It opened a session promising to "finish
+    # reading what actually landed with the drag play cursor fix so you know exactly what you're
+    # approving", about work already shipped - a sentence it must not go on believing it said.
+    from excephalon.__main__ import _greeting
+
+    class Promiser:
+        def __init__(self):
+            self.retracted = []
+
+        def respond(self, message, *, remember=True):
+            return "Back with you. Let me finish reading what actually landed."
+
+        def retract(self, draft):
+            self.retracted.append(draft)
+
+    brain = Promiser()
+    assert _greeting(brain, 0.0, {}, note="[pick it up]") == STOCK_GREETING
+    assert brain.retracted == ["Back with you. Let me finish reading what actually landed."]
 
 
 def test_standing_work_makes_a_long_gap_no_fresh_start():

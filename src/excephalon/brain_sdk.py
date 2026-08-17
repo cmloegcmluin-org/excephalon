@@ -199,6 +199,24 @@ RECENT_HEADER = (
     "context reset - pick up seamlessly from here and don't announce that any reset happened:\n"
 )
 
+# Said back to the session on its next ask, about a line it wrote that was never spoken.
+#
+# Composing is not delivering. The app asks the brain for lines it may then throw away - a
+# narration that claimed unlanded work was live, one the deadline gave up waiting for, a greeting
+# `unfit` refused - and every one of those drafts is sitting in the session's own history, where
+# the model can only read it as something it said. That is one half of the failure the
+# unwritten-lines ledger fixes from the other side: it is told about lines the app spoke that it
+# did not write, and never about lines it wrote that the app did not speak. Both halves have the
+# same consequence in his ears - the model and the user remembering different conversations - and
+# the duplicate class is the sharp end: a draft dropped for a plain notice leaves the model holding
+# the draft AND hearing the notice, which reads as having said the same thing twice.
+RETRACTED_NOTICE = (
+    "[System note, not from the user: you drafted the line(s) below earlier in this session and "
+    "the app did NOT speak them - they never reached the user, who has no idea they exist. Treat "
+    "them as unsaid: never refer back to them, never count them as something you have already "
+    "told him, and never repeat their content as though he has heard it:\n{lines}]\n\n"
+)
+
 # When usage runs out, the CLI answers with a fixed spend-limit notice instead of a real reply -
 # and the session then stays wedged on it, parroting the notice every turn even after usage resets,
 # leaving no way out but killing the app. Spotting the notice lets the brain rebuild and recover.
@@ -258,6 +276,7 @@ class SdkBrain:
         self._recent = deque(seed_turns, maxlen=recent_turns_kept)  # last turns, carried across a compaction
         self._interrupting = threading.Event()  # set while a barge-in is cancelling the live ask
         self._respond_lock = threading.Lock()  # one session, so one ask at a time
+        self._retracted = []  # drafts it wrote that were never spoken; told to it on the next ask
         # `seed_turns` are the tail of the LAST session's transcript, so a restarted process picks
         # the conversation back up instead of greeting its user as a stranger - the machinery is
         # the compaction reseed, fed from disk instead of from this process's own memory.
@@ -272,6 +291,30 @@ class SdkBrain:
         note. This is for what comes after: a compaction reseed, or the session shed by a
         deadline, both of which would otherwise resurrect the world as it was at startup."""
         self._persona = persona
+
+    def spoke(self, said):
+        """Record a line the app actually DELIVERED in Excephalon's name, whoever composed it.
+
+        The carried-forward window is what a compaction or a restart rebuilds the conversation
+        from, so it has to be the conversation he actually had. Filled from what was COMPOSED, it
+        carried drafts nobody ever heard across the reset and the model went on reasoning from
+        them. Filled from the delivery receipt instead, what it remembers saying is exactly what
+        sounded - which also makes it the whole record of app-authored lines, rather than a second
+        ledger beside it."""
+        said = str(said).strip()
+        if said:
+            self._recent.append((None, said))
+
+    def retract(self, draft):
+        """This line was composed and never spoken - tell the session so on its next ask.
+
+        The carried window can simply not hold it (`remember=False`), but the LIVE session already
+        has it in its own history, where the only reading available is that it was said. Every
+        compose-then-discard path in the app lands here: a narration that over-claimed, one the
+        deadline gave up on, an agent kicked onward instead of reported, a greeting refused."""
+        draft = str(draft).strip()
+        if draft:
+            self._retracted.append(draft)
 
     def interrupt(self):
         """Cancel the ask in flight so a barge-in doesn't have to wait it out. The flag is set
@@ -309,6 +352,7 @@ class SdkBrain:
             self._interrupting.clear()  # a fresh turn; forget any leftover cancel from the last one
             if self._should_compact():
                 self._compact()
+            utterance = self._with_retractions(utterance)
             try:
                 reply = self._bounded_ask(utterance, on_text, deadline)
             except Exception:
@@ -334,6 +378,18 @@ class SdkBrain:
             return reply
         finally:
             lock.release()
+
+    def _with_retractions(self, utterance):
+        """Any drafts it wrote and the app never spoke, put in front of this ask - once.
+
+        Taken here rather than at the caller because every path into the session comes through
+        `respond`: a narration, a greeting and a reply are all asks of the same session, and a
+        draft dropped by one of them is a false memory for whichever asks next."""
+        drafts, self._retracted = self._retracted, []
+        if not drafts:
+            return utterance
+        return RETRACTED_NOTICE.format(
+            lines="\n".join(f"- {draft}" for draft in drafts)) + utterance
 
     def _bounded_ask(self, utterance, on_text, deadline):
         """One ask that cannot hang: past the deadline the session is closed - the stranded ask
@@ -429,7 +485,12 @@ class SdkBrain:
     def _render_recent(self):
         if not self._recent:
             return ""
-        turns = "\n".join(f"{self._user}: {said}\nYou: {reply}" for said, reply in self._recent)
+        # A line with no words of his in front of it is one the app spoke on its own - agent news
+        # at a lull, a welcome back. It carries across a reset as what it was, something Excephalon
+        # said, rather than being hung under a system prompt as though he had asked for it.
+        turns = "\n".join(f"You: {reply}" if said is None
+                          else f"{self._user}: {said}\nYou: {reply}"
+                          for said, reply in self._recent)
         return RECENT_HEADER + turns
 
     def warmup(self, announce=lambda line: None):
