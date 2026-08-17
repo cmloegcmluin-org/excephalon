@@ -55,6 +55,15 @@ _IS_BARE_LOCAL = re.compile(_BARE_LOCAL)
 _IS_FILE_URL = re.compile(_FILE_URL)
 
 
+# A markdown link, the shape every coding agent writes: the label is what a person reads and
+# says, the address is what a click opens. Unparsed, the whole construct fell through the
+# word-scanner - "[▶ Launch the Auto-play demo](http://localhost:41777/launch?...)" drew as
+# plain text and the voice read the address out character by character ("it's still sending
+# links that aren't clickable, and still trying to read them aloud"). The label is the part
+# with meaning; the address is machinery for the click.
+_MARKDOWN = re.compile(r"\[(?P<label>[^\]\n]+)\]\((?P<url>[^)\s]+)\)")
+
+
 def bare_path(target):
     """A `file://` URL as the plain path it names, or `target` unchanged.
 
@@ -119,7 +128,21 @@ def link_parts(text, *, exists=os.path.exists):
 
 
 def _line_parts(line, exists):
-    """One newline-free line, split exactly as `link_parts` always split whole texts."""
+    """One newline-free line: markdown links first - their labels hold spaces, so they must be
+    lifted out whole before any word-splitting - then the word-scanner over what remains."""
+    parts, at = [], 0
+    for found in _MARKDOWN.finditer(line):
+        parts += _word_parts(line[at:found.start()], exists)
+        parts.append({"text": found["label"], "link": found["url"]})
+        at = found.end()
+    parts += _word_parts(line[at:], exists)
+    return parts
+
+
+def _word_parts(line, exists):
+    """A stretch with no markdown in it, split exactly as `link_parts` always split whole texts."""
+    if not line:
+        return []
     words = line.split(" ")
     parts, plain, index = [], [], 0
     while index < len(words):
@@ -231,12 +254,22 @@ def as_spoken(text):
     of "backslash". Exact identifiers get the same treatment - "859e704" spoken is a mangled
     transcription waiting to happen, and the standing instruction is screen, not voice. What is
     on screen is still the real thing, so it can be read and clicked."""
+    # A markdown link is spoken as its LABEL - that is what the label is for - with the symbols
+    # dropped ("▶" is a button glyph, not a word). Before any splitting, because the label holds
+    # spaces and the construct read piecewise is the address read raw.
+    text = _MARKDOWN.sub(lambda found: _spoken_label(found["label"]), text)
     # An em- or en-dash glued to an address ("...5210/—drag the notes") rides inside the matched
     # word, and the voice read the raw address out with "drag" welded on. The dashes are the
     # sentence's, never the address's, so they get their own space before words are judged - the
     # voice reads "a — b" and "a—b" alike, so only the judging changes.
     text = re.sub(r"[–—]", lambda dash: f" {dash.group(0)} ", text)
     return " ".join(_said_aloud(word) for word in text.split())
+
+
+def _spoken_label(label):
+    """A markdown label as speech: its words, or the stand-in when nothing survives."""
+    words = re.sub(r"[^A-Za-z0-9' -]+", " ", label).split()
+    return " ".join(words) if words else SPOKEN_ADDRESS
 
 
 def _said_aloud(word):

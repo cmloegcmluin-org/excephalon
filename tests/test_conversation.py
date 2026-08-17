@@ -2173,3 +2173,73 @@ def test_fresh_news_about_an_agent_already_listed_does_not_repeat_the_same_sente
 
     convo.turn()  # and when he takes number one, what he gets is the NEWEST of fixer's news
     assert "fixer presented its work for your eyes" in "\n".join(tts.spoken)
+
+
+def test_a_pasted_report_never_reaches_the_voice_or_the_record():
+    # "Whoa whoa whoa whoa whoa. That message is huge. That's like ten times bigger than I ever
+    # want you to send a message to me." The brain relayed an agent's whole markdown report -
+    # blockquote lines, launcher link, sign-off - inside its reply. A reply is speech, and
+    # speech has no blockquote: a ">"-led line is a document quoted into the mouth, dropped
+    # before it can sound and off the record's copy alike.
+    tts = FakeTTS()
+
+    class PastingBrain(FakeBrain):
+        def respond(self, utterance):
+            super().respond(utterance)
+            return ("The fix is ready for your eyes.\n\n"
+                    "> Done - the choice is now saved on the server in preferences.json.\n"
+                    "> 1. Click it - a window opens with two demo notes.\n"
+                    "> Nothing is pushed or merged - say the word and I'll land it.\n\n"
+                    "Say the word when you've looked.")
+
+    convo = Conversation(FakeSTT(["how's the autoplay fix", "goodbye entity"]), PastingBrain(),
+                         tts, outbox=Outbox())
+    convo.turn()
+    convo.turn()
+
+    said = tts.spoken[0]
+    assert "ready for your eyes" in said
+    assert "Say the word when you've looked." in said
+    assert "preferences.json" not in said  # not one pasted line sounded
+    assert ">" not in said
+
+
+def test_news_about_other_work_holds_while_his_eyes_are_on_one_thing():
+    # "Don't ask me about updates for other items when we've already picked one of them to be
+    # working on." - and then, because nothing offered the held items when the review DID close,
+    # "Now would be a good time to ask about the other two updates," which he should never have
+    # had to say. While a review is open, other news holds; the moment it closes, the list is
+    # offered on its own.
+    outbox = Outbox()
+    outbox.push("names: the naming layer is ready for your eyes", about="names")
+    outbox.push("autoplay: the auto-play fix is ready for your eyes", about="autoplay")
+    reviewing = {"spinner"}
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["looks good, one note though", "goodbye entity"]), FakeBrain(),
+                         tts, outbox=outbox, in_review=lambda: reviewing)
+
+    convo.turn()  # the review is open: the two held updates stay held, no menu, no offer
+    assert not [line for line in tts.spoken if "updates waiting" in line]
+
+    reviewing.clear()  # his verdict closed the review
+    convo.turn()
+
+    assert any("Two updates waiting" in line for line in tts.spoken)
+
+
+def test_a_walkthrough_carries_no_menu_on_its_back():
+    # His "Yes." at 19:56 was answered with the spinner walkthrough AND "Two updates waiting...
+    # Which first?" welded to it - a menu read out at the exact moment his eyes went onto one
+    # thing. Delivering a walkthrough OPENS a review, so the list waits for his verdict.
+    outbox = Outbox()
+    outbox.push("spinner: ready for your eyes - open localhost:5599", about="spinner")
+    outbox.push("names: the naming layer is ready too", about="names")
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["one", "goodbye entity"]), FakeBrain(), tts, outbox=outbox,
+                         review_opens=lambda name: name == "spinner")
+
+    convo.turn()  # the roll call goes out; he picks the spinner by number
+    picked = next(line for line in tts.spoken if "localhost port 5599" in line)
+
+    assert "updates waiting" not in picked  # the walkthrough went out alone, review now open
+    convo.turn()

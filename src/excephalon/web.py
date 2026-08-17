@@ -12,6 +12,7 @@ There is no tab strip. What were tabs are pages with a bar above them: the conve
 profile's four sections down one page, the persona, what has been learned, and the agents.
 """
 
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -68,7 +69,33 @@ SECTIONS = (
 )
 
 
-def _said(entry, label="", day="", speakers=SPEAKERS):
+def _agent_name_links(parts, names):
+    """Every agent name in a message becomes a link to that agent's log - "when Excephalon
+    speaks about an agent, the agent's name should be a link to that agent's logs". Exact
+    names only, which is how the roll calls and heads-ups write them; longest first, so a name
+    that extends another is never eaten by its prefix. `names` maps each name to where it
+    opens: a live agent's own tab, or the Agents page for one already archived."""
+    if not names:
+        return parts
+    pattern = re.compile("|".join(
+        re.escape(name) for name in sorted(names, key=len, reverse=True)))
+    linked = []
+    for part in parts:
+        if part["link"] or not part["text"]:
+            linked.append(part)
+            continue
+        text, at = part["text"], 0
+        for found in pattern.finditer(text):
+            if found.start() > at:
+                linked.append({"text": text[at:found.start()], "link": ""})
+            linked.append({"text": found.group(0), "link": names[found.group(0)]})
+            at = found.end()
+        if at < len(text):
+            linked.append({"text": text[at:], "link": ""})
+    return linked
+
+
+def _said(entry, label="", day="", speakers=SPEAKERS, agent_links=None):
     """One entry as the page needs it: who said it, when, and whether it is a message at all.
 
     `label` is a session's name, which the break itself does not carry - it is worked out from
@@ -95,12 +122,14 @@ def _said(entry, label="", day="", speakers=SPEAKERS):
         "reference": f"{name} · {dated}" if bubble else "",
         "moment": dated if bubble else "",
         # What in it can be opened, worked out here so the page only draws it. Space-aware, so a
-        # path with a folder like "Field Notes" in it is one link, not one broken one.
-        "parts": link_parts(entry["text"]) if entry["role"] in SIDES else [],
+        # path with a folder like "Field Notes" in it is one link, not one broken one - and an
+        # agent's name in it links to that agent's log.
+        "parts": (_agent_name_links(link_parts(entry["text"]), agent_links)
+                  if entry["role"] in SIDES else []),
     }
 
 
-def _thread(entries, since, speakers=SPEAKERS):
+def _thread(entries, since, speakers=SPEAKERS, agent_links=None):
     """A stretch of conversation as the page draws it, from `since` on."""
     found = sessions(entries)
     # By position, never by value: every session break is the same dict as every other, so
@@ -114,7 +143,8 @@ def _thread(entries, since, speakers=SPEAKERS):
             day = entry["stamp"]
         day_at.append(day)
     return {
-        "entries": [_said(entry, named.get(since + offset, ""), day_at[since + offset], speakers)
+        "entries": [_said(entry, named.get(since + offset, ""), day_at[since + offset], speakers,
+                          agent_links)
                     for offset, entry in enumerate(entries[since:])],
         "at": since,
         "total": len(entries),
@@ -339,7 +369,12 @@ def create_app(model, *, on_submit, on_stop=None, on_mic=None, on_auto_listen=No
         entries = model.entries
         since = min(request.args.get("since", 0, type=int), len(entries))
         retract, typed, send = mirror.dictated() if mirror is not None else (0, [], False)
-        return _thread(entries, since) | {
+        # An agent's name, wherever a message says one, opens that agent's log: a live one lands
+        # on its own tab, a wrapped one on the Agents page where its archive is listed.
+        live = agents.names()
+        by_name = {name: f"/agents#agent-{name}" for name in live}
+        by_name |= {kept: "/agents" for kept, _ in agents.archived_names() if kept not in by_name}
+        return _thread(entries, since, agent_links=by_name) | {
             "state": mirror.state if mirror is not None else "waking",
             "level": mirror.level if mirror is not None else 0.0,
             "hearing": mirror.hearing if mirror is not None else "",

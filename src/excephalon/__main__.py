@@ -686,6 +686,11 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
                 # Anything of his that has changed since the brain was told, whatever part of
                 # his context it lives in - the guard against the whole stale-snapshot category.
                 standing=StandingWatch(_persona, on_change=brain.refresh_persona).moved,
+                # One thing at a time: while his eyes are on presented work, other agents' news
+                # holds and no menu is read - and a walkthrough being delivered never carries a
+                # menu on its back, since speaking it is what opens the review.
+                in_review=desk.in_review,
+                review_opens=lambda name: desk.delivery_stage(name) == "ready",
                 briefing=lambda: (
                     f"{desk.digest()}\nFresh agents start on {desk.running_on()}."
                     "\n\nHis Enhancements list - the OPEN items, live from the file this turn. "

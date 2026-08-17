@@ -210,6 +210,47 @@ class _FarewellGate:
             self._forward(sentence)
 
 
+class _PastedReportGate:
+    """Forwards a streamed reply onward, dropping any line that is pasted material.
+
+    A reply is SPEECH, and speech has no blockquote: a line opening with ">" is a document
+    quoted into the mouth. The brain once relayed an agent's whole markdown report inside a
+    reply - launcher link, numbered steps, sign-off - and he stopped it mid-word: "Whoa whoa
+    whoa... That's like ten times bigger than I ever want you to send a message to me." The
+    held news the app welds on is composed by the narrator and carries no quote marks, so
+    nothing legitimate is lost. Line-buffered, because the quote marker is a line's first
+    character and a delta can end anywhere."""
+
+    def __init__(self, forward):
+        self._forward = forward
+        self._held = ""
+
+    def feed(self, piece):
+        *done, self._held = (self._held + piece).split("\n")
+        for line in done:
+            self._pass(line + "\n")
+
+    def flush(self):
+        """The reply is complete: whatever is held is its last (unterminated) line."""
+        held, self._held = self._held, ""
+        if held:
+            self._pass(held)
+
+    def _pass(self, line):
+        if not line.lstrip().startswith(">"):
+            self._forward(line)
+
+
+# The same rule for text already in hand: the record must match the ear, so what the stream
+# gate drops is dropped from the kept reply too (and from a non-streamed one wholesale).
+_PASTED_LINE = re.compile(r"(?m)^[ \t]*>[^\n]*\n?")
+
+
+def _without_pasted_report(said):
+    kept = _PASTED_LINE.sub("", said)
+    return kept if kept.strip() else said  # a reply that was ALL paste still answers with itself
+
+
 class _ThinkInterrupted(Exception):
     """Internal signal that a barge-in cancelled the brain call - the turn is abandoned and the
     loop goes straight back to listening, with no reply and no error spoken."""
@@ -330,6 +371,8 @@ class Conversation:
         briefing=None,
         standing=None,
         opening="",
+        in_review=None,
+        review_opens=None,
     ):
         self._stt = stt
         self._brain = brain
@@ -379,6 +422,14 @@ class Conversation:
         self._interrupt = interrupt  # set (e.g. by a keypress) to cut off whatever it's saying
         self._paused = False
         self._floor_watched = False  # true while a stop-watcher already holds the mic (see _say)
+        # One thing at a time - his standing instruction, made the loop's own rule. `in_review`
+        # answers which agents' work is in front of his eyes RIGHT NOW (walkthrough spoken, no
+        # verdict yet); while any is, other agents' news holds and no menu is read. `review_opens`
+        # answers whether one piece of news IS a walkthrough - delivered, it opens a review, so
+        # no menu rides its back ("Don't ask me about updates for other items when we've already
+        # picked one of them to be working on").
+        self._in_review = in_review or (lambda: ())
+        self._review_opens = review_opens or (lambda name: False)
 
     def _interrupted(self):
         return self._interrupt is not None and self._interrupt.is_set()
@@ -556,6 +607,21 @@ class Conversation:
             self._requested.discard(getattr(self._waiting[place], "about", None))
             self._speak_held(place)  # he asked for this one, by name, just now
             return
+        reviewing = set(self._in_review() or ())
+        if reviewing:
+            # One thing at a time - his standing instruction, now the loop's own rule: his eyes
+            # are on a piece of work, so no other agent's news breaks in and no menu is read
+            # ("Don't ask me about updates for other items when we've already picked one of them
+            # to be working on"). News about the work under review still flows - that is the
+            # thread he is IN - plainly, with no roll call on its back. The instant his verdict
+            # closes the review, this gate lifts and the held list is offered, which is exactly
+            # the moment he had to ask for by hand ("Now would be a good time to ask about the
+            # other two updates").
+            place = next((at for at, held in enumerate(self._waiting)
+                          if getattr(held, "about", None) in reviewing), None)
+            if place is not None:
+                self._speak_held(place, name_the_rest=False)
+            return
         if self._dormant():
             # They are off doing something else; news breaking in "out of nowhere" is a jolt.
             # One offer names who it is about, and the content waits for them to engage.
@@ -611,7 +677,13 @@ class Conversation:
             return ""  # nothing will sound; the news stays in hand, owed, for the next opening
         news = self._waiting.pop(place)
         listed = [held for held in self._waiting if getattr(held, "listed", True)]
-        named = bool(name_the_rest and listed)
+        # A walkthrough OPENS a review: the moment it is spoken, his eyes are on that work, and
+        # a menu of other items welded to its back is exactly the interruption he banned ("Don't
+        # ask me about updates for other items when we've already picked one of them to be
+        # working on"). The list is offered when his verdict closes the review, not before.
+        about = getattr(news, "about", None)
+        named = bool(name_the_rest and listed
+                     and not (about is not None and self._review_opens(about)))
         said = f"{news}\n\n{roll_call(listed)}" if named else str(news)
         # The session's first line rides the front of the FIRST delivery whatever its shape -
         # `_announce` carries it for a list, this for a single item. Left behind here, a boot
@@ -846,7 +918,11 @@ class Conversation:
             self._update_offered = False
             self._announced = ()
             return self._answer(heard, offered=self._waiting.pop())
-        if self._waiting:  # they may be naming one of the agents the roll call just read out
+        if self._waiting and (self._announced or self._update_offered):
+            # They may be naming one of the agents the roll call just read out - and ONLY then:
+            # picking is answering a list, so with no list read out and no offer standing, a
+            # short sentence that happens to contain "one" is his own words, not a choice off a
+            # menu he never heard.
             picked = self._take_pick(heard)
             if picked is not None:
                 return picked
@@ -896,9 +972,11 @@ class Conversation:
             spoken_parts.append(piece)
             reply.add(piece)
 
-        # The gate between the brain and the voice: a stray goodbye sentence is dropped before
-        # it can sound, so the closing line is only ever heard when the app actually closes.
+        # The gates between the brain and the voice: a pasted document line is dropped before it
+        # can sound, then a stray goodbye sentence - so the closing line is only ever heard when
+        # the app actually closes, and a quoted-in report is never read at him.
         gate = _FarewellGate(audible, self.farewell_reply) if reply is not None else None
+        paste = _PastedReportGate(gate.feed) if gate is not None else None
 
         release_floor = self._hold_the_floor(
             script=lambda: as_spoken("".join(spoken_parts)),
@@ -906,7 +984,7 @@ class Conversation:
         think_start = time.monotonic()
         try:
             said = self._think(self._with_system_notes(heard, offered),
-                               on_text=gate.feed if gate is not None else None)
+                               on_text=paste.feed if paste is not None else None)
         except _ThinkInterrupted:  # they cut the thinking off - no reply, straight back to listening
             self._keep_for_later(offered)  # nothing was said, so the update is still owed
             self._settle(reply)
@@ -933,10 +1011,14 @@ class Conversation:
             self._speak_reply(said)
             return Turn(heard=heard, said=said, error=True)
         think_time = time.monotonic() - think_start
+        if paste is not None:
+            paste.flush()  # the last line may have ended without a newline
         if gate is not None:
             gate.flush()  # the last sentence may have ended without punctuation
         # The record matches the ear: a stray goodbye the gate kept out of the voice comes off
-        # the screen's copy too, and a reply that WAS only the goodbye becomes a silent turn.
+        # the screen's copy too, and a reply that WAS only the goodbye becomes a silent turn -
+        # and the pasted lines the paste gate never let sound come off it the same way.
+        said = _without_pasted_report(said)
         said = re.sub(r"[ \t]{2,}", " ", self._stray_goodbye.sub(r"\1", said)).strip()
         # Any held update this turn owes him - the one he was offered, and any the brain handed
         # over mid-think (deliver_update) - is appended to the reply BY CODE, word for word, one

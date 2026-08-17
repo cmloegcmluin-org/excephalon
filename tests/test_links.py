@@ -321,3 +321,34 @@ def test_lines_hold_their_own_links_and_blank_lines_survive():
 
     assert [p["link"] for p in parts if p["link"]] == ["localhost:5200", r"C:\ada\notes.md"]
     assert "".join(p["text"] for p in parts).replace(" \n", "\n") == text
+
+
+def test_a_markdown_link_is_clickable_by_its_label_and_spoken_as_it():
+    from excephalon.links import link_parts, as_spoken
+
+    # The shape every coding agent writes. Unparsed, the whole construct drew as plain text and
+    # the voice read the address out ("it's still sending links that aren't clickable, and
+    # still trying to read them aloud").
+    demo = ("[\u25b6 Launch the Auto-play demo](http://localhost:41777/launch?t=a780&p=C%3A%5C"
+            "demo%5Claunch.vbs)")
+    parts = link_parts(f"Ready for your eyes.\n\n{demo}\n\n1. Click a note", exists=lambda p: False)
+
+    labeled = [p for p in parts if p["link"]]
+    assert len(labeled) == 1
+    assert labeled[0]["text"] == "\u25b6 Launch the Auto-play demo"
+    assert labeled[0]["link"].startswith("http://localhost:41777/launch?")
+
+    said = as_spoken(f"Here you go: {demo} - click it.")
+    assert "Launch the Auto-play demo" in said
+    assert "41777" not in said and "%5C" not in said  # the address never reaches the voice
+    assert "\u25b6" not in said  # a button glyph is not a word
+
+
+def test_a_markdown_link_mid_sentence_keeps_the_words_around_it():
+    from excephalon.links import link_parts
+
+    parts = link_parts("Open [the demo](http://localhost:5599/x) and click around.",
+                       exists=lambda p: False)
+
+    assert [p["text"] for p in parts] == ["Open ", "the demo", " and click around."]
+    assert [p["link"] for p in parts] == ["", "http://localhost:5599/x", ""]

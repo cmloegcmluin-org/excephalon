@@ -34,13 +34,19 @@ function element(entry) {
     if (!part.link) { box.append(part.text); continue; }
     const link = document.createElement("a");
     link.className = "opens";
-    link.href = "#";
-    link.title = part.link;
     link.append(part.text);
-    link.onclick = (event) => {
-      event.preventDefault();
-      fetch("/open", { method: "POST", body: new URLSearchParams({ target: part.link }) });
-    };
+    if (part.link.startsWith("/")) {
+      // The app's own pages - an agent's name opening its log tab - navigate the window
+      // itself; only real addresses and paths go through /open to the machine.
+      link.href = part.link;
+    } else {
+      link.href = "#";
+      link.title = part.link;
+      link.onclick = (event) => {
+        event.preventDefault();
+        fetch("/open", { method: "POST", body: new URLSearchParams({ target: part.link }) });
+      };
+    }
     box.append(link);
   }
   said.append(who, box);

@@ -263,7 +263,17 @@ brain's own, or invites approval while the briefing has nothing in review, is a 
 rather than a failure, and the stock line takes its place.
 `conversation.py` is the loop (listen → think → speak) and owns turn-taking, barge-in, and the
 delivery of agent news at a lull; it puts the desk's fleet briefing in front of the brain every
-turn and streams the reply into the voice as it is written. `voice.py` is how a streamed reply
+turn and streams the reply into the voice as it is written - through two gates: a line opening
+with ">" is a pasted document, never speech, dropped before it can sound and off the record's
+copy (the brain once read an agent's whole markdown report at him - "ten times bigger than I
+ever want you to send a message to me"), and the stray goodbye. One thing at a time is the
+loop's own rule, not the persona's: while any work is in review (`desk.in_review` - presented,
+walkthrough spoken, verdict pending), other agents' news holds and no menu is read; a
+walkthrough OPENS a review, so no roll call rides its back; and the held list is offered the
+moment the verdict closes the review, which is the moment he once had to name by hand ("Now
+would be a good time to ask about the other two updates"). His words are read as a PICK only
+while a roll call or an offer actually stands - with no list read out, a short sentence that
+happens to contain "one" is his own words, not a choice off a menu he never heard. `voice.py` is how a streamed reply
 becomes audible — sentences cut the moment they end, synthesized and played while the next forms,
 one stop draining everything — and an engine hands its line over as PIECES rather than one
 finished clip, so a voice that generates over a network is not held back until its last byte;
@@ -368,6 +378,8 @@ and Translations tabs, with a contents rail, the old tab paths redirecting into 
 and Memory are bullet lists, not checklists, and his translation and instruction edits are in
 force immediately — translations swap into the running ear on save, instructions ride the
 per-turn notes — and Agents),
+and every agent name a message speaks is drawn as a link to that agent's log - a live one lands
+on its own tab, a wrapped one on the Agents page - through the app's own pages, never /open;
 and `desktop.py` puts them in an OS window of their own (Flask on a loopback port, pywebview
 holding the view) rather than a browser tab - it also switches Edge's own context menus back on
 (pywebview ties them to its debug flag), and that is the ONLY right-click menu the app has: the
@@ -432,7 +444,11 @@ its own space before the voice judges the words, or the address is read raw with
 word welded on - and EVERY link shape stops at an em- or en-dash, path as well as address,
 because scoping that to URLs alone left "...aug14-20.html—and send your routine" still swallowing
 "the dash and the following word" into the link a day later; an ordinary hyphen is a name's own
-character and stays. `link_parts` judges each LINE on its own: split on spaces alone, a newline
+character and stays. A markdown link - `[label](url)`, the shape every coding agent writes - is
+lifted out whole before any word-splitting (its label holds spaces), drawn as its label opening
+its address, and SPOKEN as the label with the glyphs dropped: unparsed, the launcher link drew
+as plain text and was read aloud character by character ("it's still sending links that aren't
+clickable, and still trying to read them aloud"). `link_parts` judges each LINE on its own: split on spaces alone, a newline
 stayed inside a word, and the address ending a numbered demo step arrived welded to the next
 line's "2." - unmatchable, so the one address the message existed to hand over was drawn as
 plain text ("link not rendering"). A path wearing the `file://` scheme an agent writes for Claude's own app is
