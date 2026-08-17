@@ -7,13 +7,14 @@ companion - it starts answering in quoted-block format, the hook fires every tur
 injects "FORMAT VIOLATION" feedback, and latency explodes to ~50s. Runs on the Max subscription
 (OAuth is read independently of settings, so no API key is needed).
 
-Built for the conversation's tempo, not an agent's. The model is the fast tier: its job is to
-talk, decide, and pull typed levers - never to investigate, which is why `tools=[]` strips every
-built-in tool. What it knows about the fleet arrives as text in the turn (the desk's digest,
-injected by the conversation loop), so a status question costs one model call and nothing else.
-Acting goes through the in-process action tools (excephalon.actions), and the reply streams out
-delta by delta so a voice can start speaking the first sentence while the rest is still being
-written.
+Built for the conversation's tempo, not an agent's: its job is to talk, decide, and pull typed
+levers - never to investigate, which is why `tools=[]` strips every built-in tool. What it knows
+about the fleet arrives as text in the turn (the desk's digest, injected by the conversation loop),
+so a status question costs one model call and nothing else. Acting goes through the in-process
+action tools (excephalon.actions), and the reply streams out delta by delta so a voice can start
+speaking the first sentence while the rest is still being written - which is why the model here is
+a thinking tier rather than the fastest one (see DEFAULT_BRAIN_MODEL): what the user waits for is
+the first sentence, not the turn.
 
 Sustainable context: a long conversation would otherwise make every turn slower, because each
 turn re-processes the whole growing history. So the brain watches how big the context has grown
@@ -79,9 +80,18 @@ class BrainInterrupted(Exception):
     """Raised by `respond` when the user barges in mid-thought: the in-flight call was cancelled, so
     there's no reply to speak and nothing to remember - the caller just returns to listening."""
 
-# Talking is a fast job given to a fast model: the brain never digs, so what it needs from a model
-# is first words in about a second, not depth. The agents doing the real work run Opus-tier.
-DEFAULT_BRAIN_MODEL = FAMILIES["haiku"]
+# The talker sits on the hardest judgement in this codebase - everything the user hears is decided
+# here - and it ran on the fastest model in the family, chosen for first words in about a second.
+# Almost every reply he has called insane was a judgement failure, never a slow one: retelling news
+# he had just been handed, restating one fact in two shapes inside one reply, welding two topics
+# into one message, asking a question and rambling past it, calling delivered work unreviewed. Some
+# fifty gates in the loop and twelve thousand words of standing law grew to compensate, and the
+# gates started breaking each other. Latency is a problem this codebase already solves - the voice
+# speaks each sentence the moment it is written (voice.py), so the wait is one sentence, not one
+# turn - while incoherence is not solvable by gates. So the tier that thinks is the tier that talks.
+# The fast tier keeps the backchannel: naming.NAME_MODEL, errands.ERRAND_MODEL - work he never
+# hears as a voice.
+DEFAULT_BRAIN_MODEL = FAMILIES["sonnet"]
 
 # Who Excephalon is for is NOT written here: `{user}` is filled in from the user's own profile when
 # the persona is composed (excephalon.memory.compose_persona), so this source ships with no one's name.

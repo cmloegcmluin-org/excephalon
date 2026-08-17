@@ -1,7 +1,17 @@
 import pytest
 
-from excephalon.brain_sdk import DEFAULT_PERSONA, BrainInterrupted, SdkBrain, _is_usage_limit, _make_options
+from excephalon.brain_sdk import (
+    DEFAULT_BRAIN_MODEL,
+    DEFAULT_PERSONA,
+    BrainInterrupted,
+    SdkBrain,
+    _is_usage_limit,
+    _make_options,
+)
+from excephalon.errands import ERRAND_MODEL
 from excephalon.memory import compose_persona
+from excephalon.models import FAMILIES
+from excephalon.naming import NAME_MODEL
 
 _LIMIT = "You've hit your monthly spend limit - raise it at claude.ai/settings/usage"
 
@@ -309,9 +319,15 @@ def test_the_brain_has_no_built_in_tools_only_the_typed_actions():
     assert opts.include_partial_messages is True  # the voice speaks the reply as it is written
 
 
-def test_the_brain_defaults_to_the_fast_model():
-    # Talking is a fast job for a fast model: first words in about a second. The agents doing the
-    # real work run Opus-tier - that default lives with the desk, not here.
+def test_the_brain_runs_on_a_capable_model():
+    # The seam between the app and the user is the hardest judgement in this codebase, and it was
+    # given the fastest model in the family. Nearly every reply he has called insane was a
+    # judgement failure rather than a slow one: retelling news he had just been given, restating
+    # one fact in two shapes inside a single reply, welding two topics together, asking a question
+    # and then rambling past it, calling delivered work unreviewed. Some fifty code gates and
+    # twelve thousand words of standing law grew here to compensate, and the gates began breaking
+    # each other. Latency is the problem this codebase already solved - the voice speaks each
+    # sentence as it is written - so the tier that thinks is the one that talks.
     made = []
 
     class Session:
@@ -324,7 +340,17 @@ def test_the_brain_defaults_to_the_fast_model():
 
     SdkBrain(session_factory=Session)
 
-    assert "haiku" in made[0].model
+    assert made[0].model == FAMILIES["sonnet"]
+
+
+def test_the_fast_tier_is_kept_for_the_backchannel():
+    # The fast model still has its jobs - the ones the user never hears as a voice: distilling an
+    # agent's task down to a name, and the errand hand's fetch-and-carry. Pinned together with the
+    # brain's own tier so a future edit cannot quietly put the talker back on the label model, nor
+    # spend a thinking model on a three-word filename.
+    assert NAME_MODEL == FAMILIES["haiku"]
+    assert ERRAND_MODEL == FAMILIES["haiku"]
+    assert DEFAULT_BRAIN_MODEL != NAME_MODEL
 
 
 def test_text_deltas_stream_through_respond_to_the_caller():
