@@ -26,18 +26,38 @@ class News(str):
     name. Only an agent's news is: the errand hand exists so a small chore is not a visible
     agent, and its result was read out numbered beside a real one, under the internal word for
     the machinery ("I don't even know what errands would be"). Unlisted news is simply something
-    to say."""
+    to say.
+
+    `kind` is the event it came from ("landed", "quiet", "finished"...), because not every piece
+    of news is worth the same. A merge report is a thread's LAST WORD and outranks everything;
+    a silence alarm is a guess by a timer, and one of those replaced a merge report in the queue
+    and left him waiting on news that had already been written."""
 
     about = None  # the agent, when there is one
     composed = False  # whether the brain itself wrote the words
     listed = True  # whether it is an item on the numbered list, or just a thing to say
+    kind = ""  # the event behind it, for the few places where the KIND decides
 
-    def __new__(cls, message, about=None, composed=False, listed=True):
+    def __new__(cls, message, about=None, composed=False, listed=True, kind=""):
         news = super().__new__(cls, message)
         news.about = about
         news.composed = composed
         news.listed = listed
+        news.kind = kind
         return news
+
+    @property
+    def concluding(self):
+        """Is this a thread's last word - it landed, or it died? Never held back for anything:
+        holding one is the black hole this project has already sat through once."""
+        return self.kind in ("landed", "died")
+
+    @property
+    def alarm(self):
+        """Is this only a timer's guess that something has gone quiet? It is worth saying when
+        there is nothing else to say about that agent, and worth nothing at all beside a real
+        report - which one of them destroyed."""
+        return self.kind == "quiet"
 
 
 class Outbox:
@@ -64,14 +84,15 @@ class Outbox:
             # that statement in our conversation - I didn't say the feature was already in
             # Highdeas", about a heads-up it had spoken verbatim 18 minutes earlier).
             self._items.append(News(held["message"], held.get("about"),
-                                    listed=held.get("listed", True)))
+                                    listed=held.get("listed", True),
+                                    kind=held.get("kind", "")))
         if self._items:
             self.arrived.set()
 
-    def push(self, message, about=None, composed=False, listed=True):
+    def push(self, message, about=None, composed=False, listed=True, kind=""):
         with self._lock:
-            self._items.append(News(message, about, composed, listed))
-            self._keep(message, about, composed, listed)
+            self._items.append(News(message, about, composed, listed, kind))
+            self._keep(message, about, composed, listed, kind)
         self.arrived.set()
 
     def drain(self):
@@ -96,7 +117,7 @@ class Outbox:
         """Held news about a renamed agent is about the same agent - under his name for it now, so
         a roll call reads out what he called it rather than what the app happened to name it."""
         with self._lock:
-            self._items = deque(News(str(item), to, item.composed, item.listed)
+            self._items = deque(News(str(item), to, item.composed, item.listed, item.kind)
                                 if getattr(item, "about", None) == about else item
                                 for item in self._items)
             kept = self._spooled()
@@ -171,10 +192,10 @@ class Outbox:
                 break
         self._write(kept)
 
-    def _keep(self, message, about, composed, listed=True):
+    def _keep(self, message, about, composed, listed=True, kind=""):
         kept = self._spooled()
         kept.append({"message": str(message), "about": about, "composed": bool(composed),
-                     "listed": bool(listed)})
+                     "listed": bool(listed), "kind": str(kind)})
         self._write(kept)
 
     def _spooled(self):

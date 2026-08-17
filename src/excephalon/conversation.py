@@ -88,6 +88,13 @@ STANDING_NOTICE = (
     "here:\n\n{standing}]\n\n"
 )
 
+SILENT_TURN_NOTICE = (
+    "[System note, not from the user: your last turn produced no words at all - whatever you "
+    "did with your tools, they heard NOTHING back, which reads as the app being broken. Answer "
+    "their words below now, in one short sentence, saying what you did or where it stands. Call "
+    "no tools this turn; the work is already done.]\n\n"
+)
+
 BRIEFING_NOTICE = (
     "[Fleet briefing, from the app - the live state of your agents as of this turn. Where a "
     "piece of work stands comes from HERE, never from your memory of the conversation: work "
@@ -129,6 +136,12 @@ CONDUCT_NOTICE = (
 
 # While the brain thinks, re-check this often for a barge-in, so cutting a slow think off feels
 # instant rather than waiting out the next check-in.
+# How many of HIS turns the one-thing-at-a-time gate may hold everything else for. A review is
+# closed by a verdict, and a verdict that never got recorded held every other thread's news
+# forever - including a merge report he was waiting on. Two turns is generous for "he is looking
+# at it right now" and short enough that a missed record can never bury the fleet.
+REVIEW_HOLDS_TURNS = 2
+
 DEFAULT_INTERRUPT_POLL = 0.05
 # After telling the brain to cancel, wait up to this long for the call to actually unwind before
 # moving on - so the loop never starts a second brain call overlapping a half-cancelled one.
@@ -309,8 +322,18 @@ def _newest_per_agent(waiting):
     waiting, but order them differently? Now I don't know what to tell you." An agent holds its
     number for as long as it stays on the list.
 
+    An ALARM never displaces a report. "Been silent for 20 minutes" is a timer's guess; it
+    arrived twenty minutes after that agent's merge report and, being newest, superseded it -
+    so the one thing he was waiting for was destroyed by a warning about the very agent that
+    had already finished, and its durable copy went with it. Where an agent has real news, its
+    alarms are dropped instead.
+
     What is superseded comes back to the caller because dropping it here is only half the job:
     its durable copy has to go too, or the next restart reads yesterday's sentence out as news."""
+    real = {getattr(item, "about", None) for item in waiting
+            if not getattr(item, "alarm", False)}
+    waiting = [item for item in waiting
+               if not (getattr(item, "alarm", False) and getattr(item, "about", None) in real)]
     newest = {}
     for item in waiting:
         about = getattr(item, "about", None)
@@ -448,6 +471,8 @@ class Conversation:
         # picked one of them to be working on").
         self._in_review = in_review or (lambda: ())
         self._review_opens = review_opens or (lambda name: False)
+        self._reviewing = set()  # whose work the gate is currently holding everything else for
+        self._review_turns = 0  # his turns since it opened - the bound on how long it may hold
 
     def _interrupted(self):
         return self._interrupt is not None and self._interrupt.is_set()
@@ -633,7 +658,7 @@ class Conversation:
             self._requested.discard(getattr(self._waiting[place], "about", None))
             self._speak_held(place)  # he asked for this one, by name, just now
             return
-        reviewing = set(self._in_review() or ())
+        reviewing = self._still_reviewing()
         if reviewing:
             # One thing at a time - his standing instruction, now the loop's own rule: his eyes
             # are on a piece of work, so no other agent's news breaks in and no menu is read
@@ -642,9 +667,12 @@ class Conversation:
             # thread he is IN - plainly, with no roll call on its back. The instant his verdict
             # closes the review, this gate lifts and the held list is offered, which is exactly
             # the moment he had to ask for by hand ("Now would be a good time to ask about the
-            # other two updates").
+            # other two updates"). A thread's CONCLUSION is never held by it: a merge report is
+            # the last word he is owed, and holding one is the black hole this project has
+            # already sat through.
             place = next((at for at, held in enumerate(self._waiting)
-                          if getattr(held, "about", None) in reviewing), None)
+                          if getattr(held, "about", None) in reviewing
+                          or getattr(held, "concluding", False)), None)
             if place is not None:
                 self._speak_held(place, name_the_rest=False)
             return
@@ -819,6 +847,21 @@ class Conversation:
         self._update_offered = False
         return self._hand_over(heard, self._waiting.index(listed[place]))
 
+    def _still_reviewing(self):
+        """Whose work is genuinely in front of him right now - and nothing once his attention has
+        plainly moved on.
+
+        The gate silences every other thread, so it may never outlive its own premise. A verdict
+        that never got RECORDED (the brain answered his "ship it" with nothing at all, so no tool
+        call was ever made) left a review open forever, and behind it a merge report he was
+        waiting for sat unspeakable while he asked where it was. So the hold is bounded by his
+        own turns: past a couple of them with no verdict, he is no longer looking at that work,
+        whatever the record still says."""
+        reviewing = set(self._in_review() or ())
+        if reviewing != self._reviewing:
+            self._reviewing, self._review_turns = reviewing, 0
+        return reviewing if self._review_turns < REVIEW_HOLDS_TURNS else set()
+
     def _dormant(self):
         return (self._dormant_after is not None
                 and self._clock() - self._last_engaged > self._dormant_after)
@@ -922,6 +965,7 @@ class Conversation:
         # "ready for your eyes" ungated, seconds after he had APPROVED that very work. Once he has
         # spoken again, whatever he asked for before is ordinary held news and faces the gate.
         self._requested.clear()
+        self._review_turns += 1  # a turn of his against the one-thing-at-a-time gate's bound
         # The session's first line is a first line or nothing. One that missed its moment - he was
         # mid-sentence at boot, or the delivery that should have carried it never sounded - is no
         # longer a greeting once he has spoken: the boot welcome once surfaced seven minutes into
@@ -1059,6 +1103,7 @@ class Conversation:
         # The record matches the ear: a stray goodbye the gate kept out of the voice comes off
         # the screen's copy too, and a reply that WAS only the goodbye becomes a silent turn -
         # and the pasted lines the paste gate never let sound come off it the same way.
+        wrote_nothing = not str(said or "").strip()  # before the gates: did it write at all?
         said = _without_pasted_report(said)
         said = re.sub(r"[ \t]{2,}", " ", self._stray_goodbye.sub(r"\1", said)).strip()
         # Any held update this turn owes him - the one he was offered, and any the brain handed
@@ -1070,11 +1115,24 @@ class Conversation:
         served = self._requested_now()
         extras = ([offered] if offered is not None else []) + [news for _, news in served]
         if not said.strip() and not extras:
-            # Nothing to say - the turn completed silently. A blank "excephalon>" line or an empty
-            # utterance would be noise.
             self._settle(reply)
             release_floor()
-            return Turn(heard=heard, said="")
+            if not wrote_nothing:
+                # It DID write, and a gate scrubbed the whole of it - a reply that was only the
+                # stray goodbye. Deliberately silent: the misfire is what was dropped, and there
+                # is nothing else it meant to say.
+                return Turn(heard=heard, said="")
+            # He SPOKE and the brain wrote nothing at all. It happens when a turn is spent on
+            # tool calls and no words: he said "Yes, looks good. Ship it." and heard dead air,
+            # then waited half an hour for an update on a landing nobody had recorded. Silence
+            # is never an answer to his words, so the turn is asked once more, told plainly what
+            # went wrong; only if THAT is silent too does the app say so in its own voice.
+            said = self._say_something(heard)
+            if not said:
+                self._console.evidence("(the brain answered his words with nothing, twice)")
+                said = self.error_reply
+            self._speak_reply(said, known=True)
+            return Turn(heard=heard, said=said)
         combined = "\n\n".join([part for part in [said] if part]
                                + [str(extra) for extra in extras])
         speak_start = time.monotonic()
@@ -1115,6 +1173,16 @@ class Conversation:
             self._console.timing(think=think_time, speak=time.monotonic() - speak_start)
         self._pause_to_read()
         return Turn(heard=heard, said=combined)
+
+    def _say_something(self, heard):
+        """One more ask, when the brain answered his words with no words at all - "" if it stays
+        silent. Not the same turn again: it is told what happened, because a turn spent entirely
+        on tool calls has already DONE the thing and only owes him the sentence about it."""
+        try:
+            said = self._think(SILENT_TURN_NOTICE + heard)
+        except Exception:
+            return ""
+        return _without_pasted_report(str(said or "")).strip()
 
     def _settle(self, reply):
         """Let an open reply stream wind down (whatever was already spoken has been heard; the rest

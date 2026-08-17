@@ -275,7 +275,14 @@ loop's own rule, not the persona's: while any work is in review (`desk.in_review
 walkthrough spoken, verdict pending), other agents' news holds and no menu is read; a
 walkthrough OPENS a review, so no roll call rides its back; and the held list is offered the
 moment the verdict closes the review, which is the moment he once had to name by hand ("Now
-would be a good time to ask about the other two updates"). His words are read as a PICK only
+would be a good time to ask about the other two updates"). The gate silences everything, so it
+may never outlive its premise: a thread's CONCLUSION is never held by it (a merge report is his
+last word, and holding one is the black hole), and it releases after `REVIEW_HOLDS_TURNS` of his
+turns with no verdict — a verdict that never got RECORDED once held the whole fleet's news
+behind a review nobody could close. A turn of HIS that the brain answers with no words at all is
+asked once more, told what happened (`SILENT_TURN_NOTICE`), and failing that answered in the
+app's own error line: he said "ship it", heard dead air, and waited half an hour for a landing
+report nobody had recorded. His words are read as a PICK only
 while a roll call or an offer actually stands - with no list read out, a short sentence that
 happens to contain "one" is his own words, not a choice off a menu he never heard - and a pick
 SPENDS the offer: left standing, the leftover item rode his next, unrelated words ("The ship it
@@ -641,7 +648,11 @@ last diagnosis blind. When an agent's newer news replaces its older,
 the old one is dropped from the SPOOL as well as from the queue (`Outbox.superseded`) - collapsing
 the queue in memory alone left yesterday's sentence in the file, and the next process read it out
 as news: he was told work was "ready for your eyes" thirteen seconds after giving his notes on
-that very work, "out of nowhere", with nothing in it he did not already know. Held news dies the
+that very work, "out of nowhere", with nothing in it he did not already know. Not every piece of
+news is worth the same, so each carries its event's `kind`: a silence ALARM never displaces a
+report and is dropped where the agent has real news (one arrived twenty minutes after its
+agent's merge report and, being newest, destroyed it), and an alarm about an agent whose thread
+has already ENDED is never raised at all. Held news dies the
 same way when HE moves past it: telling an agent something (`tell_agent`, through
 `desk.drop_news`) drops whatever that agent was still waiting to say, because an update composed
 before his latest instructions was offered back to him as fresh ("surely there's no update for
