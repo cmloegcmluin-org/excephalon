@@ -1419,10 +1419,14 @@ def test_a_task_started_from_its_robot_stays_green_when_projects_reloads(tmp_pat
     client = _client(profile_path=profile, agent_state_path=state, agent_logs_dir=logs)
 
     def working_row():
+        # Before the desk's work thread records the agent, the task has no anchor id yet - so guard
+        # the split rather than assume it: an empty row keeps the poll going instead of crashing. The
+        # timing that let an unguarded split pass locally raced the persist and threw on CI.
         page = client.get("/projects").get_data(as_text=True)
-        return page.split('id="task-excephalon-3"')[1].split("</li>")[0]
+        parts = page.split('id="task-excephalon-3"')
+        return parts[1].split("</li>")[0] if len(parts) > 1 else ""
 
-    deadline = time.monotonic() + 3
+    deadline = time.monotonic() + 5
     while time.monotonic() < deadline and "agent-link working" not in working_row():
         time.sleep(0.02)
 
