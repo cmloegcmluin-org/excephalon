@@ -243,17 +243,26 @@ the welcome back — a greeting assembled from templates is the stock line weari
 and every failure falls back to the stock line, because a greeting is not worth a launch. The
 note says what is ALREADY waiting to be spoken and forbids naming any of it, and the greeting is
 handed to the conversation as its `opening` rather than spoken beside it, so a restart with news
-waiting is ONE message (welcome, then the roll call) instead of the two thirteen seconds apart he
-got — a welcome asking about one update, then the app offering all three. The opening rides the
-FIRST delivery whatever its shape — the roll call, or the lone held update, which a boot with
-exactly one piece of news once left it behind for: the welcome sat pending for seven minutes and
-surfaced inviting him to look at a demo he had already approved ("this message makes no sense") —
-and a first line that misses its moment dies the instant he speaks, because it is a first line or
-nothing. A greeting that RETELLS the news it precedes is dropped for the news itself
-(`_retells`, shared content words): told not to name the waiting news, the brain named it anyway,
-and "Agent naming is still waiting for your verdict" welded onto a walkthrough opening "Agent
-naming is waiting for your verdict" reached him as the same sentence twice ("like an insane
-person"). What landed is offered
+waiting is ONE message instead of the two thirteen seconds apart he got — a welcome asking about
+one update, then the app offering all three. It is ONE message the other way too: the opening is
+never welded to the news, it goes out FIRST and ALONE and it IS the offer. Welded, it gave him a
+question and a different thread's whole walkthrough in the same breath, so neither could be
+answered — "it insanely asks me if I'd like to continue with a calendar demo, then in the same
+breath tells me that a demo for a feature an agent has been working on in the background is ready
+for my review, and moreover, it just goes straight into the detailed information about that
+feature. in this case, it should have instead asked me: would you like to pick up the calendar
+work, or hear an update from that feature work." So with news waiting the note has the greeting
+END on exactly that either/or question and name nothing of what waits, `unfit` lets that
+invitation stand (an update really waiting makes it a true sentence, not a stage claim), and the
+held news is spoken in full the moment he answers — the offer latch the app already had. First
+and alone also means it can never be left behind: a boot with exactly one piece of news once
+spoke the news and left the welcome pending for seven minutes, surfacing to invite him to a demo
+he had already approved ("this message makes no sense"); and a first line that misses its moment
+dies the instant he speaks, because it is a first line or nothing. The similarity check that used
+to drop a greeting for retelling the news behind it (`_retells`) is GONE with its premise: the
+two are never in one utterance, so the repeat it caught — "Agent naming is still waiting for your
+verdict" welded onto a walkthrough opening "Agent naming is waiting for your verdict", the same
+sentence twice ("like an insane person") — cannot be built. What landed is offered
 to him only if he could NOTICE it: the same note warns that most commits are internal machinery,
 after the brain turned two of them into "a voice safety layer caught some things before they
 reached you... you're still driving", which meant nothing to him — but work the desk's briefing

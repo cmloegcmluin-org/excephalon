@@ -97,16 +97,20 @@ def test_a_change_he_cannot_see_is_not_something_to_tell_him_about():
     assert "INTERNAL" in note
 
 
-def test_the_note_says_what_is_already_waiting_so_the_greeting_does_not_ask_about_one():
+def test_the_note_makes_the_greeting_offer_the_choice_and_name_none_of_it():
     # He opened it and got two messages thirteen seconds apart: a welcome asking about the
-    # scrubber fix, then "Three updates waiting. One... Two... Three... Which first?" The
-    # greeting must not pick one out - the list is the app's to read.
+    # scrubber fix, then "Three updates waiting. One... Two... Three... Which first?" Then the
+    # other end of the same failure, once they were welded into one: a welcome asking whether to
+    # pick the calendar work back up, with an unrelated walkthrough behind it in the same breath,
+    # so neither question could be answered. The greeting is the only thing he hears until he
+    # chooses, so it ends by offering the choice - and says nothing about what is waiting.
     note = homecoming_note(
         turns=[("what about the scrubber?", "It's ready for your eyes.")],
         changes=[], away=95.0, waiting=["highdeas-scrubber-fix", "robot-icon-ui"])
 
     assert "2 update" in note
-    assert "do NOT ask" in note and "do not list them" in note
+    assert "either/or" in note
+    assert "Say nothing about WHAT is waiting" in note
 
 
 def test_a_session_he_said_goodbye_to_is_not_the_middle_of_anything():
