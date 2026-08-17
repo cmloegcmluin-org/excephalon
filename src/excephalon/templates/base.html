@@ -49,6 +49,9 @@
   <script src="{{ url_for('static', filename='closing.js') }}"></script>
   {#- Ctrl+F on every page: the embedded browser has none of its own. -#}
   <script src="{{ url_for('static', filename='finder.js') }}"></script>
+  {#- Each reading tab remembers its scroll position across the page load a tab switch is. Loaded
+      here (before the page's own script) so a #task-/#agent- deep link still wins where it lands. -#}
+  <script src="{{ url_for('static', filename='scroll.js') }}"></script>
 
   {% block scripts %}{% endblock %}
 </body>

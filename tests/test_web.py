@@ -1043,6 +1043,28 @@ def test_ctrl_f_reaches_every_page_not_just_the_lists():
     assert "ctrlKey" in finder and "metaKey" in finder
 
 
+def test_each_tab_remembers_where_it_was_scrolled_to():
+    # "if I switch from Projects to Agents tab while scrolled nearly to the bottom of the Projects
+    # tab and then switch right back, I should still be looking at the same thing." Every tab but
+    # the conversation is its own page load, so navigating away drops the scroll; the same
+    # sessionStorage that carries the half-written draft across a tab switch carries the scroll too,
+    # keyed by the tab's own path so each is remembered on its own. The conversation is a
+    # fixed-height grid whose thread follows the live end itself, so its document never scrolls and
+    # there is nothing here to restore.
+    client = _client()
+
+    # It rides the shared chrome, so every reading tab carries it.
+    for path in ("/config", "/projects", "/agents"):
+        assert "scroll.js" in client.get(path).get_data(as_text=True)
+
+    js = client.get("/static/scroll.js").get_data(as_text=True)
+    assert "sessionStorage" in js               # survives the page load a tab switch is
+    assert "location.pathname" in js            # each tab keyed on its own, never one shared slot
+    assert "document.scrollingElement" in js    # the reading pages scroll at the document level
+    assert "scrollTo" in js                     # restore: land back where it was
+    assert '"scroll"' in js                     # and keep that up to date as it scrolls
+
+
 def test_the_agents_rail_dates_every_row_by_when_its_agent_started(tmp_path):
     # "The active agents lack a date but they should have one too. the date should be when the
     # agent was started, not when it finished" - which is the first line the desk ever wrote to
