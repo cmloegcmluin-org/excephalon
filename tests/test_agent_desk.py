@@ -1824,3 +1824,49 @@ def test_an_approval_carrying_a_tweak_lands_with_the_tweak_in_one_order(tmp_path
     assert "land it now" in order and "no second presentation" in order
     assert desk.delivery_stage("namer") == "landing"  # the gate is open: the sign-off is on record
     desk.close()
+
+
+def test_the_wrap_up_ticks_the_item_by_number_however_the_text_was_retyped(tmp_path):
+    # Two delivered features left their items open and their robots just went grey again: the
+    # tick was a substring match of the item text as the BRAIN had retyped it. The number is
+    # resolved when the agent starts, and the tick goes by number.
+    ticked = []
+    logs = tmp_path / "agent-logs"
+    desk, outbox, _ = _desk(log_dir=logs)
+    desk._complete_enhancement = lambda item, **where: False  # the text no longer matches anything
+    desk._tick_by_id = lambda item_id, **where: ticked.append((item_id, where)) or True
+    desk.start("namer", "/tmp/wt", "distill agent names", enhancement="a paraphrase of his line",
+               item_id=135)
+    assert _wait_for(lambda: bool(outbox))
+    _approved(desk, "namer")
+
+    assert desk.retire("namer") is True
+
+    assert ticked == [(135, {})]
+    assert not outbox.owed_about()  # nothing to report: it landed
+    desk.close()
+
+
+def test_a_tick_that_misses_rides_the_landing_message_rather_than_being_eaten_by_it(tmp_path):
+    # The miss used to be pushed as news of its own - and the landing narration, being newer news
+    # about the same agent, superseded it on arrival: the item stayed open with nobody told.
+    events, logs = [], tmp_path / "agent-logs"
+    made = []
+
+    def factory(name, cwd, decide, **choice):
+        made.append(FakeAgent(name, cwd, decide))
+        return made[-1]
+
+    desk = AgentDesk(Outbox(), agent_factory=factory, log_dir=logs, run=_no_git,
+                     events=lambda *e: events.append(e),
+                     complete_enhancement=lambda item, **where: False)
+    desk._merged = lambda entry: True
+    desk.start("lander", "/tmp/wt", "align the icons", enhancement="an item nothing matches")
+    assert _wait_for(lambda: any(e[0] == "finished" for e in events))
+    desk.present("lander", "open the demo")
+    desk.verdict("lander", True)
+
+    assert _wait_for(lambda: any(e[0] == "landed" for e in events))
+    [landed] = [e for e in events if e[0] == "landed"]
+    assert "did not get checked off" in landed[2]  # one message, carrying both facts
+    desk.close()

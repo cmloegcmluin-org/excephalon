@@ -24,6 +24,7 @@ from excephalon.delivery import DeliveryError
 from excephalon.naming import distill_name
 from excephalon.memory import (PROJECT_PREFIX, append_enhancement, append_learned,
                            complete_enhancement_anywhere, drop_persona_instruction,
+                           enhancement_id,
                            forget_learned, save_persona_instruction,
                            complete_enhancement_by_id, revise_enhancement)
 from excephalon.models import resolve as resolve_model
@@ -111,6 +112,7 @@ def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement
                   save_instruction=save_persona_instruction,
                   drop_instruction=drop_persona_instruction,
                   remember_fact=append_learned, forget_fact=forget_learned,
+                  item_number=enhancement_id,
                   resolve=_resolve, prepare=prepare_worktree_for, default_task=DEFAULT_TASK,
                   namer=distill_name, other_apps=(), clock=time.strftime):
     """The action tools, wired to this desk and foreman: (server config for the options, the
@@ -155,7 +157,16 @@ def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement
                 name = await asyncio.to_thread(namer, task, project)
             else:
                 name = Path(path).name  # a fan-out re-attaches to existing worktrees, each own name
-            started.append(desk.start(name, path, task, enhancement=enhancement, project=project))
+            # The item's NUMBER, resolved now, while it is in front of whoever is asking. The
+            # tick at the end used to match the item TEXT as typed here, so a paraphrase or a
+            # guessed card missed silently: two delivered features left their items open and
+            # their robots just went grey again. His own words for the task are tried too - the
+            # task is passed on faithfully, so it carries his line when the retyping does not.
+            item_id, _ = (item_number(enhancement) if enhancement else (None, None))
+            if item_id is None:
+                item_id, _ = item_number(task)
+            started.append(desk.start(name, path, task, enhancement=enhancement, project=project,
+                                      item_id=item_id))
         return _say(f"Started {', '.join(started)} on {desk.running_on()}.")
 
     @tool("rename_agent", "Call a running agent something else - the name the user gives it, used "

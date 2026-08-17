@@ -570,7 +570,13 @@ it in one place, shared with the window's own close button), the Enhancements it
 ticked off the user's list, its session closed, its worktree removed. That item rides with the
 agent from `start` (the brain passes it to `start_agent` when the work is one off a list) and is
 ticked only for a cleanly finished agent, never a died one, because a wrong tick would corrupt the
-list's record of ask and answer. The CARD rides along too (`project`, the Projects-tab card the
+list's record of ask and answer. The tick goes by the item's NUMBER, resolved at start
+(`memory.enhancement_id`, from the brain's words or from his own task text, unique winner only)
+and carried as `item_id`: matched on the TEXT the brain retyped, a paraphrase or a dropped
+backtick missed silently, and two delivered features left their items open — "instead of the
+tasks getting checked off at the end, the robot icons just went grey again". A miss rides the
+landing's own utterance (`retire(report=…)`) instead of being pushed as news, which the newer
+landing narration used to supersede on arrival, leaving the item open with nobody told. The CARD rides along too (`project`, the Projects-tab card the
 item lives on, None meaning the Enhancements card), because every tick could once land only on the
 Enhancements card and an afternoon's three delivered tasks sat open on their cards ("it did not
 check them off in the Projects tab") — check_off_enhancement and the CLI's `tick` take the card

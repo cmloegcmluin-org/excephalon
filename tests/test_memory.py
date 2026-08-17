@@ -1146,3 +1146,39 @@ def test_an_id_living_on_several_cards_is_refused_never_guessed(tmp_path):
     assert complete_enhancement_anywhere(2, path) is None
     kept = path.read_text(encoding="utf-8")
     assert "- [ ] #2 better voice" in kept and "- [ ] #2 play cursor drag" in kept
+
+
+def test_an_items_number_is_found_from_the_words_however_they_were_retyped(tmp_path):
+    # "instead of the tasks getting checked off at the end, the robot icons just went grey
+    # again." The tick matched the item TEXT as the brain had retyped it, so a paraphrase or a
+    # dropped backtick missed silently. The number is resolved when the agent starts, from
+    # whatever words are to hand, and a number does not drift.
+    from excephalon.memory import enhancement_id
+
+    path = tmp_path / "profile.md"
+    lines = ["# P", "", "## Enhancements he wants for you (roadmap, not now)",
+             "- [ ] #135 agent names shouldn't be the name of the task with hyphens. they should "
+             "be distilled to 1-3 words with the project prefixed, i.e. `highdeas-`",
+             "- [x] #134 something already done", "", "## Project: Highdeas",
+             "- [ ] #17 I don't think it's remembering my auto-play choice on Windows"]
+    path.write_text(chr(10).join(lines) + chr(10), encoding="utf-8")
+
+    # The whole line, and a fragment of it, both find the same number and card.
+    assert enhancement_id("agent names shouldn't be the name of the task with hyphens",
+                          path)[0] == 135
+    found, card = enhancement_id("I don't think it's remembering my auto-play choice on Windows",
+                                 path)
+    assert (found, card) == (17, "Project: Highdeas")
+    assert enhancement_id("something else entirely", path) == (None, None)
+    assert enhancement_id("", path) == (None, None)
+
+
+def test_a_number_is_never_guessed_between_two_items(tmp_path):
+    from excephalon.memory import enhancement_id
+
+    path = tmp_path / "profile.md"
+    lines = ["# P", "", "## Enhancements he wants for you (roadmap, not now)",
+             "- [ ] #1 make the robot icons green", "- [ ] #2 make the robot icons green"]
+    path.write_text(chr(10).join(lines) + chr(10), encoding="utf-8")
+
+    assert enhancement_id("make the robot icons green", path) == (None, None)

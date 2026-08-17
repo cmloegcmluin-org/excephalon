@@ -32,6 +32,8 @@ from excephalon.memory import (
     DEFAULT_PROFILE_PATH,
     append_learned,
     complete_enhancement,
+    complete_enhancement_anywhere,
+    complete_enhancement_by_id,
     compose_persona,
     lexicon_terms,
     load_learned,
@@ -486,7 +488,12 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
                      # Wrapping up an agent started for an Enhancements item ticks that item off
                      # the user's list (profile.md) - the pool they file into, self-draining as
                      # the work lands.
-                     complete_enhancement=complete_enhancement)
+                     complete_enhancement=complete_enhancement,
+                     # By NUMBER first: the item's id is resolved when the agent
+                     # starts, and a number does not drift the way the brain's
+                     # retyping of his sentence does.
+                     tick_by_id=complete_enhancement_by_id,
+                     tick_anywhere=complete_enhancement_anywhere)
     newsroom["desk"] = desk  # so an event can ask whether its agent is still a going concern
     # The senior layer: engaged only when the brain hands it a stuck agent (ask_foreman), so its
     # bigger model is paid for per snag, never per turn.
