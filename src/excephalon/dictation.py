@@ -169,11 +169,15 @@ class Dictation:
 
     def listen(self):
         """Block until the window submits a turn (Submit button, or a spoken "over"). An interrupt
-        (queued agent news during a lull) yields "" so the loop can go deliver it."""
+        (queued agent news during a lull) yields "" so the loop can go deliver it - but only at an
+        actual lull: yielded mid-sentence, the delivery pass found him talking, deferred, and had
+        no way back until his next words - held news sat silent for nine minutes and he had to
+        ask for it ("I keep having to prompt this thing for updates")."""
         while True:
             if self._stop is not None and self._stop.is_set():
                 return ""
-            if self._interrupt is not None and self._interrupt.is_set():
+            if (self._interrupt is not None and self._interrupt.is_set()
+                    and not self.is_mid_utterance()):
                 return ""
             try:
                 return self._submitted.get(timeout=0.1)

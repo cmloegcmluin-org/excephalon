@@ -180,3 +180,28 @@ def test_a_dead_foreman_session_is_news_not_a_black_hole():
     [news] = outbox.drain()
     assert "foreman couldn't take" in str(news)
     assert news.about == "fixer"
+
+
+def test_the_foreman_stays_silent_about_work_already_delivered():
+    # The auto-wrap-up beat the quiet alarm's question: the foreman found the desk empty,
+    # reasoned "with no log I can't confirm which", and its shrug reached the user as a
+    # heads-up. Delivered work needs no investigation and no news - the landed narration
+    # already said it - so the foreman answers a question about it with nothing at all.
+    outbox = Outbox()
+
+    class WrappedDesk:
+        def ended(self, agent):
+            return "delivered"
+
+        def task_of(self, agent):
+            raise AssertionError("a delivered thread must not be investigated")
+
+        def recent_log(self, agent):
+            raise AssertionError("a delivered thread must not be investigated")
+
+    foreman = Foreman(WrappedDesk(), outbox,
+                      session_factory=lambda options: (_ for _ in ()).throw(
+                          AssertionError("no senior session for a finished thread")))
+    foreman._work("autoplay-fix", "it has been quiet for 20 minutes")
+
+    assert not outbox  # no escalation, no shrug: the thread ended and the news already went out

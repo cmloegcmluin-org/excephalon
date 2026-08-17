@@ -346,10 +346,21 @@ whole, because everything before it is the foreman's working notes: one such ana
 as the agent's "update" and sat in the roll call as a jargon bomb), and escalates to the user only
 what is genuinely theirs — its
 escalations go out app-authored so the unwritten-lines ledger keeps the fast brain aware of them.
+A question about a thread that already ENDED it answers from the file, not the model: the
+auto-wrap-up beat a quiet alarm's question, the foreman found the desk empty and shrugged "with
+no log I can't confirm which" about logs sitting whole in the archive, and the shrug reached him
+as a heads-up ("that's fucking bullshit, the logs are right there") — `desk.ended` says delivered
+and the foreman says nothing, because the landed narration already said it; a wrapped agent's
+name still resolves, its archived log still reads (`recent_log`), and its task is still on file.
 `dictation.py` is the window's mic: a *state*, not a walkie-talkie — continuous
 transcription into an editable draft, `hey excephalon` / `stop listening` to arm and disarm, `scratch
 that` to take back what was just said, and it reports whether it is recording so nothing speaks
-over the user. It is also the duplex ear: while the brain merely thinks the ear stays open and
+over the user. Its `listen` yields a delivery turn for waiting news only at an actual LULL —
+yielded mid-sentence, the delivery pass found him talking, deferred, and had no way back until
+his next words — and the pass that defers puts the outbox's arrived flag back up, because news
+deferred with the flag down sat silent for nine minutes until he asked for it himself ("I keep
+having to prompt this thing for updates. one of its main purposes is to share these updates with
+me ASAP"); the dormant-lull offer likewise counts as made only if it began sounding. It is also the duplex ear: while the brain merely thinks the ear stays open and
 words land in the draft; while the voice is actually sounding, chunks are judged against the
 script being spoken (`covered_by`) — its own leak dropped, other words kept, and only a stop bark
 cuts the audio, so the TV can never kill a reply. Its terminator answers to a mishearing as

@@ -1739,3 +1739,24 @@ def test_approved_work_that_reached_main_is_wrapped_up_by_the_desk_itself(tmp_pa
     assert (tmp_path / "agent-logs-archive" / "lander.log").exists()
     assert desk.roster() == []  # retired: nothing left to haunt the next boot
     desk.close()
+
+
+def test_a_wrapped_agents_log_and_task_are_still_on_file(tmp_path):
+    # "it says 'with no log I can't confirm' but that's fucking bullshit, the logs are right
+    # there." The auto-wrap-up moved the log to the archive and the foreman's read then found
+    # nothing: a wrapped agent's name still resolves, its log still reads, its task and its
+    # ending are still answerable.
+    logs = tmp_path / "agent-logs"
+    desk, outbox, _ = _desk(log_dir=logs)
+    desk._wrapped_path = tmp_path / "wrapped.json"
+    desk._now = lambda: 1000.0
+    desk.start("autoplay-fix", "/tmp/wt", "make the auto-play choice stick")
+    assert _wait_for(lambda: bool(outbox))
+    _approved(desk, "autoplay-fix")
+    assert desk.retire("autoplay-fix") is True
+
+    assert desk.resolve("the autoplay fix") == "autoplay-fix"
+    assert "make the auto-play choice stick" in desk.recent_log("autoplay-fix")
+    assert desk.task_of("autoplay-fix") == "make the auto-play choice stick"
+    assert desk.ended("autoplay-fix") == "delivered"
+    desk.close()
