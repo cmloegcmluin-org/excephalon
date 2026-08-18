@@ -216,7 +216,7 @@ class _Desked:
     """One agent and what it's doing, so the roster can say more than just a name."""
 
     def __init__(self, agent, cwd, task, log, *, model, effort, delivery=None, enhancement=None,
-                 project=None, item_id=None, landed=False):
+                 project=None, item_id=None, landed=False, ticked=False):
         self.agent = agent
         self.cwd = cwd
         self.task = task
@@ -241,6 +241,12 @@ class _Desked:
         # carrying it: an agent was recorded DELIVERED two seconds after his "ship it", its item
         # ticked off his list, while its work sat unpushed on his machine.
         self.landed = landed
+        # Whether its list item has been checked off. The tick belongs to the MERGE, not to the
+        # tab closing: it used to be a step inside the wrap-up, so every other door that ends an
+        # agent - the window's own close button, a wrap-up refused, a process that went down
+        # first - left his ask standing open with the work already shipped. Recorded so the doors
+        # that come later cannot tick it twice either.
+        self.ticked = ticked
         self.state = "starting"
         self.last_heard = None  # when it last said anything at all, step or reply
         self.last_word = None  # the last thing it said back, trimmed for the roster
@@ -487,7 +493,8 @@ class AgentDesk:
                                  enhancement=entry.get("enhancement"),
                                  project=entry.get("project"),
                                  item_id=entry.get("item_id"),
-                                 landed=bool(entry.get("landed")))
+                                 landed=bool(entry.get("landed")),
+                                 ticked=bool(entry.get("ticked")))
                 desked.recorded_session = session  # what the next persist writes until it speaks
                 desked.state = "idle"
                 # A crash streak survives the app's own restart, or a task that kills its agents
@@ -959,7 +966,7 @@ class AgentDesk:
                 # to the card the item RIDES FROM - a Projects-tab card as readily as the
                 # Enhancements card, since a whole afternoon's Highdeas tasks were delivered and
                 # left standing open ("it did not check them off in the Projects tab").
-                ticked = finished_cleanly and self._tick(entry)
+                ticked = finished_cleanly and self._tick_once(entry)
                 if not ticked:
                     missed = (f"{name} is wrapped up, but its list item did not get checked "
                               "off - settle that item by hand (check_off_enhancement by its "
@@ -971,6 +978,19 @@ class AgentDesk:
             self._finished(name)  # a landing agent's clock runs until here; a retired one is off it
             self._persist()
         return True
+
+    def _tick_once(self, entry):
+        """Check this agent's item off, once, however many doors ask.
+
+        The merge asks first, because that is the fact a tick means; the wrap-up asks after, and
+        finds it already done. A tick that MISSED is not recorded, so the next door tries again -
+        an item left open is the failure this exists to end."""
+        if entry.ticked:
+            return True
+        if self._tick(entry):
+            entry.ticked = True
+            return True
+        return False
 
     def _tick(self, entry):
         """Check this agent's list item off - by its NUMBER first, which is what it was resolved
@@ -1074,6 +1094,14 @@ class AgentDesk:
         if landed:
             with self._lock:
                 entry.landed = True  # git said so; from here a wrap-up is legal, and only from here
+            # And the tick happens HERE, at the merge, not as a step inside the wrap-up. Every
+            # other door that ends an agent - the window's own close button on its tab, a wrap-up
+            # this desk refuses, a process that goes down before it runs - used to leave his ask
+            # standing open over work that had already shipped, and he has asked for this five
+            # times: "when an agent is done with its task, Excephalon needs to check off the task
+            # it was working on!!!!!!!". The merge is the fact the tick MEANS, so the tick is
+            # taken the moment the fact is.
+            self._tick_once(entry)
         self._set_state(name, "idle", last_word=reply)
         if landed:
             # The loop's last leg is mechanical, so the desk walks it itself: approved work
@@ -1207,7 +1235,8 @@ class AgentDesk:
                  "delivery": entry.delivery.stage, "steps": entry.delivery.steps,
                  "rejections": entry.delivery.rejections, "deaths": entry.deaths,
                  "enhancement": entry.enhancement, "item_id": entry.item_id,
-                 "project": entry.project, "landed": entry.landed}
+                 "project": entry.project, "landed": entry.landed,
+                 "ticked": entry.ticked}
                 for name, entry in self._desked.items()
             ]
         self._state_path.parent.mkdir(parents=True, exist_ok=True)

@@ -620,7 +620,14 @@ it in one place, shared with the window's own close button), the Enhancements it
 ticked off the user's list, its session closed, its worktree removed. That item rides with the
 agent from `start` (the brain passes it to `start_agent` when the work is one off a list) and is
 ticked only for a cleanly finished agent, never a died one, because a wrong tick would corrupt the
-list's record of ask and answer. The tick goes by the item's NUMBER, resolved by the DESK at start
+list's record of ask and answer. The tick belongs to the MERGE, not to the wrap-up
+(`_tick_once`, called where git confirms the branch reached origin/main): as a step inside
+`retire` it was lost by every OTHER door that ends an agent — the window's own close button on a
+tab archives the log directly, a wrap-up this desk refuses never runs it, a process that goes
+down first never reaches it — and #137 sat open over work that had already shipped, the fifth
+time he had asked ("when an agent is done with its task, Excephalon needs to check off the task
+it was working on!!!!!!!"). Recorded on the entry, so the doors that come after find it done
+rather than doing it twice; a tick that MISSED is not recorded, so the next door tries again. The tick goes by the item's NUMBER, resolved by the DESK at start
 (`_item_number` → `memory.enhancement_id`, from the item text as retyped or from his own task
 text, unique winner only) and carried as `item_id`: matched on the TEXT the brain retyped, a
 paraphrase or a dropped backtick missed silently, and two delivered features left their items
