@@ -110,7 +110,11 @@ def test_a_brain_failure_falls_back_to_the_plain_notice():
 
     assert _wait_for(outbox)
     [news] = outbox.drain()
-    assert "fixer" in str(news) and "All done." in str(news)
+    # The news itself, in plain words - never opening with the agent's internal name, which is a
+    # label and reached him as one ("Does a human walk up to their coworker ... and just begin a
+    # conversation with the word 'errands'?"). Which agent it is about travels with it instead.
+    assert str(news) == "All done."
+    assert news.about == "fixer"
     assert news.composed is False  # app-authored after all, so the ledger treats it as unwritten
 
 

@@ -767,6 +767,51 @@ def test_a_first_line_that_did_sound_is_remembered_as_said():
     assert "Back with you." in brain.said
 
 
+def test_an_offer_he_has_not_answered_is_never_delivered_at_him_anyway():
+    # "I never said I was ready for the update." He was offered one at a lull, said nothing, and
+    # five minutes later the whole walkthrough was read out unasked - it had arrived by another
+    # road (an errand's report), which bypassed the offer entirely. An offer he did not take is
+    # not a licence to deliver.
+    clock = FakeClock()
+    outbox = Outbox()
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["", ""]), FakeBrain(), tts, outbox=outbox,
+                         dormant_after=180, clock=clock)
+    clock.now = 600
+    outbox.push("The scheduled-message feature is ready to try.", about="scheduler")
+
+    convo.turn()  # the lull: he is offered it
+    assert tts.spoken == ["I've got an update on scheduler when you're ready."]
+
+    outbox.push("Here are the exact steps to launch it.", about="errands", listed=False)
+    convo.turn()  # more arrives, by another road, while the offer stands
+
+    assert not any("exact steps" in line for line in tts.spoken)  # nothing read at him
+
+
+def test_more_arriving_under_a_standing_offer_says_so_by_the_count():
+    # "if it now had another update, it should have said something like 'I now have two updates
+    # for the scheduled-message item'." The offer stands; what changes is how much is behind it.
+    clock = FakeClock()
+    outbox = Outbox()
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["", "", ""]), FakeBrain(), tts, outbox=outbox,
+                         dormant_after=180, clock=clock)
+    clock.now = 600
+    outbox.push("Built and ready to try.", about="scheduler")
+
+    convo.turn()
+    # By another road, as it was in his transcript: the same work reported under a second name.
+    outbox.push("And here is how to launch it.", about="errands", listed=False)
+    convo.turn()
+
+    assert tts.spoken[-1].startswith("I've got two updates on ")
+
+    convo.turn()  # nothing new since: a standing question is not repeated
+
+    assert len(tts.spoken) == 2
+
+
 def test_a_mouth_that_receipts_its_own_silence_is_believed(tmp_path):
     # The gap the loop could not see. Its own interrupt was never set, so every check it makes
     # says the line went out - but the voice knows better: a barge-in landed while the engine was

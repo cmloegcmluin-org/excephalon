@@ -24,7 +24,7 @@ def test_a_new_complete_line_is_pushed_to_the_outbox(tmp_path):
     watcher.poll_once()
 
     [news] = outbox.drain()
-    assert news == "auth-agent: I need your call: JWT or sessions?"
+    assert news == "I need your call: JWT or sessions?"  # his news, not a name-tag
     # Named, so several landing together can be read out by name for one of them to be picked -
     # rather than the name being worked back out of the sentence the agent happened to write.
     assert news.about == "auth-agent"
@@ -52,7 +52,7 @@ def test_a_partial_line_waits_until_its_newline_arrives(tmp_path):
     with open(f, "a", encoding="utf-8") as fh:
         fh.write("ought\n")
     watcher.poll_once()
-    assert outbox.drain() == ["agent: still typing this thought"]  # surfaces once complete
+    assert outbox.drain() == ["still typing this thought"]  # surfaces once complete
 
 
 def test_lines_across_several_files_all_surface(tmp_path):
@@ -63,7 +63,7 @@ def test_lines_across_several_files_all_surface(tmp_path):
 
     watcher.poll_once()
 
-    assert set(outbox.drain()) == {"a: agent A is ready for review", "b: agent B hit a failing test"}
+    assert set(outbox.drain()) == {"agent A is ready for review", "agent B hit a failing test"}
 
 
 def test_a_cleared_inbox_file_resyncs_from_the_top(tmp_path):
@@ -74,14 +74,14 @@ def test_a_cleared_inbox_file_resyncs_from_the_top(tmp_path):
     f = tmp_path / "agent.txt"
     f.write_text("first question\n", encoding="utf-8")
     watcher.poll_once()
-    assert outbox.drain() == ["agent: first question"]
+    assert outbox.drain() == ["first question"]
 
     f.write_text("", encoding="utf-8")  # cleared (shrinks below our offset)
     watcher.poll_once()
     f.write_text("second question\n", encoding="utf-8")
     watcher.poll_once()
 
-    assert outbox.drain() == ["agent: second question"]
+    assert outbox.drain() == ["second question"]
 
 
 def test_blank_lines_are_ignored(tmp_path):
@@ -91,7 +91,7 @@ def test_blank_lines_are_ignored(tmp_path):
 
     watcher.poll_once()
 
-    assert outbox.drain() == ["agent: real message"]
+    assert outbox.drain() == ["real message"]
 
 
 def test_each_poll_ticks_the_monitor(tmp_path):
@@ -124,7 +124,7 @@ def test_a_multi_line_report_arrives_as_one_notice_not_line_by_line(tmp_path):
     watcher.poll_once()
 
     said = outbox.drain()
-    assert said == ["fixer: IN PROGRESS - backfill. (the rest is in fixer's tab)"]
+    assert said == ["IN PROGRESS - backfill."]
     assert "91459e5" not in said[0]  # its internals never reach them
 
 
