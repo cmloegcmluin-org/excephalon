@@ -237,7 +237,11 @@ def test_the_agents_reply_arrives_in_the_outbox_when_it_lands():
     desk.start("fixer", "/tmp/wt", "fix the drive link")
 
     assert _wait_for(lambda: bool(outbox))
-    assert any("did: fix the drive link" in message for message in outbox.drain())
+    # News about HIS work, in his own words for it - never the agent's report, which is a
+    # conversation he was not part of.
+    [news] = outbox.drain()
+    assert str(news) == "There's an update on fix the drive link."
+    assert news.about == "fixer"
     desk.close()
 
 
@@ -311,7 +315,9 @@ def test_an_agent_that_blows_up_is_reported_not_swallowed():
 
     assert _wait_for(lambda: bool(outbox))
     said = outbox.drain()
-    assert any("doomed" in m and "session died" in m for m in said)
+    # The app's own plain sentence about HIS work - never the crash, never the agent's name.
+    assert said and all("session died" not in m for m in said)
+    assert any("run into trouble" in m for m in said)
     assert [news.about for news in said] == ["doomed"]  # a death is news about an agent too
     desk.close()
 

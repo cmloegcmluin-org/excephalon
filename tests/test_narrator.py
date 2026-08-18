@@ -89,6 +89,40 @@ def test_the_brain_is_told_which_agent_and_what_it_reported():
     assert remembered is False
 
 
+def test_the_line_is_told_his_own_name_for_the_work_and_never_the_agents():
+    # "it says 'still waiting: ... scheduled-messages'. I think this is the same as the
+    # 'timed-reminder feature', but it's weird and confusing that in the previous message it chose
+    # a different name for the feature than its agent log's name." One thread, one name, and the
+    # name is his - the agent's is a filename.
+    brain, outbox = FakeBrain(), Outbox()
+    Narrator(brain, outbox, work_of=lambda agent: "a timed-reminder feature").tell(
+        "finished", "excephalon-138-scheduled-messages", "Red.")
+
+    assert _wait_for(outbox)
+    [(asked, _)] = brain.asked
+    assert "a timed-reminder feature" in asked
+    assert "Never say the agent's internal name" in asked
+    assert outbox.drain()[0].work == "a timed-reminder feature"
+
+
+def test_a_fallback_says_what_the_app_knows_never_what_the_agent_wrote():
+    # "The fresh demo is clean: exactly the four curated scenarios, two clean Excephalon
+    # messages..." reached him verbatim: "what is a 'fresh' demo?? what four curated scenarios?
+    # what two clean Excephalon messages? basically this whole message is useless, insane,
+    # confusing, and terrible."
+    class BrokenBrain:
+        def respond(self, utterance, *, remember=True, on_text=None):
+            raise RuntimeError("session wedged")
+
+    outbox = Outbox()
+    Narrator(BrokenBrain(), outbox, work_of=lambda agent: "a timed-reminder feature").tell(
+        "finished", "excephalon-139", "The fresh demo is clean: exactly the four curated scenarios.")
+
+    assert _wait_for(outbox)
+    [news] = outbox.drain()
+    assert str(news) == "There's an update on a timed-reminder feature."
+
+
 def test_a_death_is_narrated_as_what_it_is():
     brain, outbox = FakeBrain("The fixer agent died mid-task - want me to start a fresh one?"), Outbox()
     Narrator(brain, outbox).tell("died", "fixer", "RuntimeError: session lost")
@@ -113,7 +147,8 @@ def test_a_brain_failure_falls_back_to_the_plain_notice():
     # The news itself, in plain words - never opening with the agent's internal name, which is a
     # label and reached him as one ("Does a human walk up to their coworker ... and just begin a
     # conversation with the word 'errands'?"). Which agent it is about travels with it instead.
-    assert str(news) == "All done."
+    # The app's own sentence about HIS work - never a word of what the agent wrote.
+    assert str(news) == "There's an update on your work."
     assert news.about == "fixer"
     assert news.composed is False  # app-authored after all, so the ledger treats it as unwritten
 
@@ -287,7 +322,7 @@ def test_news_survives_a_brain_that_hangs():
 
     assert _wait_for(outbox)
     [news] = outbox.drain()
-    assert "It merged." in str(news)
+    assert str(news) == "There's an update on your work."  # never the agent's own words
     assert news.composed is False  # app-authored: the ledger must read it back to the brain
 
     # The brain's answer, when it finally comes, is dropped - the news must not be told twice.

@@ -499,7 +499,7 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
         if narrator is not None:
             narrator.tell(kind, agent, report)
         else:
-            outbox.push(notice(agent, report), about=agent, kind=kind)
+            outbox.push(notice(kind), about=agent, kind=kind)
 
     # Don't just wait to be told - watch the agents. If one goes silent past the threshold, the
     # monitor surfaces a heads-up so the user isn't left in the dark by a hung or stalled agent.
@@ -608,7 +608,8 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     brain.warmup(announce=announce)
     # From here on, news arrives in the brain's own voice - and worded by where the work stands:
     # a finished turn is presentation news while building, wrap-up news while landing approved work.
-    newsroom["narrator"] = Narrator(brain, outbox, stage_of=desk.delivery_stage)
+    newsroom["narrator"] = Narrator(brain, outbox, stage_of=desk.delivery_stage,
+                                    work_of=desk.title_of)
     # "I close it and reopen it constantly": bring back every agent the last process recorded,
     # each resumed on its old session - one caught mid-task is told to pick back up. After the
     # narrator, so an instantly-finishing revival is narrated, not read out as a label.

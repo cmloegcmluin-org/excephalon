@@ -1,38 +1,44 @@
-"""What an agent is allowed to say to the user: a notice, never its own words.
+"""What the app may say about an agent when it has to speak for itself.
 
-They were handed commit hashes, test counts and "I reran the suite myself" verbatim, and could not
-tell whether they were talking to Excephalon or to the agent it was driving. Telling the model not to
-relay was not enough - they asked for the code to prevent it - so nothing an agent writes reaches the
-outbox except this: the gist, capped, with the rest left where it is.
+An agent's own words never reach the user. They were handed commit hashes, test counts and "I
+reran the suite myself" verbatim, and could not tell whether they were talking to Excephalon or to
+the agent it was driving. The fallback here used to relay the agent's FIRST SENTENCE, which is the
+same failure wearing a cap: "The fresh demo is clean: exactly the four curated scenarios, two
+clean Excephalon messages, no raw 'Red', no 'tab' pointer" reached him whole, and every noun
+in it belonged to a conversation he was never part of - "what is a 'fresh' demo?? what four
+curated scenarios? what two clean Excephalon messages? basically this whole message is useless,
+insane, confusing, and terrible."
 
-This is the FALLBACK, reached only when the brain could not word the event itself - and it is still
-spoken in Excephalon's voice, so it may not read as a label. It used to open with the agent's
-internal name and close by sending him to that agent's tab: "errands: The agent that fixed the
-proactive-notice bug is registered as `excephalon-139-bug-excephalon-occasionally`... (the rest is
-in errands's tab)". His answer: "Does a human walk up to their coworker in an office space and just
-begin a conversation with the word 'errands'? No, of course not. This is not natural human
-behavior." Both the name-tag and the tab pointer are gone - the logs are Excephalon's to read, not
-his - and what is left is one sentence of the news itself.
+So this says only what the APP knows: which piece of work, in HIS words, and what happened to it.
+No agent prose, no internal name, no jargon, and never a pointer to a log ("the purpose of
+Excephalon is to insulate me from these agent logs; I do not want to check them"). It is the
+fallback for when the brain cannot word an event itself, so it must be sayable with nothing but
+the two facts the app is certain of.
 """
 
-import re
+# What each kind of event MEANS to him, as a sentence about his own work. Deliberately incurious
+# about the agent's report: a fallback that quoted it is what made this file a problem.
+_SAID = {
+    "finished": "There's an update on {work}.",
+    "wrote": "There's an update on {work}.",
+    "pending": "{work} is still waiting on your yes or no.",
+    "landing": "{work} is being landed now.",
+    "landed": "{work} is done and in.",
+    "died": "{work} has run into trouble and needs you.",
+    "quiet": "{work} has gone quiet.",
+    "errand": "I finished that errand for you.",
+    "memory": "There's one thing from what I remember that I'd like your call on.",
+}
 
-NOTICE_CHARS = 160  # a sentence's worth; past this it is the agent talking, not a notice
-
-_SENTENCE_END = re.compile(r"(?<=[.!?])\s")
-
-# The agent's own name at the head of its report, which its log lines carry and its reports copy.
-# Stripped rather than trusted: it is the same label by another road.
-_TAGGED = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*\s*:\s+")
+FALLBACK = "There's an update on your work."
 
 
-def notice(agent, report):
-    """One line of the news he can act on, in plain words - no name-tag, no pointer to a tab."""
-    said = " ".join(str(report).split())
-    said = _TAGGED.sub("", said)
-    if not said:
-        return "There's word from your work that I couldn't put into words."
-    first = _SENTENCE_END.split(said, maxsplit=1)[0]
-    if len(first) > NOTICE_CHARS:
-        first = first[:NOTICE_CHARS].rstrip() + "…"
-    return first
+def notice(kind, work=""):
+    """One plain sentence about his work, in his words - the app speaking for itself."""
+    work = " ".join(str(work or "").split())
+    said = _SAID.get(str(kind))
+    if said is None:
+        return FALLBACK
+    if "{work}" not in said:
+        return said
+    return said.format(work=work) if work else FALLBACK

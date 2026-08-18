@@ -65,7 +65,13 @@ def chosen(heard, news):
 
 
 def _label(item):
-    return getattr(item, "about", None) or str(item)
+    """What to CALL this piece of work out loud: his own words for it.
+
+    It used to be the agent's internal name, so the list read out "scheduled-messages" about work
+    he and Excephalon had been calling the timed-reminder feature: "it's weird and confusing that
+    in the previous message it chose a different name for the feature than its agent log's name."
+    One thread, one name, and it is his."""
+    return getattr(item, "work", "") or getattr(item, "about", None) or str(item)
 
 
 def _name_words(item):

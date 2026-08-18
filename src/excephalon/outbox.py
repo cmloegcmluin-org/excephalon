@@ -39,13 +39,15 @@ class News(str):
     and left him waiting on news that had already been written."""
 
     about = None  # the agent, when there is one
+    work = ""  # the piece of work in HIS words - the only name he is ever told
     composed = False  # whether the brain itself wrote the words
     listed = True  # whether it is an item on the numbered list, or just a thing to say
     kind = ""  # the event behind it, for the few places where the KIND decides
 
-    def __new__(cls, message, about=None, composed=False, listed=True, kind=""):
+    def __new__(cls, message, about=None, composed=False, listed=True, kind="", work=""):
         news = super().__new__(cls, message)
         news.about = about
+        news.work = work
         news.composed = composed
         news.listed = listed
         news.kind = kind
@@ -95,14 +97,15 @@ class Outbox:
             # Highdeas", about a heads-up it had spoken verbatim 18 minutes earlier).
             self._items.append(News(held["message"], held.get("about"),
                                     listed=held.get("listed", True),
-                                    kind=held.get("kind", "")))
+                                    kind=held.get("kind", ""),
+                                    work=held.get("work", "")))
         if self._items:
             self.arrived.set()
 
-    def push(self, message, about=None, composed=False, listed=True, kind=""):
+    def push(self, message, about=None, composed=False, listed=True, kind="", work=""):
         with self._lock:
-            self._items.append(News(message, about, composed, listed, kind))
-            self._keep(message, about, composed, listed, kind)
+            self._items.append(News(message, about, composed, listed, kind, work))
+            self._keep(message, about, composed, listed, kind, work)
         self.arrived.set()
 
     def drain(self):
@@ -127,7 +130,8 @@ class Outbox:
         """Held news about a renamed agent is about the same agent - under his name for it now, so
         a roll call reads out what he called it rather than what the app happened to name it."""
         with self._lock:
-            self._items = deque(News(str(item), to, item.composed, item.listed, item.kind)
+            self._items = deque(News(str(item), to, item.composed, item.listed, item.kind,
+                                     item.work)
                                 if getattr(item, "about", None) == about else item
                                 for item in self._items)
             kept = self._spooled()
@@ -215,10 +219,10 @@ class Outbox:
                 break
         self._write(kept)
 
-    def _keep(self, message, about, composed, listed=True, kind=""):
+    def _keep(self, message, about, composed, listed=True, kind="", work=""):
         kept = self._spooled()
         kept.append({"message": str(message), "about": about, "composed": bool(composed),
-                     "listed": bool(listed), "kind": str(kind)})
+                     "listed": bool(listed), "kind": str(kind), "work": str(work)})
         self._write(kept)
 
     def _spooled(self):

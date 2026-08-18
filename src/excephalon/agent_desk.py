@@ -713,6 +713,23 @@ class AgentDesk:
             entry = self._desked.get(name)
             return entry.delivery.stage if entry is not None else None
 
+    def title_of(self, name):
+        """This piece of work in HIS words - the only name for it he is ever told.
+
+        The list item he wrote when he asked for it, or failing that the first line of the task.
+        Never the agent's internal name: that is a filename, and read out beside his own words for
+        the same work it reads as a second, unrelated thing - "it says 'still waiting: ...
+        scheduled-messages'. I think this is the same as the 'timed-reminder feature', but it's
+        weird and confusing that in the previous message it chose a different name for the feature
+        than its agent log's name." A wrapped agent's work still has a title, from the endings
+        record, because news about it can outlive its desk."""
+        name = self.resolve(name) or name
+        with self._lock:
+            entry = self._desked.get(name)
+            if entry is not None:
+                return _one_line(entry.enhancement or entry.task, limit=90)
+        return _one_line(self.task_of(name) or "", limit=90)
+
     def task_of(self, name):
         """What `name` was put on - the first thing a senior read of its situation needs. A
         wrapped agent's task is still on file (the endings record), because a question about
@@ -1174,13 +1191,12 @@ class AgentDesk:
         return True
 
     def _plain_notices(self, kind, agent, report):
-        """The undirected default: what the desk always said, straight to the outbox. A notice,
-        never the agent's own words - the full reply is in the log its tab reads. Named, so that
-        several landing together can be read out by name for one of them to be picked."""
-        if kind == "died":
-            self._outbox.push(f"The {agent} agent died: {report}", about=agent)
-        else:
-            self._outbox.push(notice(agent, report), about=agent)
+        """The undirected default: what the desk says when nothing is wired to word events for it.
+
+        Never the agent's own words, and never its internal name - one plain sentence about HIS
+        piece of work, which is all the app itself knows and all he wants."""
+        work = self.title_of(agent)
+        self._outbox.push(notice(kind, work), about=agent, kind=kind, work=work)
 
     def _heard(self, name, message):
         """One message back from an agent - what it said AND what it did - logged as it arrives."""
