@@ -131,7 +131,7 @@ a known weakness rather than a solution.
   test counts, not "I reran the suite myself". Every agent event (finished, died, wrote, quiet) goes
   through `narrator.py`: one trip through the brain, which composes the one or two sentences the
   user hears in its own voice. `relay.notice()` survives only as the fallback when the brain cannot
-  answer — news must never die with a wedged session. Handed the raw stream, a person cannot tell
+  answer — news must never die with a wedged session — and it carries that news as a SENTENCE, never a label: it opened with the agent's internal name and closed by pointing at that agent's tab, until one reached him verbatim, "errands: The agent that fixed the proactive-notice bug is registered as..." ("Does a human walk up to their coworker in an office space and just begin a conversation with the word 'errands'? No, of course not"). Handed the raw stream, a person cannot tell
   whether they are talking to Excephalon or to the agent; the code, not the model, has to prevent it.
 - **Brevity is the product.** The persona holds replies to a couple of short sentences, and the
   voice speaks them as they are written, so a barge-in is the user's own length limit. The old
@@ -384,7 +384,10 @@ instruction row's `- **Name** rule` shape is composed by the saver, never truste
 wording — the one row filed bare stood out on the card until he asked for it to be fixed by hand —
 and the name is the row's identity: restating one rewrites its row in place, because "fixing" that
 bare row by filing a named copy beside it is how the card gained the duplicate he then had to
-order deleted. There is also file_improvement, which
+order deleted. There is also file_improvement, whose list is HIS - a fault Excephalon finds in
+itself is never filed there and never raised with him ("that's for me to file things, not
+Excephalon itself. if Excephalon decides it needs to self-improve, fine, but I don't want to be
+involved in the process") - and which
 REFUSES a feature request naming one of his other apps (their folder names are known; see
 `names_another_app`), because the Enhancements list is for changes to Excephalon itself and twice
 a Highdeas request was filed there instead of being handed to an agent, each time answered with a
@@ -426,7 +429,7 @@ yielded mid-sentence, the delivery pass found him talking, deferred, and had no 
 his next words — and the pass that defers puts the outbox's arrived flag back up, because news
 deferred with the flag down sat silent for nine minutes until he asked for it himself ("I keep
 having to prompt this thing for updates. one of its main purposes is to share these updates with
-me ASAP"); the dormant-lull offer likewise counts as made only if it began sounding. It is also the duplex ear: while the brain merely thinks the ear stays open and
+me ASAP"); the dormant-lull offer likewise counts as made only if it began sounding. An offer he has NOT answered holds everything: nothing goes out at him in the meantime, by any road - an errand's report carrying an agent's walkthrough went round the offer entirely and was read at him unasked ("I never said I was ready for the update") - and the only thing that may change is the COUNT (`MORE_UPDATES`, his own shape: "it should have said something like 'I now have two updates for the scheduled-message item'"). It is also the duplex ear: while the brain merely thinks the ear stays open and
 words land in the draft; while the voice is actually sounding, chunks are judged against the
 script being spoken (`covered_by`) — its own leak dropped, other words kept, and only a stop bark
 cuts the audio, so the TV can never kill a reply. Its terminator answers to a mishearing as

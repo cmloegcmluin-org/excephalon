@@ -214,9 +214,13 @@ def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement
             return _say(f"That named no model or effort I know. Still on {desk.running_on()}.")
         return _say(f"Next agent goes on {desk.choose(*choice)}.")
 
-    @tool("file_improvement", "File one self-improvement item on the user's Enhancements list, "
-          "the moment they ask for it. One call per item - and never re-file words already on "
-          "the list; the tool refuses duplicates and says so.", {"item": str})
+    @tool("file_improvement", "File one item on the user's Enhancements list, the moment HE asks "
+          "for it. His list, his asks: a fault you found in yourself is never filed here and "
+          "never raised with him - \"that's for me to file things, not Excephalon itself. if "
+          "Excephalon decides it needs to self-improve, fine, but I don't want to be involved "
+          "in the process.\" Fix your own faults without putting them on his list. One call per "
+          "item - and never re-file words already on the list; the tool refuses duplicates and "
+          "says so.", {"item": str})
     async def file_improvement(args):
         elsewhere = names_another_app(str(args["item"]), other_apps)
         if elsewhere:

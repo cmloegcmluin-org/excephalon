@@ -13,7 +13,7 @@ from excephalon.phrases import ends_with_command as _ends_with_command
 from excephalon.phrases import wakes as _wakes
 from excephalon.sdk_session import needs_sign_in
 from excephalon.voice import UNSAID, Receipt
-from excephalon.waiting import chosen, roll_call
+from excephalon.waiting import NUMBERS, chosen, roll_call
 
 # Both names, as the window's wake phrases already carried both: the app says "Excephalon" every
 # time it names itself, so that has to be the word that works - and the coined one is the word the
@@ -168,6 +168,12 @@ DEFAULT_DORMANT_AFTER = 180.0
 # How the offer is worded. App-authored (the ledger reads it back to the brain), because it must
 # be sayable even while the brain is mid-something-else.
 UPDATE_OFFER = "I've got an update on {what} when you're ready."
+
+# More has arrived for something he was already offered and has not answered. The offer stands, so
+# nothing is spoken at him - what changes is the COUNT: "I never said I was ready for the update.
+# if it now had another update, it should have said something like 'I now have two updates for the
+# scheduled-message item'." An offer he was given and did not take is not a licence to deliver.
+MORE_UPDATES = "I've got {count} updates on {what} now, when you're ready."
 
 # A bare go-ahead with SEVERAL updates held reads the numbered choice out. Exact matches only:
 # "okay" mid-sentence is them talking, not them asking for the list. With ONE update held, no
@@ -348,6 +354,11 @@ def _newest_per_agent(waiting):
     return keep, gone
 
 
+def _spoken_count(many):
+    """A count as it is said - "two updates", never "2 updates"."""
+    return NUMBERS[many - 1] if 1 <= many <= len(NUMBERS) else str(many)
+
+
 def _receipt(answer, text="", cut=False):
     """A mouth's answer as a Receipt, whatever shape of mouth answered.
 
@@ -467,6 +478,7 @@ class Conversation:
         self._dormant_after = dormant_after
         self._last_engaged = clock()  # startup counts: they just launched it, so they are here
         self._update_offered = False  # a dormant-lull offer stands; the news waits to be taken
+        self._offered_count = 0  # how much was waiting when that offer was made, so more re-offers
         self._briefing = briefing  # callable: the live fleet state, put before the brain each turn
         # callable: his standing context, but only the parts that have CHANGED since the brain was
         # last told - "" on a turn where nothing of his has moved.
@@ -710,6 +722,20 @@ class Conversation:
             asked = offers_a_choice(self._opening)
             if self._say_opening() and asked:
                 self._update_offered = True
+                self._offered_count = len(self._waiting)
+            return
+        if self._update_offered:
+            # He was offered this and has not answered. Nothing goes out at him in the meantime -
+            # not an agent's news, not an errand's report, however it arrives: "I never said I was
+            # ready for the update." What may change is the COUNT, and only that: told two more
+            # had landed he would know there was more to come back to, which is what he asked for
+            # ("it should have said something like 'I now have two updates for the
+            # scheduled-message item'"). Silent otherwise, because a standing question repeated is
+            # the same wall he already declined to answer.
+            held = len(self._waiting)
+            if held > self._offered_count and self._say(
+                    MORE_UPDATES.format(count=_spoken_count(held), what=self._whose_news())):
+                self._offered_count = held
             return
         # Unlisted news is not an item to choose between - the errand hand is machinery, not an
         # agent with a tab and a verdict, and reading its tag out as a name beside a real agent
@@ -756,6 +782,7 @@ class Conversation:
             # behind it sat unreachable.
             if not self._update_offered:
                 self._update_offered = bool(self._say(UPDATE_OFFER.format(what=self._whose_news())))
+                self._offered_count = len(self._waiting)
             return
         self._update_offered = False
         if self._announced:
