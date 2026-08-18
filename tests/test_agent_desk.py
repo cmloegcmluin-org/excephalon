@@ -700,6 +700,49 @@ def test_an_agent_cannot_be_wrapped_up_over_work_he_has_not_ruled_on(tmp_path):
     desk.close()
 
 
+def test_the_item_is_ticked_by_the_merge_not_by_whoever_closes_the_tab(tmp_path):
+    # "this is about the fifth time I've asked for this: when an agent is done with its task,
+    # Excephalon needs to check off the task it was working on!!!!!!!" The naming-prefix work
+    # merged, its tab was closed from the window - which archives the log directly, never through
+    # the desk - and #137 sat open. The tick was a step inside the wrap-up, so every other door
+    # that ends an agent lost it. It belongs to the merge, which is the fact it means.
+    ticked = []
+    desk, outbox, _ = _desk(log_dir=tmp_path / "agent-logs",
+                            run=lambda *a, **k: SimpleNamespace(returncode=0, stdout="", stderr=""),
+                            complete=lambda item, **where: ticked.append(item) or True)
+    desk.start("namer", str(tmp_path / "wt"), "number the agent names",
+               enhancement="the prefix should include the task number")
+    assert _wait_for(lambda: bool(outbox))
+    outbox.drain()
+    desk.present("namer", "click a robot and read the name")
+    desk.verdict("namer", True)
+
+    # Its landing turn ends and git says the branch reached main. Nothing else has happened yet -
+    # no wrap-up asked for, no tab closed - and the item is already off his list.
+    assert _wait_for(lambda: ticked == ["the prefix should include the task number"])
+    desk.close()
+
+
+def test_an_item_is_never_ticked_twice_however_many_doors_ask(tmp_path):
+    ticked = []
+    desk, outbox, _ = _desk(log_dir=tmp_path / "agent-logs",
+                            run=lambda *a, **k: SimpleNamespace(returncode=0, stdout="", stderr=""),
+                            complete=lambda item, **where: ticked.append(item) or True)
+    desk.start("namer", str(tmp_path / "wt"), "number the agent names",
+               enhancement="the prefix should include the task number")
+    assert _wait_for(lambda: bool(outbox))
+    outbox.drain()
+    desk.present("namer", "click a robot")
+    desk.verdict("namer", True)
+    assert _wait_for(lambda: len(ticked) == 1)
+    outbox.drain()
+
+    desk.retire("namer")  # the wrap-up asks after the merge already did
+
+    assert ticked == ["the prefix should include the task number"]
+    desk.close()
+
+
 def test_a_wrap_up_two_seconds_after_the_landing_order_is_refused(tmp_path):
     # The Asana grouping fix: he approved it at 13:37:32, and two seconds later - before the
     # agent could act on the order at all - it was recorded DELIVERED, item #19 ticked off his
