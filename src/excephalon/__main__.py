@@ -54,6 +54,7 @@ from excephalon.memory import (
 from excephalon.outbox import Outbox
 from excephalon.polish import mend
 from excephalon.relay import notice
+from excephalon.schedule import Schedule
 from excephalon.shutdown import consolidate, leave_process
 from excephalon.stt_console import ConsoleSTT
 from excephalon.tailing import safe_name
@@ -101,6 +102,7 @@ MIC_OVERRIDE = RUNTIME_DIR / "mic.txt"  # optional: a device-name substring to f
 MIC_GAIN = RUNTIME_DIR / "mic-gain.txt"  # optional: a number to boost a quiet mic (e.g. 5)
 SERVICES = RUNTIME_DIR / "services.json"  # his connected services (MCP servers), errand-hand reach
 BOOT_RECORD = RUNTIME_DIR / "boot.json"  # where the last process stood: what the welcome-back reads
+SCHEDULE = RUNTIME_DIR / "schedule.json"  # one-off messages he asked for later, waiting on the clock
 VOCAB_ROOTS = RUNTIME_DIR / "vocab-roots.txt"  # optional: extra dirs (one per line) to mine for project names
 WORKSPACE = Path.home() / "workspace"  # default project tree; its folder names seed the custom vocabulary
 AGENT_QUIET_AFTER = 20 * 60  # seconds of silence from an agent before Excephalon flags it to the user
@@ -507,6 +509,16 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     # reports once lived only in a wedged process's memory, and died with it.
     outbox = Outbox(spool=RUNTIME_DIR / "outbox.json")
 
+    # One-off messages he asked to hear at a later clock time ("remind me at 5:15 to start dinner
+    # prep"). The pending list is a file, so a message set before a restart is still there after
+    # it; the poller fires each at its wall-clock moment onto the outbox - the same road every
+    # proactive line travels, held for a lull and spoken in Excephalon's voice, surviving a restart
+    # until it actually is. about=None (the push default), so several waiting at once are each
+    # delivered, never collapsed into one the way one agent's news supersedes its own older news.
+    schedule = Schedule(SCHEDULE,
+                        deliver=lambda message: outbox.push(message, listed=False, kind="reminder"))
+    schedule.start(stop)
+
     # Every agent event - finished, died, wrote to its inbox, gone quiet - takes one trip through
     # the brain so what the user hears is the brain's own sentence, not a label read aloud. The
     # narrator needs the brain, which doesn't exist yet; until it does (a few seconds of startup),
@@ -625,7 +637,7 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     # Enhancements list is for changes to Excephalon itself, and a request for another app
     # belongs to an agent in that app's own repo.
     actions_server, _ = fleet_actions(desk, foreman, errands, namer=namer.name,
-                                      other_apps=_other_apps())
+                                      other_apps=_other_apps(), schedule=schedule)
     # Seeded with the tail of the last session's transcript, so a restart - their only way of picking
     # up a fix - resumes the conversation instead of greeting them as a stranger.
     brain = SdkBrain(persona=_persona(), user=user_name(load_profile()), actions=actions_server,
@@ -787,6 +799,9 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
                 in_review=desk.in_review,
                 review_opens=lambda name: desk.delivery_stage(name) == "ready",
                 briefing=lambda: (
+                    f"The time right now is {datetime.now():%A %Y-%m-%d %H:%M}, his local time - "
+                    "so you always know what time it is, and can turn 'remind me at 5:15' or "
+                    "'tomorrow morning' into a real time for schedule_message.\n"
                     f"{desk.digest()}\nFresh agents start on {desk.running_on()}."
                     "\n\nHis Enhancements list - the OPEN items, live from the file this turn. "
                     "You CAN see this list: it is right here, always current, and it is the same "
