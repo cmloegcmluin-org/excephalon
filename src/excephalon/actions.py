@@ -16,12 +16,14 @@ import asyncio
 import os.path
 import re
 import time
+from datetime import datetime
 from pathlib import Path
 
 from claude_agent_sdk import create_sdk_mcp_server, tool
 
 from excephalon.delivery import DeliveryError
 from excephalon.naming import distill_name
+from excephalon.schedule import resolve_when
 from excephalon.memory import (PROJECT_PREFIX, append_enhancement, append_learned,
                            complete_enhancement_anywhere, drop_persona_instruction,
                            forget_learned, save_persona_instruction,
@@ -40,7 +42,8 @@ TOOL_NAMES = tuple(f"mcp__{SERVER}__{name}"
                                 "file_improvement", "revise_enhancement", "check_off_enhancement",
                                 "update_persona", "drop_instruction", "remember", "forget_memory",
                                 "close_agent_tab", "mark_ready", "rename_agent",
-                                "record_verdict", "ask_foreman", "run_errand"))
+                                "record_verdict", "ask_foreman", "run_errand",
+                                "schedule_message"))
 
 # What the app calls itself, in the words an item would use. An item naming one of these is about
 # Excephalon, whatever else it also names.
@@ -112,7 +115,8 @@ def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement
                   drop_instruction=drop_persona_instruction,
                   remember_fact=append_learned, forget_fact=forget_learned,
                   resolve=_resolve, prepare=prepare_worktree_for, default_task=DEFAULT_TASK,
-                  namer=distill_name, other_apps=(), clock=time.strftime):
+                  namer=distill_name, other_apps=(), clock=time.strftime,
+                  schedule=None, now=datetime.now):
     """The action tools, wired to this desk and foreman: (server config for the options, the
     tools themselves).
 
@@ -239,6 +243,30 @@ def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement
     async def run_errand(args):
         errands.run(str(args["chore"]))
         return _say("Doing that little job now - its result will come back as its own note.")
+
+    @tool("schedule_message", "Hold a message and say it to the user at a real clock time later - "
+          "the timed nudge they ask for ('remind me at 5:15 to start dinner prep', 'in ten "
+          "minutes tell me to stretch'). It fires on its own whether or not you are mid-"
+          "conversation, and if the app was closed when the time came it catches up at the next "
+          "launch. `when` is the time: a clock reading ('17:15', or '5:15pm' - it fires at that "
+          "reading's NEXT occurrence, today if still ahead, tomorrow if it has passed), a delay "
+          "('in 10 minutes', 'in 2 hours'), or a full date and time for a named day like tomorrow "
+          "('2026-08-18 09:00' - build the date from the current time in your briefing). `message` "
+          "is the exact words to speak at that moment, in your own voice ('Time to start dinner "
+          "prep.'). Only for a genuine FUTURE time - anything meant for right now you answer "
+          "yourself.", {"when": str, "message": str})
+    async def schedule_message_tool(args):
+        message = str(args.get("message") or "").strip()
+        if not message:
+            return _say("Give me the message to say as well as the time - nothing was scheduled.")
+        target = resolve_when(str(args.get("when") or ""), now())
+        if target is None:
+            return _say("I couldn't read that time, so nothing was scheduled. Give it as a clock "
+                        "time like 17:15 or 5:15pm, a delay like 'in 10 minutes', or a full date "
+                        "and time like 2026-08-18 09:00.")
+        schedule.add(target.timestamp(), message)
+        return _say(f"Scheduled for {target:%A %Y-%m-%d %H:%M}. Tell the user in one short "
+                    "sentence that you'll say it then.")
 
     @tool("revise_enhancement", "Rewrite an existing Enhancements-list item's words by its #id - "
           "when the user wants a filed ticket corrected or expanded rather than duplicated. The "
@@ -377,7 +405,8 @@ def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement
 
     tools = [start_agent, tell_agent, deliver_update, set_next_agent_model, file_improvement,
              revise_item,
-             check_off_item_tool, run_errand, update_persona, drop_instruction_tool, rename_agent,
+             check_off_item_tool, run_errand, schedule_message_tool, update_persona,
+             drop_instruction_tool, rename_agent,
              remember, forget_memory, close_agent_tab, mark_ready, record_verdict, ask_foreman]
     return create_sdk_mcp_server(name=SERVER, tools=tools), tools
 
