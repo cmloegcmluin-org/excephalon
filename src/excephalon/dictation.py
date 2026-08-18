@@ -112,6 +112,7 @@ class Dictation:
         on_state,
         on_level,
         on_submit_request,
+        on_submitted=None,
         on_retract,
         muted=False,
         terminator="over",
@@ -133,6 +134,15 @@ class Dictation:
         self._on_state = on_state
         self._on_level = on_level
         self._on_submit_request = on_submit_request
+        # Called the INSTANT he submits, with his words. The record used to be written by the
+        # conversation loop when it next came round to listen - so a second message sent while the
+        # first was still being answered was invisible for as long as that took, and then landed
+        # AFTER the reply, reading as an answer to it: "if I say something, it should go into the
+        # transcript IMMEDIATELY no matter what."
+        self._on_submitted = on_submitted or (lambda text: None)
+        # True when his words are recorded HERE, at submit. The loop then must not record them a
+        # second time when it finally picks them up - one utterance of his, one line in the record.
+        self.records_input = on_submitted is not None
         self._on_retract = on_retract
         self._armed = not muted
         self._auto_listen = False  # off until they ask for it; the button is how the mic opens
@@ -180,9 +190,27 @@ class Dictation:
                     and not self.is_mid_utterance()):
                 return ""
             try:
-                return self._submitted.get(timeout=0.1)
+                first = self._submitted.get(timeout=0.1)
             except queue.Empty:
                 continue
+            return self._everything_he_said(first)
+
+    def _everything_he_said(self, first):
+        """His words, and any he sent while the last answer was still being written - in order.
+
+        Taken one at a time, a second message sent while the first was still being answered got a
+        turn of its own AFTER that answer, so the reply he was reading and the words he had
+        already sent were about different things. What he has said is one turn's worth: "if
+        Excephalon eventually comes up with something to say, it should make sure it is a natural
+        response to what I've just said."
+        """
+        said = [first]
+        while True:
+            try:
+                said.append(self._submitted.get_nowait())
+            except queue.Empty:
+                break
+        return "\n\n".join(part for part in said if part.strip()) or first
 
     def submit(self, text):
         """The window hands over the draft - as edited, which is the whole point of the box.
@@ -199,6 +227,7 @@ class Dictation:
         text = text.strip()
         if self._polish is not None and text:
             text = self._polish(text)
+        self._on_submitted(text)  # on his screen and in the record NOW, whatever the loop is doing
         self._submitted.put(text)
         self._drafted = False  # the box is empty again; the next terminator needs new words
         self._last_worded = None  # the thought was handed over; he is not mid-anything now

@@ -1096,7 +1096,12 @@ class Conversation:
             # the room. Don't transcribe it back at them; just show that it landed and was dropped.
             self._console.ignored()
             return None
-        self._console.heard(heard)  # show what was transcribed before we act on it
+        if not getattr(self._stt, "records_input", False):
+            # Shown here only when nothing showed it earlier. A window that records at SUBMIT has
+            # already put his words on the screen and in the record - the moment he sent them,
+            # which is the point: "if I say something, it should go into the transcript
+            # IMMEDIATELY no matter what."
+            self._console.heard(heard)
         # An ask covers the moment it was made. One the app could not serve at once - he was
         # already mid-sentence - stayed pending across his next turn and then delivered its stale
         # "ready for your eyes" ungated, seconds after he had APPROVED that very work. Once he has
