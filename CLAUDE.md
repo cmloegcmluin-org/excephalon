@@ -375,7 +375,7 @@ beside it, because a door built for one desk is no door on the other — is how
 only voices ADDED to the account appear at all, only some of those can be SPOKEN, and neither is
 a thing he can answer from a file. A checkout with no cloud.json is the ordinary case and is announced as nothing at all. The
 cloud voice requires the local one behind it: on a machine that cannot have Kokoro there is no
-fallback, and silence is the one thing this may never cost him. `actions.py` is everything the brain can DO: sixteen typed in-process tools wired to
+fallback, and silence is the one thing this may never cost him. `actions.py` is everything the brain can DO: seventeen typed in-process tools wired to
 the desk — among them update_persona, drop_instruction, remember and forget_memory, its levers over
 its own standing instructions (`runtime/persona.md`) and memory in BOTH directions, because a card
 he can edit and it cannot ends with it handing him the chore ("I don't have a way to remove
@@ -392,7 +392,18 @@ REFUSES a feature request naming one of his other apps (their folder names are k
 `names_another_app`), because the Enhancements list is for changes to Excephalon itself and twice
 a Highdeas request was filed there instead of being handed to an agent, each time answered with a
 written instruction that held until it didn't — its speech carries no control phrases and its
-options carry no built-in tools.
+options carry no built-in tools. And there is schedule_message, the one lever that outlives the
+turn it is called in: it holds a line he asked for at a later clock time ("remind me at 5:15 to
+start dinner prep") and says it then, whether or not a conversation is going. `schedule.py` owns
+the wait — the pending messages are a file, so one set before a restart is still there after it,
+and a poller fires each at its wall-clock moment onto the outbox, the same road every proactive
+line travels: held for a lull so it never cuts him off, spoken in Excephalon's own voice, and —
+carried under no agent's name — never collapsed with another when several wait at once, surviving
+a restart until it actually is said.
+The brain reads his words into a time and writes the finished sentence to speak; it is never told
+the current time to the minute, so the clock arithmetic is the app's — off a current-time line the
+per-turn briefing now carries, which also lets it simply say what time it is. A one-off, delivered
+once and forgotten; a recurring, calendar-driven version is a separate item, deliberately not this.
 `polish.py` is the chop mender, deterministic and instant, and it decides two things only. A
 sentence mark before a LOWERCASE continuation is a break no writer makes on purpose ("what we
 need to do. in order"). A sentence mark before one of a closed list of clause OPENERS is the
