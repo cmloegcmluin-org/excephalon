@@ -24,7 +24,21 @@ _HANDLED_LEAD = re.compile(r"(?i)^handled\b[\s\-–—:,.!]*")
 # everything after 04:43 went unspoken, one hung narration held the lock and the agent's merge
 # report and the quiet warning both queued behind it until the app closed and they died. News must
 # never die with a wedged session - that is this module's whole reason to exist.
-NARRATE_DEADLINE = 120.0
+# Deliberately under the loop's own bound on HIS silence: a narration that can outlast his
+# patience is one his turn can lose to, and three of his turns in a row died waiting on one.
+NARRATE_DEADLINE = 60.0
+
+
+def _yields_to_him(brain):
+    """`background=True` for a brain that knows the difference - so his own turn cuts this ask
+    loose instead of queueing behind it. A brain that does not is asked exactly as before."""
+    import inspect
+
+    try:
+        takes = "background" in inspect.signature(brain.respond).parameters
+    except (TypeError, ValueError):
+        takes = False
+    return {"background": True} if takes else {}
 
 # Events whose news is not an item on his list. The desk's agents have tabs, verdicts and
 # landings, and several ready at once are read out numbered so he can take them one at a time.
@@ -251,7 +265,8 @@ class Narrator:
             # heard is taken back (SdkBrain.retract).
             said = ""
             try:
-                drafted = self._brain.respond(prompt, remember=False)
+                drafted = self._brain.respond(prompt, remember=False,
+                                              **_yields_to_him(self._brain))
             except Exception:
                 drafted = ""
             else:

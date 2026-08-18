@@ -785,3 +785,69 @@ def test_every_session_the_app_spawns_is_pinned_to_its_own_servers():
     assert _make_options("p", "m").extra_args == {"strict-mcp-config": None}
     assert _foreman_options("/wt").extra_args == {"strict-mcp-config": None}
     assert _agent_options("/wt", "m", "high", lambda *a: None).extra_args == {"strict-mcp-config": None}
+
+
+def test_his_turn_cuts_a_narration_loose_instead_of_queueing_behind_it():
+    # "thrice recently Excephalon has told me something is broken in its head." Three of his turns
+    # in a row, each answered with nothing for ninety seconds - and each was waiting on the ONE
+    # session while a narration wording an agent's event held it. The loop's patience ran out
+    # before his ask had even begun. His turn cuts the background one loose; that news still
+    # reaches him, through the plain sentence the narrator falls back to.
+    import threading as _threading
+
+    holding, cut = _threading.Event(), _threading.Event()
+
+    class Session:
+        def __init__(self, options):
+            self.last_context_tokens = 0
+
+        def ask(self, message, on_message=None, on_text=None):
+            if "narration" in message:
+                holding.set()
+                cut.wait(3.0)
+                return "the narration, at last"
+            return "his answer"
+
+        def interrupt(self):
+            cut.set()
+
+        def close(self):
+            pass
+
+    brain = SdkBrain(session_factory=Session)
+    _threading.Thread(target=lambda: brain.respond("a narration", background=True),
+                      daemon=True).start()
+    assert holding.wait(2.0)  # the app's own ask has the session
+
+    assert brain.respond("his words") == "his answer"
+    assert cut.is_set()  # ...and it was cut loose rather than waited out
+
+
+def test_the_apps_own_ask_never_cuts_another_one_loose():
+    import threading as _threading
+
+    holding, cut = _threading.Event(), _threading.Event()
+
+    class Session:
+        def __init__(self, options):
+            self.last_context_tokens = 0
+
+        def ask(self, message, on_message=None, on_text=None):
+            if "first" in message:
+                holding.set()
+                _threading.Event().wait(0.2)
+            return "done"
+
+        def interrupt(self):
+            cut.set()
+
+        def close(self):
+            pass
+
+    brain = SdkBrain(session_factory=Session)
+    _threading.Thread(target=lambda: brain.respond("the first", background=True),
+                      daemon=True).start()
+    assert holding.wait(2.0)
+
+    assert brain.respond("a second narration", background=True) == "done"
+    assert not cut.is_set()  # one app ask waits its turn behind another; only HIS preempts
