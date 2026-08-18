@@ -55,6 +55,21 @@ STAGE_FACT = {
 # news legitimately says "the demo is live on that port", so "live" is not on this list.
 CLAIMS_DEPLOYED = ("deployed", "shipped", "in production", "already in ", "should be there")
 
+# The work's own name, handed over so the line calls it what HE calls it. An agent's internal
+# name is a filename: read out beside his own words for the same work it reads as a different
+# thing entirely - "it says 'still waiting: ... scheduled-messages'. I think this is the same as
+# the 'timed-reminder feature', but it's weird and confusing that in the previous message it
+# chose a different name for the feature than its agent log's name."
+WORKS_NAME = (
+    "\n\n[Fact, from the app: the work this is about is, in HIS OWN WORDS, "
+    "\"{work}\". Call it that. Never say the agent\'s internal name to him - it is a "
+    "filename, and he has never asked for one. And never relay a word of the report above: "
+    "every noun in it belongs to a conversation he was not part of, and one that reached him "
+    "whole was answered: what is a fresh demo? what four curated scenarios? what two clean "
+    "Excephalon messages? basically this whole message is useless, insane, confusing, and "
+    "terrible.]"
+)
+
 NARRATION_CONDUCT = (
     "\n\n[Standing conduct for this line, same as any reply: no internal vocabulary EVER - never "
     "'the desk', 'the fleet', 'the outbox', 'the roster', 'marked ready', 'the delivery stage', "
@@ -170,10 +185,14 @@ def _claims_deployed(said, stage):
 class Narrator:
     """Turns one agent event into one brain-composed interjection, off-thread, never lost."""
 
-    def __init__(self, brain, outbox, stage_of=None, deadline=NARRATE_DEADLINE):
+    def __init__(self, brain, outbox, stage_of=None, deadline=NARRATE_DEADLINE, work_of=None):
         self._brain = brain
         self._outbox = outbox
         self._deadline = deadline
+        # This piece of work in HIS words. It is what the line must CALL the work, and what the
+        # app's own fallback sentence is built from - the agent's internal name is a filename and
+        # reached him as a second, unrelated thing beside his own words for the same work.
+        self._work_of = work_of or (lambda agent: "")
         # Where the agent's work stands in the delivery loop (the desk's delivery_stage) - the
         # same finished turn is presentation news while building, wrap-up news while landing.
         self._stage_of = stage_of or (lambda agent: None)
@@ -203,8 +222,11 @@ class Narrator:
         if kind == "finished" and self._stage_of(agent) == "landing":
             kind = "landing"
         stage = self._stage_of(agent)
+        work = self._work_of(agent) or ""
+        plainly = notice(kind, work)
         prompt = (PROMPTS.get(kind, PROMPTS["finished"]).format(agent=agent, report=report)
-                  + STAGE_FACT.get(stage, "") + NARRATION_CONDUCT)
+                  + STAGE_FACT.get(stage, "") + NARRATION_CONDUCT
+                  + (WORKS_NAME.format(work=work) if work else ""))
         # One claim on delivering this event: whichever of the two threads takes it speaks, the
         # other stays silent. Without it, a reply landing just as the deadline runs out would be
         # spoken AND covered by the notice - the same news twice.
@@ -248,14 +270,14 @@ class Narrator:
                     # It said the work is out there when it is not. The plain notice carries the
                     # news without the claim; a sentence he would act on must not be a guess.
                     self._retract(said)
-                    self._outbox.push(notice(agent, report), about=agent, listed=listed, kind=kind)
+                    self._outbox.push(plainly, about=agent, listed=listed, kind=kind, work=work)
                 elif said.strip():
                     self._outbox.push(said.strip(), about=agent, composed=True, listed=listed,
-                                      kind=kind)
+                                      kind=kind, work=work)
                 else:
                     # The brain could not answer; the capped plain notice still carries the news,
                     # marked app-authored so the ledger reads it back to the brain next turn.
-                    self._outbox.push(notice(agent, report), about=agent, listed=listed, kind=kind)
+                    self._outbox.push(plainly, about=agent, listed=listed, kind=kind, work=work)
             else:
                 # The deadline shipped the plain notice while this was still being written. The
                 # late answer is dropped - and taken back, or the model holds a sentence he never
@@ -267,4 +289,4 @@ class Narrator:
         if not composed.wait(self._deadline) and take():
             # The brain has sat on this past the deadline - wedged, or buried under a queue that
             # will outlive the user's patience. The notice ships now; the late answer is dropped.
-            self._outbox.push(notice(agent, report), about=agent, listed=listed, kind=kind)
+            self._outbox.push(plainly, about=agent, listed=listed, kind=kind, work=work)

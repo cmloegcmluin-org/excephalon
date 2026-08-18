@@ -70,8 +70,10 @@ class InboxWatcher:
                  events=None):
         # What an agent wrote goes to the events sink as ("wrote", agent, report) for the narrator
         # to word; undirected, the capped plain notice goes straight to the outbox as it always has.
+        # Undirected (no narrator wired yet), the app's own plain sentence carries it - never a
+        # word of what the agent wrote, which is a conversation he was not part of.
         self._events = events or (lambda kind, agent, report:
-                                  outbox.push(notice(agent, report), about=agent))
+                                  outbox.push(notice(kind), about=agent, kind=kind))
         self._dir = Path(directory)
         self._poll_interval = poll_interval
         self._sleep = sleep

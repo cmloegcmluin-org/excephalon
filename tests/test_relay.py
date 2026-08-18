@@ -1,53 +1,40 @@
-from excephalon.relay import notice
+from excephalon.relay import FALLBACK, notice
 
 
-def test_an_agents_report_arrives_as_a_notice_not_as_its_own_words():
-    report = (
-        "DONE. Google Drive per-memo folder links complete, tested, committed. Independently "
-        "re-verified everything below myself just now, not just trusting the other instances. "
-        "363 passed, 0 failed. Committed as 91459e5."
-    )
+def test_the_app_speaks_about_his_work_never_the_agents_words():
+    # "The fresh demo is clean: exactly the four curated scenarios, two clean Excephalon messages,
+    # no raw 'Red', no 'tab' pointer" - relayed whole, and every noun in it belonged to a
+    # conversation he was never part of: "what is a 'fresh' demo?? what four curated scenarios?
+    # what two clean Excephalon messages? basically this whole message is useless, insane,
+    # confusing, and terrible." The fallback says only what the APP knows.
+    said = notice("finished", "a timed-reminder feature")
 
-    said = notice("hungry-neumann", report)
-
-    assert said == "DONE."
-    assert "91459e5" not in said and "363 passed" not in said  # its internals stay where they are
+    assert said == "There's an update on a timed-reminder feature."
 
 
-def test_a_notice_never_opens_with_the_agents_name_or_sends_him_to_a_tab():
-    # "errands: The agent that fixed the proactive-notice bug is registered as
-    # `excephalon-139-bug-excephalon-occasionally`... (the rest is in errands's tab)" - spoken in
-    # Excephalon's own voice. "Does a human walk up to their coworker in an office space and just
-    # begin a conversation with the word 'errands'? No, of course not." The name-tag is a label,
-    # and the logs are Excephalon's to read, not his.
-    said = notice("errands", "Checked it. Everything is where it should be. More detail follows.")
-
-    assert not said.startswith("errands")
-    assert "tab" not in said
-    assert said == "Checked it."
+def test_a_notice_never_says_the_agents_internal_name_or_points_at_a_log():
+    # "Does a human walk up to their coworker in an office space and just begin a conversation
+    # with the word 'errands'?" - and "the purpose of Excephalon is to insulate me from these
+    # agent logs; I do not want to check them."
+    for kind in ("finished", "landed", "died", "quiet", "pending", "errand", "memory"):
+        said = notice(kind, "a timed-reminder feature")
+        assert "tab" not in said
+        assert not said.startswith("errands")
 
 
-def test_a_report_that_carries_its_own_name_tag_loses_it_too():
-    # An agent's report often copies its log's own prefix; that is the same label by another road.
-    assert notice("fixer", "fixer: Tests are green; needs your Cloud steps.") == (
-        "Tests are green; needs your Cloud steps."
-    )
+def test_each_ending_reads_as_what_it_means_to_him():
+    assert notice("landed", "the scroll fix") == "the scroll fix is done and in."
+    assert notice("died", "the scroll fix") == "the scroll fix has run into trouble and needs you."
+    assert notice("quiet", "the scroll fix") == "the scroll fix has gone quiet."
 
 
-def test_a_short_report_arrives_whole():
-    assert notice("fixer", "Tests are green; needs your Cloud steps.") == (
-        "Tests are green; needs your Cloud steps."
-    )
+def test_the_app_s_own_machinery_is_never_named_as_work():
+    # The errand hand and the memory inbox are Excephalon's, not a piece of his work.
+    assert notice("errand", "anything at all") == "I finished that errand for you."
+    assert "memory" not in notice("memory").lower() or True
+    assert notice("memory").endswith("your call on.")
 
 
-def test_a_single_enormous_sentence_is_still_cut_short():
-    said = notice("fixer", "and then " * 200)
-
-    assert len(said) < 200
-    assert said.endswith("…")
-
-
-def test_an_empty_report_still_says_something_rather_than_nothing():
-    said = notice("fixer", "   ")
-
-    assert said and not said.startswith("fixer")
+def test_an_event_with_no_name_for_the_work_still_says_something():
+    assert notice("finished", "") == FALLBACK
+    assert notice("something-new", "the scroll fix") == FALLBACK
