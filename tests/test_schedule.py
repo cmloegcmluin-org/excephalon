@@ -110,3 +110,24 @@ def test_run_polls_on_each_beat_until_stopped(tmp_path):
     sched.run(stop=stop, every=0.0, sleep=fake_sleep)
 
     assert delivered == ["ping"]
+
+
+def test_several_due_reminders_all_reach_the_outbox_uncollapsed(tmp_path):
+    # The integration the feature rests on: a fired reminder lands on the same outbox that carries
+    # every proactive line, shaped so the conversation speaks it as itself. about=None keeps two
+    # waiting at once from collapsing into one (conversation._newest_per_agent), and listed=False
+    # keeps them off the numbered pick-one-of-your-agents roll call.
+    from excephalon.outbox import Outbox
+
+    outbox = Outbox(spool=tmp_path / "outbox.json")
+    sched = Schedule(tmp_path / "s.json",
+                     deliver=lambda m: outbox.push(m, listed=False, kind="reminder"),
+                     clock=lambda: 500.0)
+    sched.add(100.0, "Time to start dinner prep.")
+    sched.add(200.0, "Call your mother.")
+
+    sched.poll_once()
+
+    held = outbox.drain()
+    assert [str(news) for news in held] == ["Time to start dinner prep.", "Call your mother."]
+    assert all(news.about is None and news.listed is False for news in held)
