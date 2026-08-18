@@ -779,7 +779,8 @@ one turn — while incoherence is not solvable by gates, so the tier that thinks
 talks (`DEFAULT_BRAIN_MODEL`). The fast tier keeps the backchannel, the work he never hears as a
 voice: `naming.NAME_MODEL` distilling an agent's task into a filename, `errands.ERRAND_MODEL`
 fetching and carrying. Its every ask is bounded, and so is waiting for its one-at-a-time
-lock: a stream once died without raising, held the lock from inside a narration, and everything
+lock — which HIS turn never has to do: a narration wording an agent's event holds this same session for as long as it takes, and three of his turns in a row died queued behind one, each answered with the broken-head line after ninety seconds of nothing ("thrice recently Excephalon has told me something is broken in its head"). A foreground ask cuts a background one loose (`background=True`, which only the narrator passes) and the news still reaches him through the plain sentence the narrator falls back to; `NARRATE_DEADLINE` sits under the loop's own bound on his silence for the same reason.
+ a stream once died without raising, held the lock from inside a narration, and everything
 after — the merged report, a direct question, every later submission — sat at "(thinking…)"
 forever; now the deadline sheds the dead session (closing it makes the stranded ask raise, which
 frees the lock) and the turn retries once on a fresh seeded session before it ever gives up. When

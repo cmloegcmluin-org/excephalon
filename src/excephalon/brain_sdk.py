@@ -297,6 +297,9 @@ class SdkBrain:
         self._interrupting = threading.Event()  # set while a barge-in is cancelling the live ask
         self._respond_lock = threading.Lock()  # one session, so one ask at a time
         self._retracted = []  # drafts it wrote that were never spoken; told to it on the next ask
+        # Set while an ask the USER is not waiting on holds the one session - a narration wording
+        # an agent's event. His own turn cuts it loose rather than queueing behind it.
+        self._background = threading.Event()
         # `seed_turns` are the tail of the LAST session's transcript, so a restarted process picks
         # the conversation back up instead of greeting its user as a stranger - the machinery is
         # the compaction reseed, fed from disk instead of from this process's own memory.
@@ -345,7 +348,7 @@ class SdkBrain:
             self._session.interrupt()
 
     def respond(self, utterance, *, remember=True, on_text=None, on_activity=None,
-                deadline=RESPOND_DEADLINE):
+                background=False, deadline=RESPOND_DEADLINE):
         """Ask the brain. `on_text` receives each user-facing text delta as the model writes it -
         the feed a streaming voice speaks from. `on_activity` receives every message the model
         sends, text or not: it is the proof-of-life a turn spent inside a long tool call has, and
@@ -366,13 +369,28 @@ class SdkBrain:
         fresh session. Giving up instead ("the session is wedged") left the brain deaf for a real
         evening: the same wedge answered every later ask until the app was restarted."""
         lock = self._respond_lock  # held by name, so an abandoned lock is still the one released
-        if not lock.acquire(timeout=deadline):
+        held = lock.acquire(blocking=False)
+        if not held and not background and self._background.is_set():
+            # HIS turn does not queue behind the app's own. A narration wording an agent's event
+            # holds this same session for as long as it takes, and three of his turns in a row
+            # died waiting on one: he spoke, nothing came back, and the loop's own patience ran
+            # out while his ask had not even begun - "thrice recently Excephalon has told me
+            # something is broken in its head." Cutting it loose frees the lock at once, and its
+            # news still reaches him through the plain sentence the narrator falls back to.
+            try:
+                if self._session is not None:
+                    self._session.interrupt()
+            except Exception:
+                pass  # a cancel that will not go through must not also cost him the turn
+        if not held and not lock.acquire(timeout=deadline):
             self._shed()  # the zombie's ask raises when its session dies; the lock usually frees
             if not lock.acquire(timeout=min(10.0, deadline)):
                 _wedge_evidence()  # the holder's actual stack, written while it is still stuck
                 lock = self._respond_lock = threading.Lock()
                 lock.acquire()
         try:
+            if background:
+                self._background.set()  # his own turn may cut this loose rather than queue on it
             self._interrupting.clear()  # a fresh turn; forget any leftover cancel from the last one
             if self._should_compact():
                 self._compact()
@@ -401,6 +419,7 @@ class SdkBrain:
                 self._recent.append((utterance, reply))
             return reply
         finally:
+            self._background.clear()
             lock.release()
 
     def _with_retractions(self, utterance):
