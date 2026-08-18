@@ -668,6 +668,11 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
             on_state=lambda s: feed.push("state", s),
             on_level=lambda v: feed.push("level", v),
             on_submit_request=lambda: feed.push("submit", ""),
+            # His words on the screen and in the record the instant he sends them, however
+            # busy the loop is: a second message sent while the first was still being
+            # answered stayed invisible until the reply landed, and then appeared after it.
+            on_submitted=lambda text: newsroom["console"].heard(text)
+                                      if "console" in newsroom else None,
             on_retract=lambda: feed.push("retract", ""),
         )
         if attach is not None:
@@ -751,6 +756,7 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
         console = Console(voice=not text_mode, record=session_record.write,
                           messages=session_messages.keep)
 
+    newsroom["console"] = console  # what the mic writes his words to the instant he submits
     # The session's first line, handed to the conversation rather than spoken beside it: spoken
     # here, it was one of TWO messages he got thirteen seconds apart on opening the app - a
     # welcome asking about one update, then the app's own list offering all three ("it should

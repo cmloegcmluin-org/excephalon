@@ -54,6 +54,7 @@ class Ears:
         self.levels = []
         self.submits = 0
         self.retracted = 0
+        self.recorded = []  # his words, the instant he sends them
 
     def kwargs(self):
         return dict(
@@ -61,6 +62,7 @@ class Ears:
             on_state=self.states.append,
             on_level=self.levels.append,
             on_submit_request=self._submit,
+            on_submitted=self.recorded.append,
             on_retract=self._retract,
         )
 
@@ -953,3 +955,41 @@ def test_a_submitted_box_needs_new_words_before_okay_ends_a_turn_again():
 
     assert ears.submits == 1  # the second one drafted rather than submitting
     assert ears.drafted[-1] == "Okay."
+
+
+def test_his_words_reach_the_record_the_instant_he_sends_them():
+    # "if I say something, it should go into the transcript IMMEDIATELY no matter what." The
+    # record was written by the conversation loop when it next came round to listen, so a second
+    # message sent while the first was still being answered stayed invisible for as long as that
+    # took - and then landed after the reply, reading as an answer to it.
+    ears = Ears()
+    ear = Dictation(FakeTranscriber(), FakeMic([]), **ears.kwargs())
+
+    ear.submit("what's going on with the calendar work")
+
+    assert ears.recorded == ["what's going on with the calendar work"]
+    assert ear.records_input is True  # ...so the loop must not write it a second time
+
+
+def test_everything_he_said_is_answered_as_one_turn():
+    # Taken one at a time, his second message got a turn of its own AFTER the answer to the first,
+    # so the reply he was reading and the words he had already sent were about different things.
+    ears = Ears()
+    ear = Dictation(FakeTranscriber(), FakeMic([]), **ears.kwargs())
+
+    ear.submit("what's going on with the calendar work")
+    ear.submit("actually never mind, tell me about the reminders instead")
+
+    assert ear.listen() == ("what's going on with the calendar work\n\n"
+                            "actually never mind, tell me about the reminders instead")
+
+
+def test_a_mic_with_nowhere_to_record_still_submits():
+    ear = Dictation(FakeTranscriber(), FakeMic([]),
+                    on_draft=lambda t: None, on_state=lambda s: None, on_level=lambda v: None,
+                    on_submit_request=lambda: None, on_retract=lambda: None)
+
+    ear.submit("still fine")
+
+    assert ear.records_input is False  # nothing recorded it here, so the loop still writes it
+    assert ear.listen() == "still fine"
