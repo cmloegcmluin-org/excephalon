@@ -1147,17 +1147,38 @@ class AgentDesk:
         self._events("finished", name, reply)
 
     def _merged(self, entry):
-        """Has this agent's branch actually reached origin/main? Git is the one holder of that
+        """Has this agent's WORK actually reached origin/main? Git is the one holder of that
         truth, so it is asked directly - a fetch first, since the merge queue lands on the
         remote and a minutes-old merge is invisible to a stale clone. Any failure to answer
         reads as not-merged: a wrap-up on a guess would close work still in flight, and the
-        normal narration path still covers it."""
+        normal narration path still covers it.
+
+        The COMMITS are the question, never their hashes. Asked as "is my HEAD an ancestor of
+        origin/main?", the answer was no for every branch the merge queue rebased - which, on a
+        moving main, is most of them: the queue builds its candidate on the current main, so what
+        lands is a COPY of the work under new hashes and the original tip is an ancestor of
+        nothing. So a merged feature read as still landing forever, its agent sat idle at the desk
+        and its item stayed open, and he had to notice himself: "I think that both the agents
+        Excephalon is working with right now are finished with their work and should be archived
+        and their tasks completed, but apparently it is not coming to that conclusion."
+
+        `git cherry` answers the real question: it compares by patch, so a rebased copy upstream
+        counts as the same commit. Every line it prints for work already upstream begins "-";
+        anything still outstanding begins "+"."""
         try:
             self._run(["git", "-C", entry.cwd, "fetch", "origin", "--quiet"],
                       check=False, timeout=60)
             asked = self._run(["git", "-C", entry.cwd, "merge-base", "--is-ancestor",
                                "HEAD", "origin/main"], check=False, timeout=30)
-            return getattr(asked, "returncode", 1) == 0
+            if getattr(asked, "returncode", 1) == 0:
+                return True  # landed unchanged: the cheap, exact answer
+            asked = self._run(["git", "-C", entry.cwd, "cherry", "origin/main", "HEAD"],
+                              check=False, timeout=30, capture_output=True, text=True)
+            if getattr(asked, "returncode", 1) != 0:
+                return False
+            lines = [line for line in (getattr(asked, "stdout", "") or "").splitlines()
+                     if line.strip()]
+            return bool(lines) and not any(line.startswith("+") for line in lines)
         except Exception:
             return False
 

@@ -621,8 +621,7 @@ the spool's view of the whole debt): `mark_ready` fires when the walkthrough is 
 walkthrough then sat in hand for over an hour, and the brain briefed across the gap told him "I
 presented it earlier... no new update since then" about steps he had never heard ("That's false.
 You never presented it to me."). The loop's LAST leg is the desk's own: when a landing agent's
-turn ends, the desk asks git whether its branch actually reached origin/main (`_merged` — fetch,
-then merge-base --is-ancestor; any failure reads as not-merged) and if so wraps it up itself and
+turn ends, the desk asks git whether its WORK actually reached origin/main (`_merged` — fetch, then merge-base --is-ancestor, and failing that `git cherry`, which compares by PATCH; any failure to answer reads as not-merged). The patch comparison is the whole of it on a moving main: the merge queue builds its candidate on the current main, so what lands is a COPY of the work under new hashes and the original tip is an ancestor of nothing — asked about hashes alone the desk called shipped features unlanded forever, left their agents idle at the desk and their items open, and he had to notice himself ("I think that both the agents Excephalon is working with right now are finished with their work and should be archived and their tasks completed, but apparently it is not coming to that conclusion") and if so wraps it up itself and
 only then says so (the "landed" narration, composed from the fact, nothing left for the brain to
 do). It used to hang on a narration COMMANDING the brain to close the tab; that narration failed
 once and the merged agent haunted the desk for fourteen hours — revived every boot,
