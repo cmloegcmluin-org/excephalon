@@ -240,7 +240,7 @@ conversation — an agent sat mid-task across a ninety-minute gap and the boot g
 stock line ("even though it had some work in progress"). Past the gap the stale exchange stays
 out of the note — the greeting is about where the WORK stands, never a thread hours dead. Those become one note and the BRAIN words
 the welcome back — a greeting assembled from templates is the stock line wearing more of them —
-and every failure falls back to the stock line, because a greeting is not worth a launch. The
+and every failure falls back to the stock line, because a greeting is not worth a launch — nor a wait: the whole composition is bounded (`GREETING_BUDGET`) and a refused draft is asked again only while the budget holds, because that retry doubled the worst case and left him looking at an empty window for nearly two minutes ("I just restarted but Excephalon didn't greet me"); a better line late is worse than a plain one now. The
 note says what is ALREADY waiting to be spoken and forbids naming any of it, and the greeting is
 handed to the conversation as its `opening` rather than spoken beside it, so a restart with news
 waiting is ONE message instead of the two thirteen seconds apart he got — a welcome asking about

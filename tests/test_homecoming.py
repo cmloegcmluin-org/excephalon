@@ -303,6 +303,66 @@ def test_a_refused_greeting_is_asked_again_with_the_fault_named():
     assert "picks a thread for him" in asked[1]  # told exactly what was wrong with the first
 
 
+def test_a_slow_first_line_gives_way_to_the_plain_one():
+    # "I just restarted but Excephalon didn't greet me." It did - one minute fifty-three seconds
+    # later, because a refused draft asks again and he was looking at an empty window the whole
+    # time. He clicks Restart and this is the only thing in the window; a better line late is
+    # worse than a plain line now.
+    import time as _time
+
+    from excephalon.__main__ import GREETING_BUDGET, _greeting
+
+    tries = []
+
+    class Slow:
+        def respond(self, message, *, remember=True, deadline=None):
+            tries.append(deadline)
+            _time.sleep(0.05)
+            return "Back already. So, where should we start?"  # refused: it chooses for him
+
+    said = _greeting(Slow(), 0.0, {}, note="[pick it up]", waiting=["namer"])
+
+    from excephalon.homecoming import OFFER_GREETING
+
+    assert said == OFFER_GREETING
+    assert len(tries) == 2  # it did ask again - inside the budget
+    assert all(0 < spent <= GREETING_BUDGET for spent in tries)  # each ask bounded by what is left
+
+
+def test_a_first_line_that_eats_the_whole_budget_is_not_asked_twice():
+    import time as _time
+
+    from excephalon.__main__ import GREETING_BUDGET, _greeting
+
+    tries = []
+
+    class Glacial:
+        def respond(self, message, *, remember=True, deadline=None):
+            tries.append(deadline)
+            _time.sleep(0.05)
+            raise AssertionError("never reached on the second attempt")
+
+    class OnceSlow(Glacial):
+        def respond(self, message, *, remember=True, deadline=None):
+            tries.append(deadline)
+            _time.sleep(0.02)
+            return "Back already. So, where should we start?"
+
+    brain = OnceSlow()
+    import excephalon.__main__ as main
+
+    original, main.GREETING_BUDGET = main.GREETING_BUDGET, 0.01
+    try:
+        said = main._greeting(brain, 0.0, {}, note="[pick it up]", waiting=["namer"])
+    finally:
+        main.GREETING_BUDGET = original
+
+    from excephalon.homecoming import OFFER_GREETING
+
+    assert said == OFFER_GREETING
+    assert len(tries) == 1  # the budget was gone; no second ask on top of it
+
+
 def test_a_greeting_that_promises_work_is_unfit():
     # "Let me finish reading what actually landed..." opened a session by resurrecting a dead
     # errand; he answered "Dude, what the fuck? No. It's already been shipped." A greeting says

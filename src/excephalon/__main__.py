@@ -6,6 +6,7 @@
   --no-timings  hide the per-turn think/speak readout (shown by default)
 """
 
+import inspect
 import signal
 import sys
 import threading
@@ -320,15 +321,22 @@ def _greeting(brain, booted_at, previous_boot, was_seen=0.0, waiting=(), note=No
     # him. Told what was wrong with the draft, the second attempt usually asks instead; and a rule
     # only the note carries is a known weakness here, which is why unfit checks rather than hopes.
     fault = ""
+    spent = 0.0
     for _ in range(2):
+        if spent >= GREETING_BUDGET:
+            break  # he is looking at an empty window; the plain line beats a better one late
+        began = time.monotonic()
         try:
             # Not remembered as a turn: this is a draft that may never be spoken at all - `unfit`
             # may refuse it, and he may simply speak first. Carried into the window a restart
             # rebuilds from, a greeting nobody heard comes back as something the model believes it
             # opened with. What it actually said is written from the delivery (SdkBrain.spoke).
-            said = brain.respond(_again(note, fault), remember=False).strip()
+            said = brain.respond(_again(note, fault), remember=False,
+                                 **_within(brain, GREETING_BUDGET - spent)).strip()
         except Exception:
             return plainly
+        finally:
+            spent += time.monotonic() - began
         # An update genuinely waiting makes "want to hear it?" a true sentence rather than a stage
         # claim - and makes choosing FOR him the thing to refuse.
         fault = unfit(said, fleet, owed=bool(waiting)) if said else "says nothing at all"
@@ -336,6 +344,23 @@ def _greeting(brain, booted_at, previous_boot, was_seen=0.0, waiting=(), note=No
             return said
         _retract(brain, said)  # written, never spoken: off its record, or it is a false memory
     return plainly
+
+
+# How long the FIRST LINE may take before the plain one goes out instead. He clicks Restart, the
+# window comes up, and this is the only thing in it - so the wait is his, staring at nothing. A
+# refused draft asks again, which doubled the worst case and left him looking at an empty window
+# for nearly two minutes ("I just restarted but Excephalon didn't greet me"). A greeting is not
+# worth a launch, and it is not worth a wait either.
+GREETING_BUDGET = 25.0
+
+
+def _within(brain, seconds):
+    """`deadline=` for a brain that takes one, nothing for a fake that does not."""
+    try:
+        takes = "deadline" in inspect.signature(brain.respond).parameters
+    except (TypeError, ValueError):
+        takes = False
+    return {"deadline": max(1.0, seconds)} if takes else {}
 
 
 def _again(note, fault):
