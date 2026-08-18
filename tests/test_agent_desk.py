@@ -749,6 +749,62 @@ def test_an_item_is_never_ticked_twice_however_many_doors_ask(tmp_path):
     desk.close()
 
 
+def test_work_the_merge_queue_rebased_still_counts_as_landed(tmp_path):
+    # "I think that both the agents Excephalon is working with right now are finished with their
+    # work and should be archived and their tasks completed, but apparently it is not coming to
+    # that conclusion." The queue builds its candidate on the CURRENT main, so what lands is a
+    # copy of the work under new hashes and the branch tip is an ancestor of nothing. Asked about
+    # hashes, the desk said not-merged forever: a shipped feature sat "landing", its agent idle at
+    # the desk, its item open. git cherry compares by patch, so a rebased copy is the same commit.
+    asked = []
+
+    def git(command, **kwargs):
+        asked.append(command)
+        if "--is-ancestor" in command:
+            return SimpleNamespace(returncode=1, stdout="", stderr="")  # the tip is not on main
+        if "cherry" in command:
+            return SimpleNamespace(returncode=0, stdout="- 42f3a2a its work, rebased\n", stderr="")
+
+    ticked = []
+    desk, outbox, _ = _desk(log_dir=tmp_path / "agent-logs", run=git,
+                            complete=lambda item, **where: ticked.append(item) or True)
+    desk.start("shipper", str(tmp_path / "wt"), "hold a message until a clock time",
+               enhancement="add real scheduled messages")
+    assert _wait_for(lambda: bool(outbox))
+    outbox.drain()
+    desk.present("shipper", "ask it to remind you in two minutes")
+    desk.verdict("shipper", True)
+
+    assert _wait_for(lambda: ticked == ["add real scheduled messages"])
+    assert any("cherry" in command for command in asked)
+    desk.close()
+
+
+def test_work_still_outstanding_is_not_landed_however_it_is_asked(tmp_path):
+    def git(command, **kwargs):
+        if "cherry" in command:
+            # One patch upstream, one still only here: the work is NOT all in.
+            return SimpleNamespace(returncode=0,
+                                   stdout="- aaa already in\n+ bbb still mine\n", stderr="")
+        return SimpleNamespace(returncode=1, stdout="", stderr="")
+
+    ticked = []
+    desk, outbox, _ = _desk(log_dir=tmp_path / "agent-logs", run=git,
+                            complete=lambda item, **where: ticked.append(item) or True)
+    desk.start("shipper", str(tmp_path / "wt"), "half a feature", enhancement="half a feature")
+    assert _wait_for(lambda: bool(outbox))
+    outbox.drain()
+    desk.present("shipper", "look at it")
+    desk.verdict("shipper", True)
+    agent = desk._desked["shipper"].agent
+    assert _wait_for(lambda: len(agent.messages) >= 2
+                     and desk._desked["shipper"].state == "idle")
+
+    assert ticked == []                     # nothing was ticked over work still outstanding
+    assert desk.retire("shipper") is False  # ...and nothing was wrapped up over it either
+    desk.close()
+
+
 def test_a_wrap_up_two_seconds_after_the_landing_order_is_refused(tmp_path):
     # The Asana grouping fix: he approved it at 13:37:32, and two seconds later - before the
     # agent could act on the order at all - it was recorded DELIVERED, item #19 ticked off his
