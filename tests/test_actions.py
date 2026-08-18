@@ -1,8 +1,10 @@
 import asyncio
 import os.path
+from datetime import datetime
 from pathlib import Path
 
 from excephalon.actions import _resolve, fleet_actions, take_care_spec
+from excephalon.schedule import Schedule
 
 
 def test_take_care_spec_carries_the_task_its_enhancement_and_the_project():
@@ -753,3 +755,40 @@ def test_renaming_an_agent_by_voice_goes_through_the_desk():
 
     assert desk.renamed == [("gdoc-export", "the Drive export")]
     assert "the-Drive-export" in said
+
+
+def test_schedule_message_stores_the_message_at_the_resolved_time(tmp_path):
+    # "send me a message at 5:15 saying to start dinner prep" - the brain reads the time into a
+    # form the app can resolve and passes the exact words to speak; the app holds them until then.
+    sched = Schedule(tmp_path / "s.json", deliver=lambda m: None)
+    now = datetime(2026, 8, 17, 16, 30)
+    tools = _tools(FakeDesk(), schedule=sched, now=lambda: now)
+
+    said = _call(tools["schedule_message"], when="17:15", message="Time to start dinner prep.")
+
+    held = sched.due(now=datetime(2026, 8, 17, 17, 20).timestamp())
+    assert held == [{"at": datetime(2026, 8, 17, 17, 15).timestamp(),
+                     "message": "Time to start dinner prep."}]
+    assert "17:15" in said
+
+
+def test_schedule_message_with_an_unreadable_time_stores_nothing_and_says_how(tmp_path):
+    sched = Schedule(tmp_path / "s.json", deliver=lambda m: None)
+    now = datetime(2026, 8, 17, 16, 30)
+    tools = _tools(FakeDesk(), schedule=sched, now=lambda: now)
+
+    said = _call(tools["schedule_message"], when="whenever", message="do the thing")
+
+    assert sched.due(now=now.timestamp() + 10**9) == []  # nothing was scheduled
+    assert "in 10 minutes" in said.lower() or "17:15" in said  # it names a form that works
+
+
+def test_schedule_message_needs_the_words_to_say(tmp_path):
+    sched = Schedule(tmp_path / "s.json", deliver=lambda m: None)
+    now = datetime(2026, 8, 17, 16, 30)
+    tools = _tools(FakeDesk(), schedule=sched, now=lambda: now)
+
+    said = _call(tools["schedule_message"], when="17:15", message="   ")
+
+    assert sched.due(now=now.timestamp() + 10**9) == []
+    assert "message" in said.lower()
