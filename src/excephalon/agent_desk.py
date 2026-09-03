@@ -28,6 +28,7 @@ from excephalon.delivery import LADDER, Delivery, DeliveryError
 from excephalon.memory import PROJECT_PREFIX
 from excephalon.models import DEFAULT_EFFORT, DEFAULT_MODEL, describe
 from excephalon.naming import unique_name
+from excephalon.outbox import News
 from excephalon.relay import notice
 from excephalon.steps import SAID, render
 from excephalon.tailing import archive_dir, safe_name
@@ -625,17 +626,24 @@ class AgentDesk:
             drop(name)
 
     def hand_over_news(self, name):
-        """Ask that this agent's held news be spoken at the next opening - True when there was
-        news to hand over. The brain calls this instead of retelling a held update in its own
-        words: retold, the app then delivered its held copy too, and the user heard two versions
-        of the same news 13 seconds apart."""
+        """The held news about this agent, for the brain to deliver in its OWN reply - or None.
+
+        The brain calls this when he asks for an agent's update and one is waiting. It used to
+        answer True and leave the app to append the held copy to the reply by code - two authors
+        in one utterance - because a fast brain asked to weave it in lost the content ("a 'Yes'
+        answered with 'Go check it out then'"). Now the brain is the one author: it is handed the
+        FACT, words it in the same reply, and the loop checks afterwards that the reply carried
+        it (speaker.unfit). The request is still recorded, so the loop knows which debt to check.
+        A held item the desk cannot see the content of (no spool) still comes back as a plain
+        marker, so the request is never lost."""
         name = self.resolve(name) or name
         held = getattr(self._outbox, "owed_about", None)
         request = getattr(self._outbox, "request", None)
         if held is None or request is None or name not in held():
-            return False
+            return None
         request(name)
-        return True
+        fact = getattr(self._outbox, "held", lambda about: None)(name)
+        return fact if fact is not None else News("an update is waiting", about=name)
 
     def roster(self):
         """(name, state, task) for each agent, newest state - what the roster file is written from."""

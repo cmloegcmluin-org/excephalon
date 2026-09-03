@@ -60,7 +60,7 @@ def test_a_draft_that_drops_the_door_is_asked_again_with_the_fault_named():
     # "What launch link? You didn't give me one." The door is what the message exists to hand
     # over; a draft without it is retracted and asked again, told exactly what it dropped.
     brain = FakeBrain("The demo is ready - open the launch link and try it.",
-                      f"The demo is ready - open {LAUNCHER} and try it.")
+                      f"The timed-reminder feature is ready - open {LAUNCHER} and try it.")
     fact = _fact(f"Ready: {LAUNCHER}")
 
     worded = Speaker(brain).word([fact])
@@ -129,7 +129,7 @@ def test_without_a_brain_the_app_speaks_for_itself_and_prose_passes_through_unch
 
 
 def test_the_brains_wait_is_bounded_and_it_is_a_foreground_ask():
-    brain = FakeBrain("Ready for your eyes.")
+    brain = FakeBrain("The timed-reminder feature is ready for your eyes.")
 
     Speaker(brain, deadline=12.0).word([_fact("Ready.")])
 
@@ -150,3 +150,25 @@ def test_claims_deployed_only_bites_before_the_work_has_landed():
     assert claims_deployed("it's shipped", "ready") is True
     assert claims_deployed("it's shipped", "landing") is False
     assert claims_deployed("the demo is live on port 5199", "ready") is False
+
+
+def test_a_draft_that_never_names_the_work_is_not_a_delivery_of_it():
+    # A reply that ignored the news entirely passed every other check, and the news was marked
+    # delivered unsaid. Naming the work - two of his own words for it - is the floor.
+    brain = FakeBrain("Sure thing, go ahead.", "The timed-reminder feature is ready to try.")
+
+    worded = Speaker(brain).word([_fact("Ready to try.")])
+
+    assert worded.text == "The timed-reminder feature is ready to try."
+    assert "never so much as names the work" in brain.asked[1][0]
+
+
+def test_the_reply_brief_hands_the_brain_the_fact_and_makes_it_the_only_author():
+    from excephalon.speaker import brief
+
+    note = brief([_fact(f"Ready: {LAUNCHER}")])
+
+    assert "OWED to him and you are its only author" in note
+    assert "the timed-reminder feature" in note
+    assert LAUNCHER in note  # the door, for the brain to carry verbatim
+    assert "app appends nothing" in note
