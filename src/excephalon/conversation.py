@@ -187,13 +187,10 @@ _GO_AHEADS = frozenset((
 # The held update, put in front of the brain on the turn that answers the offer. Delivering the
 # STORED line as well was the repeat he heard: "Yeah, let me know" missed the exact go-ahead list,
 # the brain improvised the news from memory, and the stored sentence then played anyway.
-OFFERED_NOTICE = (
-    "[System note, not from the user: you told them an update on {about} was waiting, and they "
-    "have now answered. Immediately after your reply, in the same breath, the app itself will "
-    "speak the update word for word - so answer what they just said in a sentence, and do NOT "
-    "restate, summarize, or answer the update's content yourself. For your awareness only, the "
-    "words the app will add: {news}]\n\n"
-)
+# The held update used to be described to the brain here "for your awareness only", and then
+# APPENDED to its reply by code - two authors in one utterance. The brain is now the one author of
+# the reply and of the update in it (speaker.brief), and the loop checks afterwards that the reply
+# actually carried it; one it did not stays owed and is spoken at the next opening on its own.
 
 
 def _goodbye_sentence(farewell):
@@ -1169,8 +1166,7 @@ class Conversation:
         on the turn that answers an update offer - the held update itself, to deliver once."""
         notes = CONDUCT_NOTICE
         if offered is not None:
-            notes += OFFERED_NOTICE.format(
-                about=getattr(offered, "about", None) or "your agents", news=offered)
+            notes += self._speaker.brief([offered])
         if self._standing is not None:
             moved = str(self._standing()).strip()
             if moved:
@@ -1268,17 +1264,24 @@ class Conversation:
         said = _without_pasted_report(said)
         said = re.sub(r"[ \t]{2,}", " ", self._stray_goodbye.sub(r"\1", said)).strip()
         # Any held update this turn owes him - the one he was offered, and any the brain handed
-        # over mid-think (deliver_update) - is appended to the reply BY CODE, word for word, one
-        # utterance. Woven by the brain instead, the content twice went missing ("a 'Yes'
-        # answered with 'Go check it out then'"); requested and served on a later loop pass
-        # instead, the reply promised an update that never followed ("Hm, what do you mean? You
-        # didn't get me anything.").
+        # over mid-think (deliver_update) - was carried by the reply ITSELF, or it was not. It
+        # used to be appended by code, word for word, because a fast brain asked to weave it in
+        # twice lost the content ("a 'Yes' answered with 'Go check it out then'"). Appending made
+        # two authors of one utterance, and the seam between them is where the doubled sentences
+        # and the welded topics came from. Now the brain is the one author of the reply and of
+        # the news in it, and the loop CHECKS that it delivered (speaker.unfit - the work named,
+        # every door verbatim, nothing unlanded called shipped): what it carried is settled, and
+        # what it dropped stays owed and is spoken at the next opening on its own. Loss becomes
+        # repeat, never silence - and never a splice.
         served = self._requested_now()
         extras = ([offered] if offered is not None else []) + [news for _, news in served]
-        # Each owed piece is worded by the one author before it rides the reply - a fact still
-        # carrying the agent's report becomes his news here, once, never the agent's words.
-        worded_extras = [self._speaker.word([extra]) for extra in extras]
-        if not said.strip() and not extras:
+        if not said.strip():
+            # Nothing said: nothing was delivered, whatever was owed. It all goes back, and the
+            # silent-turn path below asks once more.
+            self._keep_for_later(offered)
+            for place, news in served:
+                self._waiting.insert(min(place, len(self._waiting)), news)
+        if not said.strip():
             self._settle(reply)
             release_floor()
             if not wrote_nothing:
@@ -1297,14 +1300,9 @@ class Conversation:
                 said = self.error_reply
             self._speak_reply(said, known=True)
             return Turn(heard=heard, said=said)
-        combined = "\n\n".join([part for part in [said] if part]
-                               + [worded.text for worded in worded_extras])
+        combined = said
         speak_start = time.monotonic()
         if reply is not None:
-            for worded in worded_extras:
-                # Into the same stream, so it is one utterance and one stop silences all of it.
-                spoken_parts.append(f"\n\n{worded.text}")
-                reply.add(f"\n\n{worded.text}")
             # On screen the moment the text is complete - the audio is still going out, and
             # reading the whole of it beats being read to ("I want to see all the text
             # immediately up front and then hear it").
@@ -1321,14 +1319,22 @@ class Conversation:
             began = bool(self._speak_reply(combined, known=True))
         release_floor()
         if began:
-            for extra, worded in zip(extras, worded_extras):
-                self._delivered(extra)
-                if worded.composed:
-                    self._remember_spoken(worded.text)  # its own words, now actually in his ears
+            # The reply is the brain's own and already remembered as such; what remains is the
+            # debt. Each owed piece the reply carried is settled; each it dropped goes back where
+            # it stood, still owed, to be spoken whole at the next opening.
+            for extra in extras:
+                fault = self._speaker.unfit(said, [extra])
+                if fault:
+                    self._console.evidence(f"(the reply {fault} - still owed)")
+            if offered is not None and self._speaker.unfit(said, [offered]):
+                self._keep_for_later(offered)
+            elif offered is not None:
+                self._delivered(offered)
+            for place, news in served:
+                if self._speaker.unfit(said, [news]):
+                    self._waiting.insert(min(place, len(self._waiting)), news)
                 else:
-                    # He heard it in Excephalon's voice and the brain did not write it - the same
-                    # ledger every app-authored line rides, so it is never denied later.
-                    self._unwritten.append(worded.text)
+                    self._delivered(news)
         else:
             # Never sounded: still owed, never spent - and each goes back where it STOOD, because
             # re-queued anywhere else the numbers he was read stop meaning what he heard ("Now I

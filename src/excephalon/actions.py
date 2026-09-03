@@ -28,6 +28,7 @@ from excephalon.memory import (PROJECT_PREFIX, append_enhancement, append_learne
                            complete_enhancement_anywhere, drop_persona_instruction,
                            forget_learned, save_persona_instruction,
                            complete_enhancement_by_id, revise_enhancement)
+from excephalon.speaker import brief
 from excephalon.models import resolve as resolve_model
 from excephalon.tailing import safe_name
 from excephalon.worktrees import find_worktrees, is_worktree, prepare_worktree_for
@@ -194,20 +195,20 @@ def fleet_actions(desk, foreman, errands, *, file_enhancement=append_enhancement
             drop_held(name)
         return _say(f"Delivered to {name}.")
 
-    @tool("deliver_update", "Hand over an agent's HELD update: the app appends it to THIS very "
-          "reply, word for word, in the same breath. Call this whenever the user asks for an "
-          "agent's update and the briefing says news for that agent is still waiting to be "
-          "spoken - and never retell or summarize a held update in your own words; that is how "
-          "the user heard two versions of the same news 13 seconds apart. After calling, say at "
-          "most one short sentence answering their words, never the update's content.",
+    @tool("deliver_update", "Fetch an agent's HELD update so you can deliver it in THIS very "
+          "reply, in your own voice. Call this whenever the user asks for an agent's update and "
+          "the briefing says news for that agent is still waiting to be spoken. You get the fact "
+          "back - the work in the user's words, where it stands, the agent's report to read - and "
+          "you are its only author: put it in this same reply, steps and every link verbatim. "
+          "The app appends nothing; a reply that does not carry it leaves it owed.",
           {"name": str})
     async def deliver_update(args):
         name = str(args["name"]).strip()
-        if not desk.hand_over_news(name):
+        fact = desk.hand_over_news(name)
+        if fact is None:
             return _say(f"Nothing is waiting to be spoken about {name} - answer from the fleet "
                         "briefing, and say plainly if it holds no answer.")
-        return _say(f"{name}'s update will be appended to this reply of yours, word for word - "
-                    "do not repeat or summarize its content.")
+        return _say(brief([fact]))
 
     @tool("set_next_agent_model", "Set which model and effort the NEXT agent starts on, from the "
           "user's words ('fable on max', 'back to opus'). Agents already working keep the model "

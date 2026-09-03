@@ -1390,16 +1390,21 @@ def test_the_digest_says_when_presented_work_has_not_actually_reached_them_yet()
     desk.close()
 
 
-def test_hand_over_news_marks_held_news_to_be_spoken_and_says_when_there_is_none():
-    # The brain's one honest way to answer "give me the update on X": the app speaks the held
-    # copy word for word. Retold in the brain's own words instead, the app then delivered its
-    # copy too - the same news twice, 13 seconds apart.
+def test_hand_over_news_answers_with_the_fact_and_with_nothing_when_nothing_is_held():
+    # "give me the update on X" once had the brain retell the update in its own words while the
+    # app then spoke its held copy too - the same news twice, 13 seconds apart. Then the app
+    # appended the held copy to the reply by code: two authors of one utterance. The brain is the
+    # one author now, so what it is handed is the FACT itself, to carry in its own reply.
     desk, outbox, _ = _desk()
-    outbox.push("fixer: ready for your eyes", about="fixer")
+    outbox.push("There's an update on the drive link fix.", about="fixer", work="the drive link fix",
+                report="ready for your eyes", stage="ready")
 
-    assert desk.hand_over_news("fixer") is True
-    assert outbox.take_requested() == {"fixer"}
-    assert desk.hand_over_news("nobody") is False  # nothing held: the brain answers, not the app
+    held = desk.hand_over_news("fixer")
+
+    assert held is not None and held.about == "fixer"
+    assert held.work == "the drive link fix" and held.report == "ready for your eyes"
+    assert outbox.take_requested() == {"fixer"}  # the loop still knows which debt to check
+    assert desk.hand_over_news("nobody") is None  # nothing held: the brain answers, not the app
     desk.close()
 
 

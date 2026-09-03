@@ -138,6 +138,23 @@ class Outbox:
                 return {held.get("about") for held in self._spooled()}
             return {getattr(item, "about", None) for item in self._items}
 
+    def held(self, about):
+        """The newest piece of news still owed about this agent, as a News - from the spool, which
+        is the record of the whole debt (queued or drained into the conversation's hand alike),
+        or from the queue when there is no spool. None when nothing is owed. This is what the
+        brain is handed when it delivers a held update in its own reply: the fact, not a flag."""
+        with self._lock:
+            if self._spool is not None:
+                rows = [held for held in self._spooled() if held.get("about") == about]
+                if not rows:
+                    return None
+                row = rows[-1]
+                return News(row["message"], row.get("about"), listed=row.get("listed", True),
+                            kind=row.get("kind", ""), work=row.get("work", ""),
+                            report=row.get("report", ""), stage=row.get("stage"))
+            mine = [item for item in self._items if getattr(item, "about", None) == about]
+            return mine[-1] if mine else None
+
     def retag(self, about, to):
         """Held news about a renamed agent is about the same agent - under his name for it now, so
         a roll call reads out what he called it rather than what the app happened to name it."""

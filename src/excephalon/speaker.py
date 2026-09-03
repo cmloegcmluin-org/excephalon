@@ -193,6 +193,49 @@ def _takes(call, keyword):
         return False
 
 
+# Words too common to prove a sentence is about a particular piece of work.
+_SMALL_WORDS = frozenset(("this", "that", "with", "your", "here", "there", "still", "back",
+                          "ready", "look", "open", "click", "when", "what", "have", "from",
+                          "into", "then", "also", "just", "about", "over", "make", "give"))
+
+
+def subject_words(fact):
+    """The words that show an utterance is about THIS piece of work: the content words of his
+    own name for it, or of the news itself when it carries no name."""
+    source = getattr(fact, "work", "") or str(fact)
+    return [word for word in re.findall(r"[a-z0-9]+", source.lower())
+            if len(word) >= 4 and word not in _SMALL_WORDS]
+
+
+def names_the_work(said, fact):
+    """Does this utterance so much as name the work the fact is about? Two of its content words
+    is the bar - one is a coincidence, and a title of one word needs only itself. Without this a
+    reply that ignored the news entirely passed every other check and the news was marked
+    delivered unsaid."""
+    need = subject_words(fact)
+    want = min(2, len(need))
+    lowered = str(said).lower()
+    return sum(word in lowered for word in need) >= want
+
+
+DELIVER_NOW = (
+    "[System note, not from the user: the update below is OWED to him and you are its only "
+    "author. Answer his words AND deliver it, in this same reply, in your own voice - the steps "
+    "if there are steps, every link or launcher verbatim, and never the agent's own words. The "
+    "app appends nothing; if your reply does not carry it, he simply has not heard it yet.]")
+
+
+def brief(facts):
+    """The facts as a note for the brain's OWN reply to carry: it answers his words and delivers
+    this in the same breath, one author for the whole of it. The loop checks afterwards that the
+    reply actually did (`Speaker.unfit`); if not, the fact stays owed and is spoken at the next
+    opening on its own. Loss becomes repeat, never silence and never a splice."""
+    pieces = [DELIVER_NOW]
+    for place, fact in enumerate(list(facts), start=1):
+        pieces.append(_framed(place, fact))
+    return "\n\n".join(pieces) + "\n\n"
+
+
 class Speaker:
     """Words facts into the one utterance he hears. With no brain it speaks for the app alone."""
 
@@ -242,23 +285,18 @@ class Speaker:
                         return f"drops the link {door}, which is the door he needs verbatim"
             if claims_deployed(said, getattr(fact, "stage", None)):
                 return "says the work is deployed or shipped while the app knows it is not"
+            if not names_the_work(said, fact):
+                about = getattr(fact, "work", "") or str(fact)
+                return f"never so much as names the work it is about ({about})"
         return ""
+
+    def brief(self, facts):
+        return brief(facts)
 
     def _prompt(self, facts, listed):
         pieces = [OPENING]
         for place, fact in enumerate(facts, start=1):
-            kind = getattr(fact, "kind", "") or "finished"
-            work = getattr(fact, "work", "") or ""
-            lines = [f"[Piece {place}: " + FRAMING.get(kind, FRAMING["finished"]) + "]"]
-            if work:
-                lines.append("[" + WORKS_NAME.format(work=work) + "]")
-            stage = STAGE_FACT.get(getattr(fact, "stage", None))
-            if stage:
-                lines.append(stage)
-            report = getattr(fact, "report", "")
-            lines.append("[" + REPORT.format(report=report) + "]" if report
-                         else f"[The news, as the app has it: {fact}]")
-            pieces.append("\n".join(lines))
+            pieces.append(_framed(place, fact))
         titles = [_title(item) for item in listed]
         pieces.append(ALSO_WAITING.format(titles=", ".join(titles)) if titles else NOTHING_ELSE)
         pieces.append(CONDUCT)
@@ -297,6 +335,23 @@ class Speaker:
         take_back = getattr(self._brain, "retract", None)
         if take_back is not None and str(draft or "").strip():
             take_back(draft)
+
+
+def _framed(place, fact):
+    """One fact as the brain is told it: the framing for its kind, the work in his words, where
+    it stands, and the agent's report as input."""
+    kind = getattr(fact, "kind", "") or "finished"
+    work = getattr(fact, "work", "") or ""
+    lines = [f"[Piece {place}: " + FRAMING.get(kind, FRAMING["finished"]) + "]"]
+    if work:
+        lines.append("[" + WORKS_NAME.format(work=work) + "]")
+    stage = STAGE_FACT.get(getattr(fact, "stage", None))
+    if stage:
+        lines.append(stage)
+    report = getattr(fact, "report", "")
+    lines.append("[" + REPORT.format(report=report) + "]" if report
+                 else f"[The news, as the app has it - say it in your own words: {fact}]")
+    return "\n".join(lines)
 
 
 def _title(item):

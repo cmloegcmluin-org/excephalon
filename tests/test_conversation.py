@@ -30,6 +30,18 @@ class FakeBrain:
         return f"reply to {_words(utterance)}"
 
 
+class CarryingBrain(FakeBrain):
+    """A brain that does what the reply brief asks: it carries the owed news in its own reply."""
+
+    def __init__(self, reply):
+        super().__init__()
+        self._reply = reply
+
+    def respond(self, utterance):
+        super().respond(utterance)
+        return self._reply
+
+
 class FakeTTS:
     """A one-shot voice with no stream(): the fallback shape (system voice, muted runs)."""
 
@@ -575,29 +587,54 @@ def test_a_refreshed_agent_keeps_its_number_even_as_the_list_grows():
             in tts.spoken)
 
 
-def test_the_offered_update_rides_the_reply_by_code_not_by_the_brains_memory():
+def test_the_offered_update_is_carried_by_the_reply_itself_and_checked():
     # "Folded into a fresh brain turn the content twice went missing - a 'Yes' answered with 'Go
-    # check it out then'" - the brain was ASKED to weave the update in and to be trusted that it
-    # had. The app appends the stored words to the reply itself now: one utterance, the reply
-    # opening it, the news byte-identical behind it, nothing riding on memory.
+    # check it out then'" - so for a while the app appended the stored words to the reply by
+    # code. That made two authors of one utterance, and the seam between them is where doubled
+    # sentences and welded topics came from. The brain is the one author now, handed the fact to
+    # carry in its own reply - and the loop CHECKS that the reply carried it before anything is
+    # spent. One utterance, one author, nothing riding on trust.
     clock = FakeClock()
     outbox = Outbox()
     tts = FakeTTS()
-    convo = Conversation(FakeSTT(["", "sure, go ahead with it", "goodbye entity"]), FakeBrain(),
+    brain = CarryingBrain("Sure - the scrubber drag is ready for your eyes now.")
+    convo = Conversation(FakeSTT(["", "sure, go ahead with it", "goodbye entity"]), brain,
                          tts, outbox=outbox, dormant_after=180, clock=clock)
     clock.now = 600
     outbox.push("The scrubber drag is ready for your eyes.", about="scrubber")
 
     convo.turn()  # the offer
-    convo.turn()  # more than a bare go-ahead: a real turn, with the update owed on its back
+    convo.turn()  # more than a bare go-ahead: a real turn, with the update owed into it
 
-    combined = next(line for line in tts.spoken if "sure, go ahead" in line)
-    assert combined.endswith("The scrubber drag is ready for your eyes.")
-    assert not outbox  # delivered - and durably so
-    assert "The scrubber drag is ready for your eyes." not in tts.spoken  # never spoken twice
+    assert "OWED to him and you are its only author" in brain.heard[-1]
+    assert "Sure - the scrubber drag is ready for your eyes now." in tts.spoken
+    assert not outbox  # carried, so delivered - and durably so
+    assert "The scrubber drag is ready for your eyes." not in tts.spoken  # never a second copy
 
 
-def test_a_reply_the_brain_leaves_empty_still_carries_the_offered_update():
+def test_a_reply_that_drops_the_owed_update_leaves_it_owed_and_it_is_spoken_next():
+    # The other half of the same rule, and the one the weld existed to guarantee: a reply that
+    # did not carry the news has not delivered it. It stays owed - back where it stood - and goes
+    # out whole at the next opening. Loss becomes repeat, never silence.
+    clock = FakeClock()
+    outbox = Outbox()
+    tts = FakeTTS()
+    convo = Conversation(FakeSTT(["", "sure, go ahead with it", "", "goodbye entity"]),
+                         FakeBrain(), tts, outbox=outbox, dormant_after=180, clock=clock)
+    clock.now = 600
+    outbox.push("The scrubber drag is ready for your eyes.", about="scrubber")
+
+    convo.turn()  # the offer
+    convo.turn()  # "reply to sure, go ahead with it" - the news is nowhere in it
+    assert convo._waiting and str(convo._waiting[0]) == "The scrubber drag is ready for your eyes."
+
+    convo.turn()  # the next opening: the news itself, whole
+
+    assert "The scrubber drag is ready for your eyes." in tts.spoken
+    assert not outbox
+
+
+def test_a_reply_the_brain_leaves_empty_leaves_the_update_owed_for_the_next_opening():
     clock = FakeClock()
     outbox = Outbox()
     tts = FakeTTS()
@@ -607,15 +644,18 @@ def test_a_reply_the_brain_leaves_empty_still_carries_the_offered_update():
             super().respond(utterance)
             return ""
 
-    convo = Conversation(FakeSTT(["", "tell me about it", "goodbye entity"]), SilentBrain(), tts,
-                         outbox=outbox, dormant_after=180, clock=clock)
+    convo = Conversation(FakeSTT(["", "tell me about it", "", "goodbye entity"]), SilentBrain(),
+                         tts, outbox=outbox, dormant_after=180, clock=clock)
     clock.now = 600
     outbox.push("The scrubber drag is ready for your eyes.", about="scrubber")
 
     convo.turn()
-    convo.turn()
+    convo.turn()  # nothing said, so nothing delivered: the update goes back, still owed
+    assert convo._waiting
 
-    assert "The scrubber drag is ready for your eyes." in tts.spoken  # the attachment alone
+    convo.turn()  # and the next opening speaks it whole
+
+    assert "The scrubber drag is ready for your eyes." in tts.spoken
 
 
 def test_deliver_update_lands_in_the_same_utterance_as_the_reply_that_announces_it():
@@ -639,7 +679,7 @@ def test_deliver_update_lands_in_the_same_utterance_as_the_reply_that_announces_
             super().respond(utterance)
             if "fixer thing" in utterance:
                 self._request("fixer")
-                return "Here it is."
+                return "Here it is - the drive link is fixed."
             return "reply"
 
     convo = Conversation(FakeSTT(["give me the update on the fixer thing", "goodbye entity"]),
@@ -647,9 +687,9 @@ def test_deliver_update_lands_in_the_same_utterance_as_the_reply_that_announces_
 
     convo.turn()  # the roll call of two goes out, then his full-sentence ask
 
-    combined = next(line for line in tts.spoken if line.startswith("Here it is."))
-    assert combined.endswith("fixer: the drive link is fixed")
-    assert convo._waiting and convo._waiting[0].about == "docs-sidebar"  # the other still held
+    assert "Here it is - the drive link is fixed." in tts.spoken  # the reply itself is the update
+    assert "fixer: the drive link is fixed" not in tts.spoken  # nothing appended behind it
+    assert [held.about for held in convo._waiting] == ["docs-sidebar"]  # settled; the other held
 
 
 def test_a_delivery_that_never_began_sounding_is_still_owed():
@@ -835,7 +875,7 @@ def test_a_mouth_that_receipts_its_own_silence_is_believed(tmp_path):
     assert outbox.owed_about() == {"fixer"}
 
 
-def test_the_weld_holds_on_the_streaming_path_the_real_app_runs():
+def test_the_streamed_reply_carries_the_news_itself_on_the_path_the_real_app_runs():
     # The production shape is a streaming brain into a streaming voice: the extras must enter the
     # SAME reply stream (one utterance, one stop), and a stream that never got a word into the
     # air spends nothing.
@@ -843,18 +883,18 @@ def test_the_weld_holds_on_the_streaming_path_the_real_app_runs():
     outbox = Outbox()
     tts = StreamingTTS()
     convo = Conversation(FakeSTT(["", "yeah, let me know", ""]),
-                         StreamingBrain("Right, here it is."), tts, outbox=outbox,
-                         dormant_after=180, clock=clock)
+                         StreamingBrain("Right - the fix is ready to look at on localhost:5200."),
+                         tts, outbox=outbox, dormant_after=180, clock=clock)
     clock.now = 600
     outbox.push("The fix is ready to look at on localhost:5200.", about="asana-submit-fix",
                 composed=True)
 
     convo.turn()  # the offer
-    convo.turn()  # his answer: the reply streams, and the update is fed into the same stream
+    convo.turn()  # his answer: the reply streams, carrying the update in its own words
 
     reply = tts.replies[-1]
-    assert "".join(reply.deltas).endswith("The fix is ready to look at on localhost:5200.")
-    assert not convo._waiting  # delivered off the back of the streamed reply
+    assert "".join(reply.deltas) == "Right - the fix is ready to look at on localhost:5200."
+    assert not convo._waiting  # carried by the streamed reply, so delivered
 
 
 def test_a_streamed_utterance_that_never_sounded_spends_nothing():
@@ -970,15 +1010,15 @@ def test_deliver_update_reaches_news_that_arrived_mid_turn():
             # The agent reports while the brain is mid-think, and the brain hands it straight over.
             self._outbox.push("fixer: the drive link is fixed", about="fixer")
             self._outbox.request("fixer")
-            return "Just came in - here it is."
+            return "Just came in - the drive link is fixed."
 
     convo = Conversation(FakeSTT(["did the fixer finish", "goodbye entity"]), MidTurnBrain(outbox),
                          tts, outbox=outbox)
 
     convo.turn()
 
-    combined = next(line for line in tts.spoken if line.startswith("Just came in"))
-    assert combined.endswith("fixer: the drive link is fixed")
+    assert "Just came in - the drive link is fixed." in tts.spoken
+    assert not convo._waiting and not outbox  # carried by the reply, so settled
 
 
 def test_a_weld_that_never_sounds_puts_the_update_back_where_it_stood():
@@ -1027,8 +1067,9 @@ def test_the_offered_update_is_durably_delivered(tmp_path):
     spool = tmp_path / "outbox.json"
     outbox = Outbox(spool=spool)
     tts = FakeTTS()
-    convo = Conversation(FakeSTT(["", "yeah, let me know", ""]), FakeBrain(), tts, outbox=outbox,
-                         dormant_after=180, clock=clock)
+    convo = Conversation(FakeSTT(["", "yeah, let me know", ""]),
+                         CarryingBrain("Sure - the fix is ready to look at on localhost:5200."),
+                         tts, outbox=outbox, dormant_after=180, clock=clock)
     clock.now = 600
     outbox.push("The fix is ready to look at on localhost:5200.", about="asana-submit-fix")
 
@@ -1307,7 +1348,7 @@ def test_a_bare_go_ahead_is_answered_with_the_held_update_itself():
     assert brain.heard == []  # no turn for the brain to improvise around it and drop it
 
 
-def test_answering_the_offer_welds_the_update_to_the_reply_by_code():
+def test_answering_the_offer_is_answered_by_one_reply_that_carries_the_update():
     # "Yeah, let me know." was answered twice: it missed the exact go-ahead list, so the brain
     # improvised the news from memory - and the stored line then played at the next lull anyway.
     # The answer to the offer IS the delivery, and the delivery is mechanical now: the brain
@@ -1316,7 +1357,7 @@ def test_answering_the_offer_welds_the_update_to_the_reply_by_code():
     clock = FakeClock()
     outbox = Outbox()
     tts = FakeTTS()
-    brain = FakeBrain()
+    brain = CarryingBrain("Sure - the fix is ready to look at on localhost:5200.")
     convo = Conversation(FakeSTT(["", "yeah, let me know", ""]), brain, tts, outbox=outbox,
                          dormant_after=180, clock=clock)
     clock.now = 600
@@ -1328,13 +1369,13 @@ def test_answering_the_offer_welds_the_update_to_the_reply_by_code():
     convo.turn()  # a later pass finds nothing left to deliver
 
     assert "The fix is ready to look at on localhost:5200." in brain.heard[-1]
+    assert "OWED to him and you are its only author" in brain.heard[-1]
     assert _words(brain.heard[-1]) == "yeah, let me know"
-    assert turn.said == ("reply to yeah, let me know\n\n"
-                         "The fix is ready to look at on localhost:5200.")
-    # Spoken once, welded: the offer, then the one combined utterance - never a third line.
+    assert turn.said == "Sure - the fix is ready to look at on localhost:5200."
+    # Spoken once: the offer, then the one reply that IS the update - never a third line.
     assert tts.spoken == [
         "I've got an update on asana-submit-fix when you're ready.",
-        "reply to yeah, let me know The fix is ready to look at on localhost port 5200.",
+        "Sure - the fix is ready to look at on localhost port 5200.",
     ]
 
 
@@ -1400,7 +1441,7 @@ def test_the_offer_is_made_once_not_every_pass_round_the_loop():
     assert tts.spoken.count("I've got an update on fixer when you're ready.") == 1
 
 
-def test_engaging_with_something_else_delivers_the_news_in_that_same_reply():
+def test_engaging_with_something_else_hands_the_reply_the_news_or_it_is_spoken_next():
     # He answered the offer with a question of his own. He is present, and the one reply folds
     # the update in around his question - a separate stored line arriving afterwards is how he
     # heard everything twice.
@@ -1414,12 +1455,14 @@ def test_engaging_with_something_else_delivers_the_news_in_that_same_reply():
     outbox.push("news about the fix", about="fixer", composed=True)
 
     convo.turn()  # the offer
-    convo.turn()  # his question - the reply carries the update with it
-    convo.turn()  # the goodbye; nothing further arrives
+    convo.turn()  # his question - the brain is handed the update to carry in that reply
+    convo.turn()  # the goodbye pass: a reply that did not carry it left it owed, so it goes now
 
-    assert "news about the fix" in brain.heard[-1]
+    assert "news about the fix" in brain.heard[-1]  # the goodbye never reaches the brain
     assert _words(brain.heard[-1]) == "what time is it"
-    assert "news about the fix" not in tts.spoken  # only inside the brain's one reply
+    # This fake never carries anything, so the update was still owed after its reply - and the
+    # next opening spoke it whole rather than losing it. Never inside a reply AND on its own.
+    assert tts.spoken.count("news about the fix") == 1
 
 
 def test_news_while_he_is_active_is_not_gated_behind_an_offer():

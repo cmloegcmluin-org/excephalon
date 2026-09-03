@@ -719,10 +719,18 @@ the APP's to answer, never the brain's: the first update is spoken word for word
 still held is NAMED after it (`_hand_over`, the one delivery path) - answering a go-ahead with the
 numbered list and "Which first?" is answering the answer to a question with the question again
 ("I already said yes to the Highdeas-submission-feedback one. Why would you ask me this? You sound
-insane."); the list decides ORDER, not whether. Anything OWED into a brain turn is welded onto
-that turn's reply BY CODE, word for word, one utterance: the update he was offered, and any the
-brain hands over mid-think (deliver_update, for the full-sentence ask that never reads as a pick
-- see MOST_WORDS). Welded, because every other arrangement has failed him in the transcript:
+insane."); the list decides ORDER, not whether. Anything OWED into a brain turn - the update he was offered, and any the brain fetches
+mid-think with deliver_update (for the full-sentence ask that never reads as a pick - see
+MOST_WORDS) - is carried by the REPLY ITSELF, or it is not: the brain is handed the FACT
+(`speaker.brief`: the work in his words, its stage, the agent's report to read, every door) and
+is its only author in that same reply, and afterwards the loop CHECKS that the reply carried it
+(`speaker.unfit`: the work named, every door verbatim, nothing unlanded called shipped). What
+the reply carried is settled; what it dropped stays owed, back where it stood, and is spoken
+whole at the next opening - loss becomes repeat, never silence, and never a splice. For a
+while it was WELDED onto the reply by code instead, word for word, because a fast brain asked
+to weave it in lost the content - and the weld made two authors of one utterance, which is
+where the doubled sentences and the welded topics came from. The record of why the weld was
+tried, since every other arrangement had failed him in the transcript:
 asked to weave the update into its reply, the brain twice lost the content ("a 'Yes' answered
 with 'Go check it out then'... that's not an update") while the app marked it delivered; asked to
 retell it, he heard "two versions of the same message in quick succession" thirteen seconds

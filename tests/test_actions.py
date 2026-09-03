@@ -3,6 +3,7 @@ import os.path
 from datetime import datetime
 from pathlib import Path
 
+from excephalon.outbox import News
 from excephalon.actions import _resolve, fleet_actions, take_care_spec
 from excephalon.schedule import Schedule
 
@@ -65,7 +66,11 @@ class FakeDesk:
 
     def hand_over_news(self, name):
         self.handed.append(name)
-        return name in self._known
+        if name not in self._known:
+            return None
+        return News("There's an update on the gdoc export.", about=name, work="the gdoc export",
+                    report="Ready for his eyes at http://localhost:5199/ - 1226 tests pass.",
+                    stage="ready")
 
     def choose(self, model=None, effort=None):
         self.chosen.append((model, effort))
@@ -339,17 +344,22 @@ def test_telling_an_agent_drops_its_held_news_because_he_has_moved_past_it():
     assert desk.news_dropped == ["gdoc-export"]
 
 
-def test_delivering_an_update_hands_the_held_news_to_the_app_to_speak():
+def test_delivering_an_update_hands_the_brain_the_fact_to_carry_in_its_own_reply():
     # "give me the update on the smart grouping" went to the brain, which retold the update in
-    # its own words - and the app then spoke its held copy too, 13 seconds later. The tool is the
-    # brain's one honest answer: the app speaks the held copy, the brain adds nothing.
+    # its own words - and the app then spoke its held copy too, 13 seconds later. The app used to
+    # answer that by appending the held copy to the reply itself: two authors of one utterance.
+    # The brain is the one author now: it is handed the FACT - the work in his words, its stage,
+    # the agent's report to read - and the loop checks afterwards that its reply carried it.
     desk = FakeDesk()
     tools = _tools(desk)
 
     said = _call(tools["deliver_update"], name="gdoc-export")
 
     assert desk.handed == ["gdoc-export"]
-    assert "do not repeat" in said.lower()
+    assert "only author" in said.lower()
+    assert "the gdoc export" in said
+    assert "http://localhost:5199/" in said  # the door, for the reply to carry verbatim
+    assert "1226 tests" in said  # the report is in front of the brain to READ, never to relay
 
 
 def test_delivering_an_update_with_nothing_held_says_to_answer_from_the_briefing():
