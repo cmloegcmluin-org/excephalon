@@ -40,14 +40,23 @@ class News(str):
 
     about = None  # the agent, when there is one
     work = ""  # the piece of work in HIS words - the only name he is ever told
+    # The agent's own report, verbatim - the ONE AUTHOR's input at delivery time and never its
+    # output. News that carries one is a FACT to be worded when it is spoken; the message on it is
+    # the app's plain fallback sentence, which is what survives a restart and what is spoken if
+    # no wording can be had. `stage` is where the work stood when the fact arrived.
+    report = ""
+    stage = None
     composed = False  # whether the brain itself wrote the words
     listed = True  # whether it is an item on the numbered list, or just a thing to say
     kind = ""  # the event behind it, for the few places where the KIND decides
 
-    def __new__(cls, message, about=None, composed=False, listed=True, kind="", work=""):
+    def __new__(cls, message, about=None, composed=False, listed=True, kind="", work="",
+                report="", stage=None):
         news = super().__new__(cls, message)
         news.about = about
         news.work = work
+        news.report = report
+        news.stage = stage
         news.composed = composed
         news.listed = listed
         news.kind = kind
@@ -98,14 +107,17 @@ class Outbox:
             self._items.append(News(held["message"], held.get("about"),
                                     listed=held.get("listed", True),
                                     kind=held.get("kind", ""),
-                                    work=held.get("work", "")))
+                                    work=held.get("work", ""),
+                                    report=held.get("report", ""),
+                                    stage=held.get("stage")))
         if self._items:
             self.arrived.set()
 
-    def push(self, message, about=None, composed=False, listed=True, kind="", work=""):
+    def push(self, message, about=None, composed=False, listed=True, kind="", work="",
+             report="", stage=None):
         with self._lock:
-            self._items.append(News(message, about, composed, listed, kind, work))
-            self._keep(message, about, composed, listed, kind, work)
+            self._items.append(News(message, about, composed, listed, kind, work, report, stage))
+            self._keep(message, about, composed, listed, kind, work, report, stage)
         self.arrived.set()
 
     def drain(self):
@@ -131,7 +143,7 @@ class Outbox:
         a roll call reads out what he called it rather than what the app happened to name it."""
         with self._lock:
             self._items = deque(News(str(item), to, item.composed, item.listed, item.kind,
-                                     item.work)
+                                     item.work, item.report, item.stage)
                                 if getattr(item, "about", None) == about else item
                                 for item in self._items)
             kept = self._spooled()
@@ -219,10 +231,12 @@ class Outbox:
                 break
         self._write(kept)
 
-    def _keep(self, message, about, composed, listed=True, kind="", work=""):
+    def _keep(self, message, about, composed, listed=True, kind="", work="", report="",
+              stage=None):
         kept = self._spooled()
         kept.append({"message": str(message), "about": about, "composed": bool(composed),
-                     "listed": bool(listed), "kind": str(kind), "work": str(work)})
+                     "listed": bool(listed), "kind": str(kind), "work": str(work),
+                     "report": str(report or ""), "stage": stage})
         self._write(kept)
 
     def _spooled(self):

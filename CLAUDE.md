@@ -753,9 +753,30 @@ before his latest instructions was offered back to him as fresh ("surely there's
 smart grouping. You just sent off the latest message to it."). And a drop has to reach all THREE
 places news waits - the queue, the spool, and the conversation's drained-in-hand list - so the
 outbox notes every drop and the conversation collects the notes (`take_dropped`) and prunes its
-own hand: a drop that cleaned the queue alone left the stale copy in hand, still being offered. `narrator.py` is how any agent event becomes
-speech: the desk, the inbox watcher and the quiet monitor emit typed events into it, the brain
-words each one as its own sentence - carrying the same conduct a reply carries (a narration is a
+own hand: a drop that cleaned the queue alone left the stale copy in hand, still being offered. `speaker.py` is the ONE AUTHOR of every piece of news he hears, and `narrator.py` is where an
+agent event becomes a FACT for it. News used to be worded when it ARRIVED - one brain call per
+event, off in the background, its sentence stored as prose and spoken minutes later with the
+app's own roll call welded onto its back: two authors in one utterance, a sentence written with
+no idea of the moment it would be said in, and every gate at that seam existed to police the
+splice. Now the narrator words nothing. It judges - a finished or quiet agent is triaged by the
+brain with its tools (`tell_agent` to kick a pausing agent onward, `ask_foreman` for a snag), and
+only what the brain calls news becomes a fact (`TRIAGED`; a landing, a death, a written note, an
+errand, a memory nudge are news without asking), because offering him "an update" that is
+nothing is its own failure ("Well then I don't think you should Have Offered it as an option. If
+there's nothing actionable for it"). The triage's answer is a decision word, never spoken, and
+taken back. The fact carries the agent's report as INPUT (`News.report`), the work in his words,
+and the stage; the words on it are the app's own plain sentence, which is what survives a
+restart. At the lull, `Speaker.word` composes the whole utterance ONCE - the fact(s) and, written
+into the same composition, the names of what else waits - and checks the draft against the
+FACTS, never the prose: every door the report handed over (`anchors`: launchers, addresses,
+paths, by the same rule the window draws links) must survive verbatim ("What launch link? You
+didn't give me one."), and unlanded work is never called shipped (`claims_deployed`). A failing
+draft is retracted and asked again once with the fault named; a second failure gives way to the
+app's own whole sentence, with the doors listed on it. Never a splice: whoever wrote the
+utterance wrote all of it (`Worded.composed` says which, so the memory and the ledger follow).
+The wait is bounded (`WORD_DEADLINE`) and is a foreground ask, since he is about to hear it. The
+old narration: the desk, the inbox watcher and the quiet monitor emit typed events into the
+narrator, and the brain used to word each one as its own sentence - carrying the same conduct a reply carries (a narration is a
 line he HEARS, and the standing conduct reached only replies, which is how "the desk" got to him),
 plus where the work actually STANDS as a fact, since "the feature should be there in Highdeas
 waiting" was said about work still being built; a composed line that calls unlanded work deployed
