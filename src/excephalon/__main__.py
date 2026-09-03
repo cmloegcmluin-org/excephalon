@@ -56,6 +56,7 @@ from excephalon.polish import mend
 from excephalon.relay import notice
 from excephalon.schedule import Schedule
 from excephalon.shutdown import consolidate, leave_process
+from excephalon.speaker import Speaker as NewsSpeaker
 from excephalon.stt_console import ConsoleSTT
 from excephalon.tailing import safe_name
 from excephalon.homecoming import (
@@ -803,6 +804,9 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
                 # holds and no menu is read - and a walkthrough being delivered never carries a
                 # menu on its back, since speaking it is what opens the review.
                 in_review=desk.in_review,
+                # The one author of every piece of news he hears: a fact is worded when it is
+                # spoken, together with whatever else that utterance owes, never welded.
+                speaker=NewsSpeaker(brain),
                 review_opens=lambda name: desk.delivery_stage(name) == "ready",
                 briefing=lambda: (
                     f"The time right now is {datetime.now():%A %Y-%m-%d %H:%M}, his local time - "

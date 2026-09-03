@@ -12,6 +12,7 @@ from excephalon.phrases import canonical as _canonical
 from excephalon.phrases import ends_with_command as _ends_with_command
 from excephalon.phrases import wakes as _wakes
 from excephalon.sdk_session import needs_sign_in
+from excephalon.speaker import Speaker
 from excephalon.voice import UNSAID, Receipt
 from excephalon.waiting import NUMBERS, chosen, roll_call
 
@@ -444,6 +445,7 @@ class Conversation:
         opening="",
         in_review=None,
         review_opens=None,
+        speaker=None,
     ):
         self._stt = stt
         self._brain = brain
@@ -507,6 +509,9 @@ class Conversation:
         # picked one of them to be working on").
         self._in_review = in_review or (lambda: ())
         self._review_opens = review_opens or (lambda name: False)
+        # The ONE author of every piece of news he hears. Given no brain it speaks for the app
+        # alone, whole - never a splice of the app's words onto the brain's.
+        self._speaker = speaker or Speaker()
         self._reviewing = set()  # whose work the gate is currently holding everything else for
         self._review_turns = 0  # his turns since it opened - the bound on how long it may hold
 
@@ -839,12 +844,14 @@ class Conversation:
         about = getattr(news, "about", None)
         named = bool(name_the_rest and listed
                      and not (about is not None and self._review_opens(about)))
-        said = f"{news}\n\n{roll_call(listed)}" if named else str(news)
+        # ONE author for the whole utterance: the news and what else waits are worded together,
+        # or the app says both itself - never the app's menu on the back of the brain's line.
+        worded = self._speaker.word([news], waiting=listed if named else ())
+        said = worded.text
         self._console.heads_up(said)
         # Known only when the whole utterance is the brain's own sentence; with a roll call
         # appended, part of what they hear is app-authored and the ledger must carry it.
-        if not self._say(said, record=False,
-                         known=getattr(news, "composed", False) and said == str(news)):
+        if not self._say(said, record=False, known=worded.composed):
             self._waiting.insert(place, news)  # never sounded: still owed, back where it stood
             return ""
         # What has been READ OUT, which is only ever a roll call that actually went out. Recorded
@@ -852,8 +859,8 @@ class Conversation:
         # would then never be spoken, since it re-reads only when it has changed.
         self._announced = self._roll() if named else ()
         self._delivered(news)
-        if getattr(news, "composed", False):
-            self._remember_spoken(str(news))  # its own words, now actually in his ears
+        if worded.composed:
+            self._remember_spoken(said)  # its own words, now actually in his ears
         return said
 
     def _hand_over(self, heard, place=0):
@@ -1268,6 +1275,9 @@ class Conversation:
         # didn't get me anything.").
         served = self._requested_now()
         extras = ([offered] if offered is not None else []) + [news for _, news in served]
+        # Each owed piece is worded by the one author before it rides the reply - a fact still
+        # carrying the agent's report becomes his news here, once, never the agent's words.
+        worded_extras = [self._speaker.word([extra]) for extra in extras]
         if not said.strip() and not extras:
             self._settle(reply)
             release_floor()
@@ -1288,13 +1298,13 @@ class Conversation:
             self._speak_reply(said, known=True)
             return Turn(heard=heard, said=said)
         combined = "\n\n".join([part for part in [said] if part]
-                               + [str(extra) for extra in extras])
+                               + [worded.text for worded in worded_extras])
         speak_start = time.monotonic()
         if reply is not None:
-            for extra in extras:
+            for worded in worded_extras:
                 # Into the same stream, so it is one utterance and one stop silences all of it.
-                spoken_parts.append(f"\n\n{extra}")
-                reply.add(f"\n\n{extra}")
+                spoken_parts.append(f"\n\n{worded.text}")
+                reply.add(f"\n\n{worded.text}")
             # On screen the moment the text is complete - the audio is still going out, and
             # reading the whole of it beats being read to ("I want to see all the text
             # immediately up front and then hear it").
@@ -1311,14 +1321,14 @@ class Conversation:
             began = bool(self._speak_reply(combined, known=True))
         release_floor()
         if began:
-            for extra in extras:
+            for extra, worded in zip(extras, worded_extras):
                 self._delivered(extra)
-                if getattr(extra, "composed", False):
-                    self._remember_spoken(str(extra))  # its own words, now actually in his ears
+                if worded.composed:
+                    self._remember_spoken(worded.text)  # its own words, now actually in his ears
                 else:
                     # He heard it in Excephalon's voice and the brain did not write it - the same
                     # ledger every app-authored line rides, so it is never denied later.
-                    self._unwritten.append(str(extra))
+                    self._unwritten.append(worded.text)
         else:
             # Never sounded: still owed, never spent - and each goes back where it STOOD, because
             # re-queued anywhere else the numbers he was read stop meaning what he heard ("Now I
