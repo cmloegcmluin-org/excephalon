@@ -701,7 +701,23 @@ you're ready" as having delivered it) and the demo link he had asked for twice. 
 it was built for is stopped at the sources instead — an errand may not ask him a question,
 and telling an agent, ruling on its work or retiring it drops its held news — and news never
 spoken stays the graver failure. Do not rebuild a model's veto over what he is owed.
-`waiting.py` is what happens when several agents finish at once: they are read out numbered and
+`threads.py` is the ONE store of what he is owed. News used to wait in three places — the
+outbox's queue, the spool behind it, and the conversation's own hand, which drained the queue
+and held items for a lull — and every cross-place failure in this record lived in the split:
+a drop that cleaned the queue while the copy in hand was still offered, a supersede that
+emptied memory while the spool kept yesterday's sentence for the next boot to read out, a
+"who is owed?" answered from the queue while the walkthrough sat in hand for an hour, three
+reports dying in a wedged process's hand. Now there is `Ledger`: a fact is owed from `owe` until
+`settle` (spoken, on the mouth's receipt) or `drop`; the loop READS `owed` every pass, speaks,
+and settles — nothing is ever drained into anyone's keeping, and `drain` survives only as a
+test's way of saying "he heard it all". The rules the hand used to apply are applied where the
+fact is written: one fact per thread, the newest taking that thread's FIRST place (so the
+numbers he was read stay true), an alarm never displacing a report, threadless news never
+collapsed. Looking (`seen`) clears the arrived signal the window's mic yields a delivery turn
+on; speaking does not, because a pass that decides not to speak yet must still stop the mic
+spinning. `outbox.Outbox` is now that class under its old name, so every producer keeps
+pushing to what it always pushed to; the file on disk is the same `runtime/outbox.json`, so
+nothing owed is lost across the upgrade. `waiting.py` is what happens when several agents finish at once: they are read out numbered and
 held, and the list is read again ONLY when it would come out in different words — compared
 against the news behind it instead, fresh news for an agent already listed re-read a
 word-for-word identical sentence eight seconds later ("why did it just give me the same message

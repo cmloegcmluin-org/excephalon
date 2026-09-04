@@ -626,7 +626,7 @@ def test_a_reply_that_drops_the_owed_update_leaves_it_owed_and_it_is_spoken_next
 
     convo.turn()  # the offer
     convo.turn()  # "reply to sure, go ahead with it" - the news is nowhere in it
-    assert convo._waiting and str(convo._waiting[0]) == "The scrubber drag is ready for your eyes."
+    assert convo._outbox.owed() and str(convo._outbox.owed()[0]) == "The scrubber drag is ready for your eyes."
 
     convo.turn()  # the next opening: the news itself, whole
 
@@ -651,7 +651,7 @@ def test_a_reply_the_brain_leaves_empty_leaves_the_update_owed_for_the_next_open
 
     convo.turn()
     convo.turn()  # nothing said, so nothing delivered: the update goes back, still owed
-    assert convo._waiting
+    assert convo._outbox.owed()
 
     convo.turn()  # and the next opening speaks it whole
 
@@ -689,7 +689,7 @@ def test_deliver_update_lands_in_the_same_utterance_as_the_reply_that_announces_
 
     assert "Here it is - the drive link is fixed." in tts.spoken  # the reply itself is the update
     assert "fixer: the drive link is fixed" not in tts.spoken  # nothing appended behind it
-    assert [held.about for held in convo._waiting] == ["docs-sidebar"]  # settled; the other held
+    assert [held.about for held in convo._outbox.owed()] == ["docs-sidebar"]  # settled; the other held
 
 
 def test_a_delivery_that_never_began_sounding_is_still_owed():
@@ -773,8 +773,12 @@ def test_a_line_overtaken_before_it_was_ever_spoken_is_taken_back():
 
     convo.turn()
 
-    assert brain.retracted == ["The drive work is being built."]
+    # The older sentence never reaches this loop at all now: the store keeps one fact per thread
+    # and the newer replaced it the moment it was written - and since news arrives as facts
+    # rather than as the brain's own prose, there is nothing of the brain's to take back.
+    assert brain.retracted == []
     assert brain.said == ["The drive work is ready for your eyes."]
+    assert not outbox
 
 
 def test_a_first_line_he_never_heard_is_taken_back_rather_than_remembered():
@@ -871,7 +875,7 @@ def test_a_mouth_that_receipts_its_own_silence_is_believed(tmp_path):
 
     convo.turn()
 
-    assert convo._waiting  # nothing was spent: the news is still owed and comes back
+    assert convo._outbox.owed()  # nothing was spent: the news is still owed and comes back
     assert outbox.owed_about() == {"fixer"}
 
 
@@ -894,7 +898,7 @@ def test_the_streamed_reply_carries_the_news_itself_on_the_path_the_real_app_run
 
     reply = tts.replies[-1]
     assert "".join(reply.deltas) == "Right - the fix is ready to look at on localhost:5200."
-    assert not convo._waiting  # carried by the streamed reply, so delivered
+    assert not convo._outbox.owed()  # carried by the streamed reply, so delivered
 
 
 def test_a_streamed_utterance_that_never_sounded_spends_nothing():
@@ -926,8 +930,8 @@ def test_a_streamed_utterance_that_never_sounded_spends_nothing():
     convo.turn()
     convo.turn()
 
-    assert convo._waiting  # never sounded: the update is still owed
-    assert str(convo._waiting[0]) == "The fix is ready to look at on localhost:5200."
+    assert convo._outbox.owed()  # never sounded: the update is still owed
+    assert str(convo._outbox.owed()[0]) == "The fix is ready to look at on localhost:5200."
 
 
 def test_a_welded_update_is_kept_when_a_barge_in_beats_the_reply():
@@ -1018,7 +1022,7 @@ def test_deliver_update_reaches_news_that_arrived_mid_turn():
     convo.turn()
 
     assert "Just came in - the drive link is fixed." in tts.spoken
-    assert not convo._waiting and not outbox  # carried by the reply, so settled
+    assert not convo._outbox.owed() and not outbox  # carried by the reply, so settled
 
 
 def test_a_weld_that_never_sounds_puts_the_update_back_where_it_stood():
@@ -1052,7 +1056,7 @@ def test_a_weld_that_never_sounds_puts_the_update_back_where_it_stood():
         interrupt=interrupt)
 
     convo.turn()  # roll call of three, his ask, the barged weld: nothing sounds, nothing is spent
-    assert [getattr(held, "about", None) for held in convo._waiting] == [
+    assert [getattr(held, "about", None) for held in convo._outbox.owed()] == [
         "fixer", "docs-sidebar", "exporter"]  # back where it stood, numbers still true
 
     convo.turn()  # "two" still means docs-sidebar
@@ -1399,7 +1403,8 @@ def test_a_go_ahead_with_several_held_says_the_first_and_names_the_rest():
     assert turn.said.startswith("fixer is ready")  # the update, not a question
     assert "Still waiting: docs-sidebar." in turn.said
     assert "Which first?" not in turn.said
-    assert not [item for item in outbox.drain()]  # and the one he heard is not owed again
+    # The one he heard is settled; the one only NAMED is still owed, in the one store.
+    assert [held.about for held in outbox.owed()] == ["docs-sidebar"]
 
 
 def test_a_brain_failure_on_the_offered_turn_does_not_lose_the_news():
@@ -1860,7 +1865,7 @@ def test_news_deferred_mid_sentence_is_retried_at_the_next_pause():
 
     convo._deliver_outbox()  # can't speak over them - but must still drain
 
-    assert [str(held) for held in convo._waiting] == ["the fixer agent has news"]  # in hand
+    assert [str(held) for held in convo._outbox.owed()] == ["the fixer agent has news"]  # in hand
     assert outbox.arrived.is_set()  # and flagged, so the next pause yields a delivery turn
 
 
@@ -2463,7 +2468,7 @@ def test_a_pick_spends_the_offer_so_the_leftover_never_rides_unrelated_words():
 
     reply = next(line for line in tts.spoken if "reply to" in line)
     assert "spinner" not in reply
-    assert [getattr(h, "about", None) for h in convo._waiting] == ["spinner"]  # still held
+    assert [getattr(h, "about", None) for h in convo._outbox.owed()] == ["spinner"]  # still held
     convo.turn()
 
 
@@ -2483,7 +2488,7 @@ def test_a_held_update_about_other_work_does_not_ride_his_reply_mid_review():
 
     reply = next(line for line in tts.spoken if "reply to" in line)
     assert "spinner" not in reply
-    assert [getattr(h, "about", None) for h in convo._waiting] == ["spinner"]
+    assert [getattr(h, "about", None) for h in convo._outbox.owed()] == ["spinner"]
     convo.turn()
 
 

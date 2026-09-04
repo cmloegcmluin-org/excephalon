@@ -845,7 +845,7 @@ def test_a_merge_report_he_never_heard_survives_the_launch_that_finds_its_agent_
     outbox = Outbox(spool=spool)
     outbox.push("still checking the tab switch", about="scroller", kind="finished")
     outbox.push("It merged - the tabs keep their scroll now.", about="scroller", kind="landing")
-    outbox.drain()  # drained into a hand that never spoke it, then the process ended
+    outbox.seen()  # looked at, never spoken - and then the process ended
 
     desk, _, _ = _desk(outbox=Outbox(spool=spool), log_dir=tmp_path / "agent-logs")
     desk.revive()  # a fresh launch: "scroller" has no tab, so its news is judged finished with

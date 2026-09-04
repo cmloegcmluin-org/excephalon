@@ -308,50 +308,6 @@ def _cause(exc, depth=3):
     return ", caused by ".join(links)
 
 
-def _newest_per_agent(waiting):
-    """`waiting` as (what to keep, what newer news about the same agent has superseded).
-
-    Every turn-end while the user was away queued its own narration, and the roll call then read
-    the same name four times - a list with no choice in it. The newest sentence about an agent
-    already says where things stand; the ones they never heard are history. News with no agent
-    on it (about=None) is never collapsed - those are not updates on one thing.
-
-    The newest sentence takes the agent's EARLIEST place in the list, not its own arrival place.
-    Kept where it arrived, a refresh moved that agent to the end and the numbered list came out
-    reordered seconds after it was read - "Why did you give me two occurrences of three updates
-    waiting, but order them differently? Now I don't know what to tell you." An agent holds its
-    number for as long as it stays on the list.
-
-    An ALARM never displaces a report. "Been silent for 20 minutes" is a timer's guess; it
-    arrived twenty minutes after that agent's merge report and, being newest, superseded it -
-    so the one thing he was waiting for was destroyed by a warning about the very agent that
-    had already finished, and its durable copy went with it. Where an agent has real news, its
-    alarms are dropped instead.
-
-    What is superseded comes back to the caller because dropping it here is only half the job:
-    its durable copy has to go too, or the next restart reads yesterday's sentence out as news."""
-    real = {getattr(item, "about", None) for item in waiting
-            if not getattr(item, "alarm", False)}
-    waiting = [item for item in waiting
-               if not (getattr(item, "alarm", False) and getattr(item, "about", None) in real)]
-    newest = {}
-    for item in waiting:
-        about = getattr(item, "about", None)
-        if about is not None:
-            newest[about] = item
-    keep, placed = [], set()
-    for item in waiting:
-        about = getattr(item, "about", None)
-        if about is None:
-            keep.append(item)
-        elif about not in placed:
-            placed.add(about)
-            keep.append(newest[about])
-    gone = [item for item in waiting
-            if (about := getattr(item, "about", None)) is not None and item is not newest[about]]
-    return keep, gone
-
-
 def _spoken_count(many):
     """A count as it is said - "two updates", never "2 updates"."""
     return NUMBERS[many - 1] if 1 <= many <= len(NUMBERS) else str(many)
@@ -465,7 +421,10 @@ class Conversation:
         self.resume_reply = resume_reply
         self.empty_turn_reply = empty_turn_reply
         self._unwritten = []  # lines spoken in its name that it didn't compose; told to it next turn
-        self._waiting = []  # news drained from the outbox and not delivered yet
+        # Facts already written to the record as held, so each is evidenced once. There is no
+        # hand here any more: what he is owed lives in ONE store (threads.Ledger), read every
+        # pass and settled on the mouth's receipt - never drained into this object's keeping.
+        self._evidenced = set()
         # The session's FIRST line, said through this one mouth rather than beside it. Spoken
         # outside the loop, it was one of two messages he got thirteen seconds apart at startup -
         # a welcome asking about one update, then the app offering all three ("I just opened
@@ -654,42 +613,35 @@ class Conversation:
         """
         if self._outbox is None:
             return self._say_opening()
-        # A drop (the agent was retired, or the user just engaged it with new words) cleans the
-        # queue and the spool, but not the news already drained into this hand - that copy was
-        # still offered after he had sent the agent fresh instructions ("surely there's no update
-        # for smart grouping. You just sent off the latest message to it."). Pruned BEFORE the
-        # drain, so news arriving after a drop is never mistaken for what the drop meant.
-        collect = getattr(self._outbox, "take_dropped", None)
-        dropped = collect() if collect is not None else ()
-        for stale in [held for held in self._waiting
-                      if getattr(held, "about", None) in dropped]:
-            self._waiting.remove(stale)
-            self._console.evidence(f"(dropped as stale for {stale.about}: {stale})")
-            if getattr(stale, "composed", False):
-                self._retract(str(stale))  # its own sentence, now never to be spoken
-        # ALWAYS drain, even when it can't be said yet. The queue's "something is waiting" flag is
-        # what makes the window's mic yield an empty turn, and it is only cleared by draining - so
-        # returning early with it still set spun the loop forever and swallowed every submission they
-        # made. Held news waits here instead, in hand, and goes out at the next opportunity.
-        fresh = self._outbox.drain()
-        self._waiting.extend(fresh)
-        for arrived in fresh:
+        # ONE store. It used to be three - the outbox's queue, its spool, and this loop's own
+        # hand, drained from the queue and held for a lull - and every cross-place failure in the
+        # record lived in the split: a drop that missed the hand, a supersede that missed the
+        # spool, a "who is owed?" that missed the hand. Now the loop READS what is owed, speaks,
+        # and settles each fact on the mouth's receipt. Looking clears the "something arrived"
+        # signal (which is what lets the window's mic yield a delivery turn without spinning);
+        # nothing is taken.
+        owed = self._owed()
+        look = getattr(self._outbox, "seen", None)
+        if look is not None:
+            look()
+        else:  # an older store: draining is how it is looked at
+            self._outbox.drain()
+        for arrived in owed:
+            key = (getattr(arrived, "about", None), str(arrived))
+            if key in self._evidenced:
+                continue
+            self._evidenced.add(key)
             # Never shown or spoken - but a piece of news that goes wrong later is undiagnosable
-            # without it: "why is this happening?" could not be answered from the record, because
-            # news that is never spoken leaves no trace once its spool entry is gone.
+            # without it: news that is never spoken leaves no trace once it is settled.
             self._console.evidence(f"(holding for {getattr(arrived, 'about', None) or 'no agent'}: "
                                    f"{arrived})")
-        self._waiting, superseded = _newest_per_agent(self._waiting)
-        for stale in superseded:
-            self._superseded(stale)  # its durable copy goes with it, or a restart revives it
-        # What the brain asked spoken (deliver_update) - collected every pass, kept until its
-        # item can go out, and pruned to what is actually held, so a request for news that has
-        # since been dropped dies quietly instead of waiting forever.
+        # What the brain asked delivered (deliver_update) - kept until its item can go out, and
+        # pruned to what is actually owed, so a request for news since dropped dies quietly.
         wanted = getattr(self._outbox, "take_requested", None)
         if wanted is not None:
             self._requested |= wanted()
-        self._requested &= {getattr(held, "about", None) for held in self._waiting}
-        if not self._waiting:
+        self._requested &= {getattr(held, "about", None) for held in owed}
+        if not owed:
             self._announced = ()  # nothing outstanding, so the next single item is simply spoken
             self._update_offered = False
             if not self._they_are_talking():  # never break in mid-sentence, greeting included
@@ -724,7 +676,7 @@ class Conversation:
             asked = offers_a_choice(self._opening)
             if self._say_opening() and asked:
                 self._update_offered = True
-                self._offered_count = len(self._waiting)
+                self._offered_count = len(owed)
             return
         if self._update_offered:
             # He was offered this and has not answered. Nothing goes out at him in the meantime -
@@ -734,7 +686,7 @@ class Conversation:
             # ("it should have said something like 'I now have two updates for the
             # scheduled-message item'"). Silent otherwise, because a standing question repeated is
             # the same wall he already declined to answer.
-            held = len(self._waiting)
+            held = len(owed)
             if held > self._offered_count and self._say(
                     MORE_UPDATES.format(count=_spoken_count(held), what=self._whose_news())):
                 self._offered_count = held
@@ -744,18 +696,18 @@ class Conversation:
         # cost him five turns trying to close a "task" that never existed ("I don't even know
         # what errands would be"). It is simply said, at the first opening, and the list behind
         # it is whatever the AGENTS are still owed.
-        loose = next((at for at, held in enumerate(self._waiting)
+        loose = next((at for at, held in enumerate(owed)
                       if not getattr(held, "listed", True)), None)
         if loose is not None:
             self._speak_held(loose, name_the_rest=False)
             return
-        place = next((at for at, held in enumerate(self._waiting)
+        place = next((at for at, held in enumerate(owed)
                       if getattr(held, "about", None) in self._requested), None)
         if place is not None:
             # The brain handed this update over rather than retelling it: the app speaks the held
             # copy word for word the moment the reply ends - one teller, the exact words, instead
             # of two versions of the same news 13 seconds apart.
-            self._requested.discard(getattr(self._waiting[place], "about", None))
+            self._requested.discard(getattr(owed[place], "about", None))
             self._speak_held(place)  # he asked for this one, by name, just now
             return
         reviewing = self._still_reviewing()
@@ -770,7 +722,7 @@ class Conversation:
             # other two updates"). A thread's CONCLUSION is never held by it: a merge report is
             # the last word he is owed, and holding one is the black hole this project has
             # already sat through.
-            place = next((at for at, held in enumerate(self._waiting)
+            place = next((at for at, held in enumerate(owed)
                           if getattr(held, "about", None) in reviewing
                           or getattr(held, "concluding", False)), None)
             if place is not None:
@@ -784,7 +736,7 @@ class Conversation:
             # behind it sat unreachable.
             if not self._update_offered:
                 self._update_offered = bool(self._say(UPDATE_OFFER.format(what=self._whose_news())))
-                self._offered_count = len(self._waiting)
+                self._offered_count = len(owed)
             return
         self._update_offered = False
         if self._announced:
@@ -799,10 +751,18 @@ class Conversation:
             if self._announced != self._roll():
                 self._announce()
             return
-        if len(self._waiting) > 1:
+        if len(owed) > 1:
             self._announce()
             return
         self._speak_held(0)  # the one item left: said as itself, through the one delivery path
+
+    def _owed(self):
+        """What he is owed right now, from the one store - a snapshot, in the order he would be
+        read it. Every place this loop used to consult its own hand consults this instead."""
+        if self._outbox is None:
+            return []
+        read = getattr(self._outbox, "owed", None)
+        return list(read()) if read is not None else []
 
     def _delivered(self, news):
         """Tell the outbox this news actually reached the user, so its durable copy is done.
@@ -831,9 +791,10 @@ class Conversation:
         already down when the words were about to start used to clear the spool over zero audio,
         and the news died in the black hole."""
         if self._interrupted():
-            return ""  # nothing will sound; the news stays in hand, owed, for the next opening
-        news = self._waiting.pop(place)
-        listed = [held for held in self._waiting if getattr(held, "listed", True)]
+            return ""  # nothing will sound; the news stays owed for the next opening
+        owed = self._owed()
+        news = owed[place]
+        listed = [held for held in owed if held is not news and getattr(held, "listed", True)]
         # A walkthrough OPENS a review: the moment it is spoken, his eyes are on that work, and
         # a menu of other items welded to its back is exactly the interruption he banned ("Don't
         # ask me about updates for other items when we've already picked one of them to be
@@ -849,8 +810,7 @@ class Conversation:
         # Known only when the whole utterance is the brain's own sentence; with a roll call
         # appended, part of what they hear is app-authored and the ledger must carry it.
         if not self._say(said, record=False, known=worded.composed):
-            self._waiting.insert(place, news)  # never sounded: still owed, back where it stood
-            return ""
+            return ""  # never sounded: still owed, exactly where it stands
         # What has been READ OUT, which is only ever a roll call that actually went out. Recorded
         # after an errand's answer instead, it would mark the agents' list announced and that list
         # would then never be spoken, since it re-reads only when it has changed.
@@ -878,20 +838,6 @@ class Conversation:
         read the offer as having delivered it."""
         return Turn(heard=heard, said=self._speak_held(place))
 
-    def _superseded(self, news):
-        """Tell the outbox this news will never be spoken - newer news about the same agent has
-        replaced it. Collapsing the queue in memory alone left the old sentence spooled, and a
-        restart delivered it as fresh: "it comes out of nowhere and provides no new information
-        that I didn't already have"."""
-        forget = getattr(self._outbox, "superseded", None)
-        if forget is not None:
-            forget(news)
-        if getattr(news, "composed", False):
-            # It wrote this sentence and nobody will ever hear it. Left on its record, the brain
-            # holds the overtaken line AND hears the newer one, which is the same-thing-twice
-            # reading manufactured from the inside.
-            self._retract(str(news))
-
     def _roll(self):
         """The roll call as it would be SPOKEN right now - the sentence, which is what a re-read
         has to be compared against.
@@ -901,7 +847,7 @@ class Conversation:
         eight seconds apart ("why did it just give me the same message twice in a row?"). Compared
         by COUNT, an earlier version of this went the other way and never re-read a genuinely
         changed list at all. The sentence is the thing he hears; the sentence is the test."""
-        return roll_call([held for held in self._waiting if getattr(held, "listed", True)])
+        return roll_call([held for held in self._owed() if getattr(held, "listed", True)])
 
     def _say_opening(self):
         """Say the session's first line, once - and answer whether it reached him.
@@ -941,7 +887,8 @@ class Conversation:
         `waiting.chosen`), so a sentence that happens to carry an agent's name is still their turn:
         answering it with a notice instead would lose the question.
         """
-        listed = [held for held in self._waiting if getattr(held, "listed", True)]
+        owed = self._owed()
+        listed = [held for held in owed if getattr(held, "listed", True)]
         place = chosen(heard, listed)
         if place is None:
             return None
@@ -949,7 +896,7 @@ class Conversation:
         # rode his NEXT words as if they had answered it: "The ship it still stands." - about a
         # different agent entirely - came back with the spinner walkthrough welded on.
         self._update_offered = False
-        return self._hand_over(heard, self._waiting.index(listed[place]))
+        return self._hand_over(heard, owed.index(listed[place]))
 
     def _still_reviewing(self):
         """Whose work is genuinely in front of him right now - and nothing once his attention has
@@ -972,7 +919,7 @@ class Conversation:
 
     def _whose_news(self):
         names = []
-        for item in self._waiting:
+        for item in self._owed():
             about = getattr(item, "about", None) or "your agents"
             if about not in names:
                 names.append(about)
@@ -1133,24 +1080,25 @@ class Conversation:
             self._paused = True
             self._speak_reply(self.suspend_reply)
             return Turn(heard=heard, said=self.suspend_reply)
-        if self._update_offered and self._waiting and canonical in _GO_AHEADS:
+        owed = self._owed()
+        if self._update_offered and owed and canonical in _GO_AHEADS:
             self._update_offered = False
-            if len(self._waiting) == 1:
+            if len(owed) == 1:
                 return self._hand_over(heard)   # the one held update IS the answer
             return self._release_updates(heard)  # several are held; read out the choice
-        if self._update_offered and len(self._waiting) == 1:
+        if self._update_offered and len(owed) == 1:
             # They answered with words of their own, so the held update rides into this turn's
             # prompt and the brain says it once, folded around what they asked. Speaking the stored
             # line as well - after the brain had already covered it - is how he heard it all twice.
             # Unless his eyes are on OTHER work: mid-review, news about a different thread never
             # rides his reply - one thing at a time - and waits for the gate instead.
-            about = getattr(self._waiting[0], "about", None)
+            about = getattr(owed[0], "about", None)
             reviewing = set(self._in_review() or ())
             if not reviewing or about in reviewing:
                 self._update_offered = False
                 self._announced = ()
-                return self._answer(heard, offered=self._waiting.pop())
-        if self._waiting and (self._announced or self._update_offered):
+                return self._answer(heard, offered=owed[0])
+        if owed and (self._announced or self._update_offered):
             # They may be naming one of the agents the roll call just read out - and ONLY then:
             # picking is answering a list, so with no list read out and no offer standing, a
             # short sentence that happens to contain "one" is his own words, not a choice off a
@@ -1228,13 +1176,11 @@ class Conversation:
                                progress=lambda: last_progress[0],
                                on_activity=working)
         except _ThinkInterrupted:  # they cut the thinking off - no reply, straight back to listening
-            self._keep_for_later(offered)  # nothing was said, so the update is still owed
-            self._settle(reply)
+            self._settle(reply)  # nothing was said, so whatever was owed stays owed
             release_floor()
             return None
         except Exception as exc:  # the plain word to them; the cause to the durable record
-            self._keep_for_later(offered)  # the delivery turn died; the update must survive it
-            self._settle(reply)
+            self._settle(reply)  # the delivery turn died; whatever it owed stays owed
             # The floor first: its leak-script is the streamed reply, and a wedge streamed
             # nothing - spoken under it, the error line's own audio came back through the mic
             # as the user's draft words. Released, _say opens a watcher scripted with exactly
@@ -1275,12 +1221,6 @@ class Conversation:
         # repeat, never silence - and never a splice.
         served = self._requested_now()
         extras = ([offered] if offered is not None else []) + [news for _, news in served]
-        if not said.strip():
-            # Nothing said: nothing was delivered, whatever was owed. It all goes back, and the
-            # silent-turn path below asks once more.
-            self._keep_for_later(offered)
-            for place, news in served:
-                self._waiting.insert(min(place, len(self._waiting)), news)
         if not said.strip():
             self._settle(reply)
             release_floor()
@@ -1326,22 +1266,13 @@ class Conversation:
                 fault = self._speaker.unfit(said, [extra])
                 if fault:
                     self._console.evidence(f"(the reply {fault} - still owed)")
-            if offered is not None and self._speaker.unfit(said, [offered]):
-                self._keep_for_later(offered)
-            elif offered is not None:
+            if offered is not None and not self._speaker.unfit(said, [offered]):
                 self._delivered(offered)
-            for place, news in served:
-                if self._speaker.unfit(said, [news]):
-                    self._waiting.insert(min(place, len(self._waiting)), news)
-                else:
+            for _place, news in served:
+                if not self._speaker.unfit(said, [news]):
                     self._delivered(news)
-        else:
-            # Never sounded: still owed, never spent - and each goes back where it STOOD, because
-            # re-queued anywhere else the numbers he was read stop meaning what he heard ("Now I
-            # don't know what to tell you").
-            self._keep_for_later(offered)
-            for place, news in served:
-                self._waiting.insert(min(place, len(self._waiting)), news)
+        # Never sounded, or not carried: still owed, never spent, and still exactly where it
+        # stands - nothing was ever taken out, so nothing has to be put back.
         if self._timings:
             self._console.timing(think=think_time, speak=time.monotonic() - speak_start)
         self._pause_to_read()
@@ -1363,17 +1294,6 @@ class Conversation:
         if reply is not None:
             reply.done()
 
-    def _keep_for_later(self, offered):
-        """An update popped into a turn that never delivered it goes back to waiting - they were
-        promised that line, and the failed turn must not be where it silently ends. Appended, not
-        pushed to the front: the OFFERED update is taken from the tail of the hand, so the tail
-        is where it stood - re-queued at the head it would reorder the list and a later roll call
-        would come back renumbered, the failure he described as not knowing which numbering to
-        answer. (A deliver_update extra, popped from an arbitrary place, is restored by place
-        instead - see _answer's kept path.)"""
-        if offered is not None:
-            self._waiting.append(offered)
-
     def _requested_now(self):
         """The held items the brain handed over DURING this turn (deliver_update), popped to ride
         this very reply. Served on a later loop pass instead, anything in between could void the
@@ -1385,22 +1305,16 @@ class Conversation:
         asked = wanted()
         if not asked:
             return []
-        # The request answers the outbox's WHOLE debt, and news that landed while he was talking
-        # is still in the queue, not the hand - so the queue is drained into the hand first, the
-        # same drain-and-collapse every delivery pass does, or a promise made about mid-turn news
-        # would be another reply followed by nothing.
-        self._waiting.extend(self._outbox.drain())
-        self._waiting, superseded = _newest_per_agent(self._waiting)
-        for stale in superseded:
-            self._superseded(stale)
+        # The request answers the store's WHOLE debt: news that landed while he was talking is
+        # already there, so a promise made about mid-turn news is never a reply followed by
+        # nothing.
+        owed = self._owed()
         served = []
         for about in asked:
-            place = next((at for at, held in enumerate(self._waiting)
+            place = next((at for at, held in enumerate(owed)
                           if getattr(held, "about", None) == about), None)
             if place is not None:
-                # The place rides along so a weld that never sounds can put it back where it
-                # stood - re-queued anywhere else, the numbers he was read stop being true.
-                served.append((place, self._waiting.pop(place)))
+                served.append((place, owed[place]))
         return sorted(served)
 
     def run(self, should_continue=lambda: True, on_turn=None):
