@@ -12,9 +12,9 @@ from excephalon.phrases import canonical as _canonical
 from excephalon.phrases import ends_with_command as _ends_with_command
 from excephalon.phrases import wakes as _wakes
 from excephalon.sdk_session import needs_sign_in
-from excephalon.speaker import Speaker
 from excephalon.voice import UNSAID, Receipt
-from excephalon.waiting import NUMBERS, chosen, roll_call
+from excephalon.speaker import Speaker, roll_call
+from excephalon.threads import NUMBERS, pick
 
 # Both names, as the window's wake phrases already carried both: the app says "Excephalon" every
 # time it names itself, so that has to be the word that works - and the coined one is the word the
@@ -139,12 +139,6 @@ CONDUCT_NOTICE = (
 
 # While the brain thinks, re-check this often for a barge-in, so cutting a slow think off feels
 # instant rather than waiting out the next check-in.
-# How many of HIS turns the one-thing-at-a-time gate may hold everything else for. A review is
-# closed by a verdict, and a verdict that never got recorded held every other thread's news
-# forever - including a merge report he was waiting on. Two turns is generous for "he is looking
-# at it right now" and short enough that a missed record can never bury the fleet.
-REVIEW_HOLDS_TURNS = 2
-
 DEFAULT_INTERRUPT_POLL = 0.05
 # After telling the brain to cancel, wait up to this long for the call to actually unwind before
 # moving on - so the loop never starts a second brain call overlapping a half-cancelled one.
@@ -431,12 +425,9 @@ class Conversation:
         # Excephalon and then it quickly sent me two messages. it should only have sent me one").
         self._opening = opening
         self._requested = set()  # agents whose held news the brain asked spoken (deliver_update)
-        self._announced = ()  # the news the roll call last read out, so fresh news re-reads
         self._clock = clock
         self._dormant_after = dormant_after
         self._last_engaged = clock()  # startup counts: they just launched it, so they are here
-        self._update_offered = False  # a dormant-lull offer stands; the news waits to be taken
-        self._offered_count = 0  # how much was waiting when that offer was made, so more re-offers
         self._briefing = briefing  # callable: the live fleet state, put before the brain each turn
         # callable: his standing context, but only the parts that have CHANGED since the brain was
         # last told - "" on a turn where nothing of his has moved.
@@ -468,8 +459,6 @@ class Conversation:
         # The ONE author of every piece of news he hears. Given no brain it speaks for the app
         # alone, whole - never a splice of the app's words onto the brain's.
         self._speaker = speaker or Speaker()
-        self._reviewing = set()  # whose work the gate is currently holding everything else for
-        self._review_turns = 0  # his turns since it opened - the bound on how long it may hold
 
     def _interrupted(self):
         return self._interrupt is not None and self._interrupt.is_set()
@@ -642,8 +631,6 @@ class Conversation:
             self._requested |= wanted()
         self._requested &= {getattr(held, "about", None) for held in owed}
         if not owed:
-            self._announced = ()  # nothing outstanding, so the next single item is simply spoken
-            self._update_offered = False
             if not self._they_are_talking():  # never break in mid-sentence, greeting included
                 self._say_opening()
             return
@@ -675,10 +662,9 @@ class Conversation:
             # and the news takes the next opening as its own utterance.
             asked = offers_a_choice(self._opening)
             if self._say_opening() and asked:
-                self._update_offered = True
-                self._offered_count = len(owed)
+                self._offered(len(owed))
             return
-        if self._update_offered:
+        if self._offer_stands():
             # He was offered this and has not answered. Nothing goes out at him in the meantime -
             # not an agent's news, not an errand's report, however it arrives: "I never said I was
             # ready for the update." What may change is the COUNT, and only that: told two more
@@ -687,9 +673,9 @@ class Conversation:
             # scheduled-message item'"). Silent otherwise, because a standing question repeated is
             # the same wall he already declined to answer.
             held = len(owed)
-            if held > self._offered_count and self._say(
+            if held > self._offer() and self._say(
                     MORE_UPDATES.format(count=_spoken_count(held), what=self._whose_news())):
-                self._offered_count = held
+                self._offered(held)
             return
         # Unlisted news is not an item to choose between - the errand hand is machinery, not an
         # agent with a tab and a verdict, and reading its tag out as a name beside a real agent
@@ -710,7 +696,7 @@ class Conversation:
             self._requested.discard(getattr(owed[place], "about", None))
             self._speak_held(place)  # he asked for this one, by name, just now
             return
-        reviewing = self._still_reviewing()
+        reviewing = self._focus()
         if reviewing:
             # One thing at a time - his standing instruction, now the loop's own rule: his eyes
             # are on a piece of work, so no other agent's news breaks in and no menu is read
@@ -734,12 +720,12 @@ class Conversation:
             # offer counts as MADE only if it began sounding - latched on an utterance a
             # barge-in silenced, the offer was never heard and never repeated, and the news
             # behind it sat unreachable.
-            if not self._update_offered:
-                self._update_offered = bool(self._say(UPDATE_OFFER.format(what=self._whose_news())))
-                self._offered_count = len(owed)
+            if not self._offer_stands():
+                if self._say(UPDATE_OFFER.format(what=self._whose_news())):
+                    self._offered(len(owed))
             return
-        self._update_offered = False
-        if self._announced:
+        self._spend_offer()
+        if self._recital():
             # A list has been read out and not worked through. Say it again only if it has changed,
             # or every trip round the loop would recite the same names at them - but changed means
             # the NEWS, not the count. Measured by count, an agent's fresh report replacing its own
@@ -748,7 +734,7 @@ class Conversation:
             # it ("I never heard back again"). The re-read comes out with every agent still at the
             # number he first heard for it (see `_newest_per_agent`), so answering an older read-out
             # by number still names the agent he means.
-            if self._announced != self._roll():
+            if self._recital() != self._roll():
                 self._announce()
             return
         if len(owed) > 1:
@@ -814,7 +800,7 @@ class Conversation:
         # What has been READ OUT, which is only ever a roll call that actually went out. Recorded
         # after an errand's answer instead, it would mark the agents' list announced and that list
         # would then never be spoken, since it re-reads only when it has changed.
-        self._announced = self._roll() if named else ()
+        self._recited(self._roll() if named else "")
         self._delivered(news)
         if worded.composed:
             self._remember_spoken(said)  # its own words, now actually in his ears
@@ -877,7 +863,7 @@ class Conversation:
         self._console.heads_up(roll)
         if not self._say(roll, record=False):
             return
-        self._announced = roll
+        self._recited(roll)
 
     def _take_pick(self, heard):
         """They answered the roll call by naming one: say that one, and what is still waiting.
@@ -889,29 +875,43 @@ class Conversation:
         """
         owed = self._owed()
         listed = [held for held in owed if getattr(held, "listed", True)]
-        place = chosen(heard, listed)
+        place = pick(heard, listed)
         if place is None:
             return None
         # The pick ANSWERS the offer, so the offer is spent. Left standing, the leftover item
         # rode his NEXT words as if they had answered it: "The ship it still stands." - about a
         # different agent entirely - came back with the spinner walkthrough welded on.
-        self._update_offered = False
+        self._spend_offer()
         return self._hand_over(heard, owed.index(listed[place]))
 
-    def _still_reviewing(self):
-        """Whose work is genuinely in front of him right now - and nothing once his attention has
-        plainly moved on.
+    def _focus(self):
+        """Whose work is genuinely in front of him right now - the store's answer, bounded by his
+        own turns so a review nobody could close can never bury the fleet (see
+        threads.FOCUS_HOLDS_TURNS)."""
+        if self._outbox is None or not hasattr(self._outbox, "focus"):
+            return set()
+        return self._outbox.focus(self._in_review() or ())
 
-        The gate silences every other thread, so it may never outlive its own premise. A verdict
-        that never got RECORDED (the brain answered his "ship it" with nothing at all, so no tool
-        call was ever made) left a review open forever, and behind it a merge report he was
-        waiting for sat unspeakable while he asked where it was. So the hold is bounded by his
-        own turns: past a couple of them with no verdict, he is no longer looking at that work,
-        whatever the record still says."""
-        reviewing = set(self._in_review() or ())
-        if reviewing != self._reviewing:
-            self._reviewing, self._review_turns = reviewing, 0
-        return reviewing if self._review_turns < REVIEW_HOLDS_TURNS else set()
+    def _offer_stands(self):
+        return bool(self._offer())
+
+    def _offer(self):
+        return getattr(self._outbox, "offer", 0) if self._outbox is not None else 0
+
+    def _offered(self, count):
+        if self._outbox is not None and hasattr(self._outbox, "offered"):
+            self._outbox.offered(count)
+
+    def _spend_offer(self):
+        if self._outbox is not None and hasattr(self._outbox, "spend_offer"):
+            self._outbox.spend_offer()
+
+    def _recital(self):
+        return getattr(self._outbox, "recital", "") if self._outbox is not None else ""
+
+    def _recited(self, text):
+        if self._outbox is not None and hasattr(self._outbox, "recited"):
+            self._outbox.recited(text)
 
     def _dormant(self):
         return (self._dormant_after is not None
@@ -934,7 +934,7 @@ class Conversation:
         sound insane." A go-ahead is a go-ahead. The list decides ORDER, not whether; the first
         is the one he was offered first, and naming the rest keeps the choice open without making
         him give it twice."""
-        self._update_offered = False
+        self._spend_offer()
         return self._hand_over(heard)
 
     def _they_are_talking(self):
@@ -1058,7 +1058,8 @@ class Conversation:
         # "ready for your eyes" ungated, seconds after he had APPROVED that very work. Once he has
         # spoken again, whatever he asked for before is ordinary held news and faces the gate.
         self._requested.clear()
-        self._review_turns += 1  # a turn of his against the one-thing-at-a-time gate's bound
+        if self._outbox is not None and hasattr(self._outbox, "his_turn"):
+            self._outbox.his_turn()  # his attention has held one turn longer, whatever it is on
         # The session's first line is a first line or nothing. One that missed its moment - he was
         # mid-sentence at boot, or the delivery that should have carried it never sounded - is no
         # longer a greeting once he has spoken: the boot welcome once surfaced seven minutes into
@@ -1081,24 +1082,23 @@ class Conversation:
             self._speak_reply(self.suspend_reply)
             return Turn(heard=heard, said=self.suspend_reply)
         owed = self._owed()
-        if self._update_offered and owed and canonical in _GO_AHEADS:
-            self._update_offered = False
+        if self._offer_stands() and owed and canonical in _GO_AHEADS:
+            self._spend_offer()
             if len(owed) == 1:
                 return self._hand_over(heard)   # the one held update IS the answer
             return self._release_updates(heard)  # several are held; read out the choice
-        if self._update_offered and len(owed) == 1:
+        if self._offer_stands() and len(owed) == 1:
             # They answered with words of their own, so the held update rides into this turn's
             # prompt and the brain says it once, folded around what they asked. Speaking the stored
             # line as well - after the brain had already covered it - is how he heard it all twice.
             # Unless his eyes are on OTHER work: mid-review, news about a different thread never
             # rides his reply - one thing at a time - and waits for the gate instead.
             about = getattr(owed[0], "about", None)
-            reviewing = set(self._in_review() or ())
+            reviewing = self._focus()
             if not reviewing or about in reviewing:
-                self._update_offered = False
-                self._announced = ()
+                self._spend_offer()
                 return self._answer(heard, offered=owed[0])
-        if owed and (self._announced or self._update_offered):
+        if owed and (self._recital() or self._offer_stands()):
             # They may be naming one of the agents the roll call just read out - and ONLY then:
             # picking is answering a list, so with no list read out and no offer standing, a
             # short sentence that happens to contain "one" is his own words, not a choice off a

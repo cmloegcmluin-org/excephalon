@@ -22,7 +22,25 @@ from dataclasses import dataclass
 
 from excephalon.links import link_parts
 from excephalon.relay import notice
-from excephalon.waiting import roll_call
+from excephalon.threads import NUMBERS, title_of
+
+
+def roll_call(news):
+    """The app's own line for several pieces of work waiting at once: numbered, so one can be
+    named back by a number that survives the trip through the transcriber, and labelled by HIS
+    words for each piece of work. A list of one is simply named - numbering a list of one and
+    asking which of it he wants reads as a form being recited - but it is still said: news that
+    goes quiet is news he never gets."""
+    if len(news) == 1:
+        return f"Still waiting: {title_of(news[0])}."
+    listed = " ".join(f"{_number(place).capitalize()}, {title_of(item)}."
+                      for place, item in enumerate(news, start=1))
+    # "updates", because "Four waiting." landed as "four WHATS?" - the count needs its noun.
+    return f"{_number(len(news)).capitalize()} updates waiting. {listed} Which first?"
+
+
+def _number(count):
+    return NUMBERS[count - 1] if 1 <= count <= len(NUMBERS) else str(count)
 
 # How long the wording may take at the lull before the app's own sentence goes out instead. He
 # is about to hear this and nothing else is happening; a few seconds is the price of one author,
