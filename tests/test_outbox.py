@@ -10,10 +10,14 @@ def test_superseded_news_leaves_the_spool_so_a_restart_does_not_revive_it(tmp_pa
     outbox = Outbox(spool=spool)
     outbox.push("The split is ready for your eyes.", about="projects-tab")
     outbox.push("All twelve are cards now - which names need shortening?", about="projects-tab")
-    older, newest = outbox.drain()
 
-    outbox.superseded(older)  # newer news about the same agent replaced it: nobody will hear it
-    outbox.spoken(newest)     # and the newest actually reached him
+    # Superseding is no longer something anyone does afterwards: the newer fact takes the older
+    # one's place the moment it is written, in memory and on disk alike.
+    [newest] = outbox.owed()
+    assert str(newest) == "All twelve are cards now - which names need shortening?"
+    assert [str(held) for held in Outbox(spool=spool).owed()] == [str(newest)]
+
+    outbox.spoken(newest)  # and the newest actually reached him
 
     assert Outbox(spool=spool).drain() == []
 
@@ -69,7 +73,7 @@ def test_undelivered_news_survives_the_process_and_delivered_news_does_not(tmp_p
     first = Outbox(spool=spool)
     first.push("the merge landed", about="lander", composed=True)
     first.push("the fix is ready to look at", about="fixer")
-    first.drain()  # in hand, not yet spoken
+    first.seen()  # looked at - which used to mean "in hand" - not yet spoken
     first.spoken("the merge landed")  # this one actually reached the user
 
     revived = Outbox(spool=spool)
@@ -96,8 +100,8 @@ def test_news_about_a_finished_agent_can_be_dropped_from_the_queue_and_the_spool
 
     outbox.drop("copy-fixes")
 
-    assert [str(news) for news in outbox.drain()] == ["the other one needs a decision"]
-    assert [str(news) for news in Outbox(spool=spool).drain()] == ["the other one needs a decision"]
+    assert [str(news) for news in outbox.owed()] == ["the other one needs a decision"]
+    assert [str(news) for news in Outbox(spool=spool).owed()] == ["the other one needs a decision"]
 
 
 def test_dropping_the_last_item_clears_the_waiting_signal(tmp_path):
@@ -118,12 +122,13 @@ def test_a_drop_reaches_news_already_drained_into_someone_elses_hand():
     # dropped and prunes its own hand.
     outbox = Outbox()
     outbox.push("grouping: done", about="grouping")
-    outbox.drain()  # in the conversation's hand now, not in the queue
+    outbox.seen()  # the conversation has looked at it - which used to mean "taken into hand"
 
     outbox.drop("grouping")
 
-    assert outbox.take_dropped() == {"grouping"}
-    assert outbox.take_dropped() == set()  # collected once; the next pass starts clean
+    # There is no hand: a drop is a drop, and there is nothing anywhere else to prune.
+    assert outbox.owed() == []
+    assert outbox.take_dropped() == set()
 
 
 def test_owed_about_sees_news_in_hand_not_only_news_in_the_queue(tmp_path):
@@ -135,7 +140,7 @@ def test_owed_about_sees_news_in_hand_not_only_news_in_the_queue(tmp_path):
     outbox = Outbox(spool=spool)
     outbox.push("linking: ready for your eyes", about="linking")
     outbox.push("fixer: merged", about="fixer")
-    outbox.drain()  # both in hand
+    outbox.seen()  # both looked at - which used to mean "both in hand"
     outbox.spoken("fixer: merged")  # one actually reached him
 
     assert outbox.owed_about() == {"linking"}
