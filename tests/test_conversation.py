@@ -3,7 +3,7 @@ import time
 
 from excephalon.console import Console
 from excephalon.conversation import Conversation, Turn
-from excephalon.outbox import Outbox
+from excephalon.threads import Ledger
 from excephalon.voice import UNSAID
 
 
@@ -442,7 +442,7 @@ def test_turn_transcribes_thinks_and_speaks():
 
 
 def test_queued_agent_news_is_spoken_when_it_is_the_entitys_turn():
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("Heads up - the auth agent is ready for your review.")
     tts = FakeTTS()
     convo = Conversation(FakeSTT(["goodbye entity"]), FakeBrain(), tts, outbox=outbox)
@@ -453,7 +453,7 @@ def test_queued_agent_news_is_spoken_when_it_is_the_entitys_turn():
 
 
 def test_an_unprompted_message_is_printed_to_the_terminal_not_only_spoken(capsys):
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("the deploy agent needs your call")
     convo = Conversation(FakeSTT(["goodbye entity"]), FakeBrain(), FakeTTS(), outbox=outbox)
 
@@ -465,7 +465,7 @@ def test_an_unprompted_message_is_printed_to_the_terminal_not_only_spoken(capsys
 def test_several_ready_at_once_are_read_out_numbered_and_held_until_one_is_named():
     # "when several are ready, tell them which and let them choose the order." Run together they
     # arrived as a wall nobody could take one piece at a time.
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("fixer: the drive link is fixed", about="fixer")
     outbox.push("docs-sidebar: needs your call on the width", about="docs-sidebar")
     tts = FakeTTS()
@@ -478,7 +478,7 @@ def test_several_ready_at_once_are_read_out_numbered_and_held_until_one_is_named
 
 
 def test_naming_one_of_them_speaks_that_one_and_says_what_is_still_waiting():
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("fixer: the drive link is fixed", about="fixer")
     outbox.push("docs-sidebar: needs your call on the width", about="docs-sidebar")
     tts = FakeTTS()
@@ -496,20 +496,20 @@ def test_an_agents_older_news_is_forgotten_durably_when_newer_news_replaces_it(t
     # The collapse used to be in memory only, so the older sentence sat on in the spool and the
     # next process spoke it: work announced as "ready for your eyes" moments after he reviewed it.
     spool = tmp_path / "outbox.json"
-    outbox = Outbox(spool=spool)
+    outbox = Ledger(spool=spool)
     outbox.push("The split is ready for your eyes.", about="projects-tab")
     outbox.push("All twelve are cards now.", about="projects-tab")
     convo = Conversation(FakeSTT(["goodbye entity"]), FakeBrain(), FakeTTS(), outbox=outbox)
 
     convo.turn()
 
-    assert Outbox(spool=spool).drain() == []  # both are finished with; neither comes back
+    assert Ledger(spool=spool).drain() == []  # both are finished with; neither comes back
 
 
 def test_a_list_already_read_out_is_not_recited_every_turn():
     # It is checked before every listen. Announcing the same names each time round would be the
     # nagging that made periodic progress updates worse than silence.
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("fixer: the drive link is fixed", about="fixer")
     outbox.push("docs-sidebar: needs your call on the width", about="docs-sidebar")
     tts = FakeTTS()
@@ -527,7 +527,7 @@ def test_a_list_already_read_out_is_not_recited_every_turn():
 def test_once_the_list_is_worked_through_the_next_single_notice_is_simply_spoken():
     # The reset that matters. Left standing, the roll-call state would hold every later notice
     # back waiting for a name that is never coming - news they are never told at all.
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("fixer: the drive link is fixed", about="fixer")
     outbox.push("docs-sidebar: needs your call on the width", about="docs-sidebar")
     tts = FakeTTS()
@@ -548,7 +548,7 @@ def test_fresh_news_from_a_listed_agent_keeps_its_place_so_the_numbers_he_heard_
     # position, so a refresh moved that agent to the end and the re-read came out re-numbered.
     # The refresh keeps the agent's place: the re-read says the same names at the same numbers,
     # and picking one yields that agent's NEWEST sentence.
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("fixer: the drive link is fixed", about="fixer")
     outbox.push("docs-sidebar: needs your call on the width", about="docs-sidebar")
     tts = FakeTTS()
@@ -571,7 +571,7 @@ def test_a_refreshed_agent_keeps_its_number_even_as_the_list_grows():
     # The same failure with a new arrival in the mix: the re-read is right (the list truly
     # changed), but the refreshed agent must hold its old place in it, so the numbers he already
     # heard stay true.
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("fixer: the drive link is fixed", about="fixer")
     outbox.push("docs-sidebar: needs your call on the width", about="docs-sidebar")
     tts = FakeTTS()
@@ -595,7 +595,7 @@ def test_the_offered_update_is_carried_by_the_reply_itself_and_checked():
     # carry in its own reply - and the loop CHECKS that the reply carried it before anything is
     # spent. One utterance, one author, nothing riding on trust.
     clock = FakeClock()
-    outbox = Outbox()
+    outbox = Ledger()
     tts = FakeTTS()
     brain = CarryingBrain("Sure - the scrubber drag is ready for your eyes now.")
     convo = Conversation(FakeSTT(["", "sure, go ahead with it", "goodbye entity"]), brain,
@@ -617,7 +617,7 @@ def test_a_reply_that_drops_the_owed_update_leaves_it_owed_and_it_is_spoken_next
     # did not carry the news has not delivered it. It stays owed - back where it stood - and goes
     # out whole at the next opening. Loss becomes repeat, never silence.
     clock = FakeClock()
-    outbox = Outbox()
+    outbox = Ledger()
     tts = FakeTTS()
     convo = Conversation(FakeSTT(["", "sure, go ahead with it", "", "goodbye entity"]),
                          FakeBrain(), tts, outbox=outbox, dormant_after=180, clock=clock)
@@ -636,7 +636,7 @@ def test_a_reply_that_drops_the_owed_update_leaves_it_owed_and_it_is_spoken_next
 
 def test_a_reply_the_brain_leaves_empty_leaves_the_update_owed_for_the_next_opening():
     clock = FakeClock()
-    outbox = Outbox()
+    outbox = Ledger()
     tts = FakeTTS()
 
     class SilentBrain(FakeBrain):
@@ -663,7 +663,7 @@ def test_deliver_update_lands_in_the_same_utterance_as_the_reply_that_announces_
     # mean? You didn't get me anything."): the tool recorded a request that a LATER loop pass was
     # supposed to serve, and anything between the two could void it. The request is now served on
     # the very turn that made it: the app appends the held words to that reply, one utterance.
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("fixer: the drive link is fixed", about="fixer")
     outbox.push("docs-sidebar: needs your call on the width", about="docs-sidebar")
     tts = FakeTTS()
@@ -696,7 +696,7 @@ def test_a_delivery_that_never_began_sounding_is_still_owed():
     # The black-hole class: _say drops the line whole when a barge-in is already set, and the
     # bookkeeping used to mark it delivered anyway - spool cleared, zero audio. Nothing is marked
     # spoken now unless its utterance actually began; the news stays owed and comes back.
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("fixer: the drive link is fixed", about="fixer")
     outbox.push("docs-sidebar: needs your call on the width", about="docs-sidebar")
     tts = FakeTTS()
@@ -750,7 +750,7 @@ def test_its_own_news_enters_its_memory_only_once_he_has_heard_it():
     # model's memory then and there. So the window a compaction or a restart rebuilds from carried
     # lines he had never heard, and the model reasoned from them as things it had told him. It is
     # written from the delivery now.
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("The drive link is fixed.", about="fixer", composed=True)
     brain = RememberingBrain()
     convo = Conversation(FakeSTT(["what time is it"]), brain, FakeTTS(), outbox=outbox)
@@ -765,7 +765,7 @@ def test_a_line_overtaken_before_it_was_ever_spoken_is_taken_back():
     # was the model's own and is still sitting in its session history, where the only reading is
     # that it was said. Holding the overtaken line AND speaking the newer one is the same news
     # twice from the inside.
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("The drive work is being built.", about="fixer", composed=True)
     outbox.push("The drive work is ready for your eyes.", about="fixer", composed=True)
     brain = RememberingBrain()
@@ -790,7 +790,7 @@ def test_a_first_line_he_never_heard_is_taken_back_rather_than_remembered():
             return True  # he is already speaking, so nothing unprompted may break in
 
     brain = RememberingBrain()
-    convo = Conversation(TalkingSTT(["what time is it"]), brain, FakeTTS(), outbox=Outbox(),
+    convo = Conversation(TalkingSTT(["what time is it"]), brain, FakeTTS(), outbox=Ledger(),
                          opening="Back with you - where were we?")
 
     convo.turn()
@@ -800,7 +800,7 @@ def test_a_first_line_he_never_heard_is_taken_back_rather_than_remembered():
 
 
 def test_a_first_line_that_did_sound_is_remembered_as_said():
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("The drive link is fixed.", about="fixer", composed=True)
     brain = RememberingBrain()
     convo = Conversation(FakeSTT(["what time is it"]), brain, FakeTTS(), outbox=outbox,
@@ -817,7 +817,7 @@ def test_an_offer_he_has_not_answered_is_never_delivered_at_him_anyway():
     # road (an errand's report), which bypassed the offer entirely. An offer he did not take is
     # not a licence to deliver.
     clock = FakeClock()
-    outbox = Outbox()
+    outbox = Ledger()
     tts = FakeTTS()
     convo = Conversation(FakeSTT(["", ""]), FakeBrain(), tts, outbox=outbox,
                          dormant_after=180, clock=clock)
@@ -837,7 +837,7 @@ def test_more_arriving_under_a_standing_offer_says_so_by_the_count():
     # "if it now had another update, it should have said something like 'I now have two updates
     # for the scheduled-message item'." The offer stands; what changes is how much is behind it.
     clock = FakeClock()
-    outbox = Outbox()
+    outbox = Ledger()
     tts = FakeTTS()
     convo = Conversation(FakeSTT(["", "", ""]), FakeBrain(), tts, outbox=outbox,
                          dormant_after=180, clock=clock)
@@ -862,7 +862,7 @@ def test_a_mouth_that_receipts_its_own_silence_is_believed(tmp_path):
     # synthesizing, and not one sample reached the air. Answered True regardless, the news was
     # spent over zero audio, which is how a merge report died. The mouth's receipt is now the
     # answer, and a mouth that says nothing sounded is believed over the loop's own view.
-    outbox = Outbox(spool=tmp_path / "spool.json")
+    outbox = Ledger(spool=tmp_path / "spool.json")
     outbox.push("fixer: the drive link is fixed", about="fixer")
 
     class SilentMouth(FakeTTS):
@@ -884,7 +884,7 @@ def test_the_streamed_reply_carries_the_news_itself_on_the_path_the_real_app_run
     # SAME reply stream (one utterance, one stop), and a stream that never got a word into the
     # air spends nothing.
     clock = FakeClock()
-    outbox = Outbox()
+    outbox = Ledger()
     tts = StreamingTTS()
     convo = Conversation(FakeSTT(["", "yeah, let me know", ""]),
                          StreamingBrain("Right - the fix is ready to look at on localhost:5200."),
@@ -905,7 +905,7 @@ def test_a_streamed_utterance_that_never_sounded_spends_nothing():
     # Reply.done() answers with what actually reached the air; drained whole by a barge-in that
     # beat the first word, it answers empty - and the update must still be owed.
     clock = FakeClock()
-    outbox = Outbox()
+    outbox = Ledger()
     interrupt = threading.Event()
 
     class DrainedTTS(StreamingTTS):
@@ -938,7 +938,7 @@ def test_a_welded_update_is_kept_when_a_barge_in_beats_the_reply():
     # The mutation this pins: removing the began-sounding guard must fail this test. His Enter
     # lands at the very end of the think; nothing sounds; the update survives to the next turn.
     clock = FakeClock()
-    outbox = Outbox()
+    outbox = Ledger()
     interrupt = threading.Event()
     tts = FakeTTS()
 
@@ -973,7 +973,7 @@ def test_a_welded_update_is_kept_when_a_barge_in_beats_the_reply():
 
 def test_a_dying_voice_spends_nothing_either():
     # tts.speak raising before any audio used to count as spoken; the news died with the hiccup.
-    outbox = Outbox()
+    outbox = Ledger()
 
     class DyingTTS(FakeTTS):
         def __init__(self):
@@ -1001,7 +1001,7 @@ def test_deliver_update_reaches_news_that_arrived_mid_turn():
     # hand_over_news answers from the outbox's whole debt - queue included - so a request for news
     # that landed WHILE he was talking must be served from the queue too, or the reply promises an
     # update that never follows (the 20:42 failure shape, reachable by another door).
-    outbox = Outbox()
+    outbox = Ledger()
     tts = FakeTTS()
 
     class MidTurnBrain(FakeBrain):
@@ -1029,7 +1029,7 @@ def test_a_weld_that_never_sounds_puts_the_update_back_where_it_stood():
     # [fixer, docs-sidebar, exporter] was read out numbered; he asks for docs-sidebar in a full
     # sentence and Enter beats the audio. Re-queued anywhere but its own place, "two" would now
     # name a different agent than the one he heard under that number - the renumbering failure.
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("fixer: the drive link is fixed", about="fixer")
     outbox.push("docs-sidebar: needs your call on the width", about="docs-sidebar")
     outbox.push("exporter: green and pushed", about="exporter")
@@ -1069,7 +1069,7 @@ def test_the_offered_update_is_durably_delivered(tmp_path):
     # resurrect an update he already heard welded to a reply.
     clock = FakeClock()
     spool = tmp_path / "outbox.json"
-    outbox = Outbox(spool=spool)
+    outbox = Ledger(spool=spool)
     tts = FakeTTS()
     convo = Conversation(FakeSTT(["", "yeah, let me know", ""]),
                          CarryingBrain("Sure - the fix is ready to look at on localhost:5200."),
@@ -1080,7 +1080,7 @@ def test_the_offered_update_is_durably_delivered(tmp_path):
     convo.turn()
     convo.turn()
 
-    assert Outbox(spool=spool).drain() == []  # nothing survives to a next life
+    assert Ledger(spool=spool).drain() == []  # nothing survives to a next life
 
 
 def test_no_stored_line_is_ever_withheld_from_him():
@@ -1089,7 +1089,7 @@ def test_no_stored_line_is_ever_withheld_from_him():
     # link he had asked for twice - "(overtaken, never spoken, for errands: The play cursor drag
     # fix demo is at ...)". It prevented nothing in return; the stale-recording cases it was built
     # for are stopped at their sources. News never spoken is the graver failure, always.
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("The play cursor drag fix demo is at localhost:5223.", about="errands",
                 listed=False)
     tts = FakeTTS()
@@ -1105,7 +1105,7 @@ def test_the_list_is_read_again_only_when_it_would_come_out_different():
     # sentence word for word. Fresh news had arrived for an agent already ON the list, which
     # changed the news but not one word of the roll call, since a roll call says only names. What
     # decides a re-read is what would be SAID, not what is held behind it.
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("fixer: the drive link is fixed", about="fixer")
     outbox.push("docs-sidebar: needs your call on the width", about="docs-sidebar")
     tts = FakeTTS()
@@ -1124,7 +1124,7 @@ def test_the_boot_says_one_thing_and_the_list_waits_for_his_answer():
     # me one." That was fixed by welding them - and the weld was the next failure: a greeting that
     # asked him something with an unrelated menu on its back is two questions in one breath. The
     # first line goes out alone and IS the offer; the list is what he hears once he says yes.
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("fixer: the drive link is fixed", about="fixer")
     outbox.push("docs-sidebar: needs your call on the width", about="docs-sidebar")
     tts = FakeTTS()
@@ -1144,7 +1144,7 @@ def test_the_boot_says_one_thing_and_the_list_waits_for_his_answer():
 
 def test_the_opening_is_said_on_its_own_when_nothing_is_waiting():
     tts = FakeTTS()
-    convo = Conversation(FakeSTT(["goodbye entity"]), FakeBrain(), tts, outbox=Outbox(),
+    convo = Conversation(FakeSTT(["goodbye entity"]), FakeBrain(), tts, outbox=Ledger(),
                          opening="I'm ready. What can I do for you?")
 
     convo.turn()
@@ -1155,7 +1155,7 @@ def test_the_opening_is_said_on_its_own_when_nothing_is_waiting():
 def test_the_opening_is_said_once_and_never_again():
     tts = FakeTTS()
     convo = Conversation(FakeSTT(["what time is it", "goodbye entity"]), FakeBrain(), tts,
-                         outbox=Outbox(), opening="I'm ready. What can I do for you?")
+                         outbox=Ledger(), opening="I'm ready. What can I do for you?")
 
     convo.turn()
     convo.turn()
@@ -1169,7 +1169,7 @@ def test_the_first_line_goes_out_first_and_never_waits_behind_the_news():
     # message makes no sense. why was this sent?"). Riding the news fixed that and broke the other
     # side - the walkthrough arrived welded to a question about something else. The first line is
     # simply FIRST, and alone, so it can never be left behind and never carries another thread.
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("robot-icon-ui: the demo is ready - open localhost:8770", about="robot-icon-ui")
     tts = FakeTTS()
     convo = Conversation(FakeSTT(["yeah", "goodbye entity"]), FakeBrain(), tts,
@@ -1198,7 +1198,7 @@ def test_an_opening_that_missed_its_moment_dies_when_he_speaks():
 
     stt = MidSentenceSTT(["what time is it", "goodbye entity"])
     tts = FakeTTS()
-    convo = Conversation(stt, FakeBrain(), tts, outbox=Outbox(),
+    convo = Conversation(stt, FakeBrain(), tts, outbox=Ledger(),
                          opening="Welcome back. Where were we?")
 
     convo.turn()  # the boot pass holds the greeting: he is mid-sentence, and then he speaks
@@ -1213,7 +1213,7 @@ def test_unlisted_news_is_simply_said_and_never_joins_the_numbered_list():
     # working on one thing. I don't even know what errands would be." The errand hand is
     # machinery, not an agent with a tab and a verdict; its result is something to say, and it
     # cost him five turns trying to close a "task" that never existed.
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("You're on italki as of this week.", about="errands", listed=False)
     outbox.push("fixer: the drive link is fixed", about="fixer")
     tts = FakeTTS()
@@ -1231,7 +1231,7 @@ def test_unlisted_news_is_simply_said_and_never_joins_the_numbered_list():
 
 
 def test_unlisted_news_does_not_hold_back_a_real_roll_call():
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("You're on italki as of this week.", about="errands", listed=False)
     outbox.push("fixer: the drive link is fixed", about="fixer")
     outbox.push("docs-sidebar: needs your call on the width", about="docs-sidebar")
@@ -1250,7 +1250,7 @@ def test_news_already_in_hand_is_pruned_when_its_agent_is_dropped():
     # and that copy was still offered after the user had sent the agent new instructions: "surely
     # there's no update for smart grouping. You just sent off the latest message to it." The hand
     # prunes itself with what the outbox collected.
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("grouping: done", about="grouping")
     outbox.push("fixer: ready for your eyes", about="fixer")
     tts = FakeTTS()
@@ -1269,7 +1269,7 @@ def test_news_already_in_hand_is_pruned_when_its_agent_is_dropped():
 def test_an_agent_finishing_while_they_are_choosing_joins_the_list_and_is_said():
     # Otherwise it sits silent behind a list that was read out before it existed, and the only
     # sign of it is a tab they had no reason to open.
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("fixer: the drive link is fixed", about="fixer")
     outbox.push("docs-sidebar: needs your call on the width", about="docs-sidebar")
     tts = FakeTTS()
@@ -1297,7 +1297,7 @@ def test_news_after_a_long_lull_is_offered_not_dumped():
     # ready'" - dormant, he is mid-something-else; the announcement lets him decide when to
     # stop, get comfortable, and take it.
     clock = FakeClock()
-    outbox = Outbox()
+    outbox = Ledger()
     tts = FakeTTS()
     convo = Conversation(FakeSTT([""]), FakeBrain(), tts, outbox=outbox,
                          dormant_after=180, clock=clock)
@@ -1334,7 +1334,7 @@ def test_a_bare_go_ahead_is_answered_with_the_held_update_itself():
     # delivered either way, so what the agent had reported reached him not at all. A bare
     # go-ahead asks for that content and nothing else, so the app says the content.
     clock = FakeClock()
-    outbox = Outbox()
+    outbox = Ledger()
     tts = FakeTTS()
     brain = FakeBrain()
     convo = Conversation(FakeSTT(["", "yes", ""]), brain, tts, outbox=outbox,
@@ -1359,7 +1359,7 @@ def test_answering_the_offer_is_answered_by_one_reply_that_carries_the_update():
     # answers his words, the app appends the stored update to that same utterance word for word,
     # and nothing is left behind to repeat or rides on the brain remembering to include it.
     clock = FakeClock()
-    outbox = Outbox()
+    outbox = Ledger()
     tts = FakeTTS()
     brain = CarryingBrain("Sure - the fix is ready to look at on localhost:5200.")
     convo = Conversation(FakeSTT(["", "yeah, let me know", ""]), brain, tts, outbox=outbox,
@@ -1389,7 +1389,7 @@ def test_a_go_ahead_with_several_held_says_the_first_and_names_the_rest():
     # in reply to the answer to one, about updates it had just named to him. A go-ahead is a
     # go-ahead: the first one is said, and the rest are named so the choice stays open.
     clock = FakeClock()
-    outbox = Outbox()
+    outbox = Ledger()
     tts = FakeTTS()
     convo = Conversation(FakeSTT(["", "okay"]), FakeBrain(), tts, outbox=outbox,
                          dormant_after=180, clock=clock)
@@ -1411,7 +1411,7 @@ def test_a_brain_failure_on_the_offered_turn_does_not_lose_the_news():
     # The update was popped into the turn that died; it must come back, or the one line he was
     # promised evaporates with the error.
     clock = FakeClock()
-    outbox = Outbox()
+    outbox = Ledger()
     tts = FakeTTS()
 
     class BrokenBrain:
@@ -1432,7 +1432,7 @@ def test_a_brain_failure_on_the_offered_turn_does_not_lose_the_news():
 
 def test_the_offer_is_made_once_not_every_pass_round_the_loop():
     clock = FakeClock()
-    outbox = Outbox()
+    outbox = Ledger()
     tts = FakeTTS()
     convo = Conversation(FakeSTT(["", "", ""]), FakeBrain(), tts, outbox=outbox,
                          dormant_after=180, clock=clock)
@@ -1451,7 +1451,7 @@ def test_engaging_with_something_else_hands_the_reply_the_news_or_it_is_spoken_n
     # the update in around his question - a separate stored line arriving afterwards is how he
     # heard everything twice.
     clock = FakeClock()
-    outbox = Outbox()
+    outbox = Ledger()
     tts = FakeTTS()
     brain = FakeBrain()
     convo = Conversation(FakeSTT(["", "what time is it", "goodbye entity"]), brain, tts,
@@ -1472,7 +1472,7 @@ def test_engaging_with_something_else_hands_the_reply_the_news_or_it_is_spoken_n
 
 def test_news_while_he_is_active_is_not_gated_behind_an_offer():
     clock = FakeClock()
-    outbox = Outbox()
+    outbox = Ledger()
     tts = FakeTTS()
     convo = Conversation(FakeSTT(["goodbye entity"]), FakeBrain(), tts, outbox=outbox,
                          dormant_after=180, clock=clock)
@@ -1489,7 +1489,7 @@ def test_stacked_news_about_one_agent_collapses_to_the_newest():
     # was away queued its own narration about the SAME agent, and the roll call read the same name
     # four times. Undelivered news about an agent is superseded by newer news about it: the newest
     # sentence already describes where things stand.
-    outbox = Outbox()
+    outbox = Ledger()
     for stale in ("asana-submit-fix is on it.", "asana-submit-fix hit a snag but recovered.",
                   "asana-submit-fix is testing now."):
         outbox.push(stale, about="asana-submit-fix", composed=True)
@@ -1506,7 +1506,7 @@ def test_stacked_news_about_one_agent_collapses_to_the_newest():
 
 
 def test_news_about_different_agents_still_all_arrives():
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("fixer: done", about="fixer")
     outbox.push("fixer: really done", about="fixer")
     outbox.push("docs-sidebar: needs your call", about="docs-sidebar")
@@ -1528,7 +1528,7 @@ def test_without_an_outbox_the_loop_is_unchanged():
 
 
 def test_a_message_arriving_during_a_lull_is_spoken_on_the_next_pass():
-    outbox = Outbox()
+    outbox = Ledger()
 
     class LullSTT:
         # the real MicSTT yields "" when its interrupt fires during a lull; mimic that here by
@@ -1679,7 +1679,7 @@ def test_delivered_news_leaves_the_durable_spool(tmp_path):
     # and the restarted app had no trace of what it still owed. Only actual delivery - the
     # words reaching the user - clears the spool; until then a fresh outbox re-owes them.
     spool = tmp_path / "outbox.json"
-    outbox = Outbox(spool=spool)
+    outbox = Ledger(spool=spool)
     outbox.push("fixer finished the drive link", about="fixer", composed=True)
     tts = FakeTTS()
     convo = Conversation(FakeSTT(["hello", "goodbye entity"]), FakeBrain(), tts, outbox=outbox)
@@ -1687,7 +1687,7 @@ def test_delivered_news_leaves_the_durable_spool(tmp_path):
     convo.run()
 
     assert any("fixer finished" in line for line in tts.spoken)
-    assert not Outbox(spool=spool)  # delivered, so a restarted outbox owes nothing
+    assert not Ledger(spool=spool)  # delivered, so a restarted outbox owes nothing
 
 
 def test_run_reports_each_completed_turn_to_on_turn():
@@ -1729,7 +1729,7 @@ def test_a_wake_word_with_words_after_it_still_wakes_it():
 def test_agent_news_still_arrives_while_it_is_asleep():
     # They asked outright: if they say "stop listening" and then it has something to relay from an
     # agent, does it speak up or wait for them? Sleep silences the user's turns, not the agents' news.
-    outbox = Outbox()
+    outbox = Ledger()
     tts = FakeTTS()
     convo = Conversation(FakeSTT(["stop listening", "anything?", "goodbye entity"]),
                          FakeBrain(), tts, outbox=outbox)
@@ -1832,7 +1832,7 @@ def test_whatever_the_outbox_has_to_say_is_one_utterance_to_stop():
     # They had to hit stop over and over while a report came at them line by line. Whatever goes
     # out - the roll call naming several, or one agent's news - is one utterance, so one stop ends
     # it. An agent with no name to it falls back to its own words, which is what these are.
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("first agent finished")
     outbox.push("second agent finished")
     tts = FakeTTS()
@@ -1854,7 +1854,7 @@ def test_news_deferred_mid_sentence_is_retried_at_the_next_pause():
     # held news sat unspoken for nine minutes and he had to ask ("I keep having to prompt this
     # thing for updates"). So a defer puts the flag back up: still waiting to be spoken is
     # exactly what the flag means.
-    outbox = Outbox()
+    outbox = Ledger()
 
     class MidSentenceSTT(FakeSTT):
         def is_mid_utterance(self):
@@ -1870,7 +1870,7 @@ def test_news_deferred_mid_sentence_is_retried_at_the_next_pause():
 
 
 def test_it_stays_quiet_while_they_are_mid_sentence_then_delivers():
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("the fixer agent has news")
     tts = FakeTTS()
 
@@ -1968,7 +1968,7 @@ def test_a_requested_update_is_spoken_by_the_app_word_for_word_after_the_turn():
     # The deep fix for one piece of news in two mouths: asked for an agent's update in a full
     # sentence, the brain hands it over (deliver_update) instead of retelling it, and the app
     # speaks the held copy word for word at the first opening - one teller, the exact words.
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("fixer: the drive link is fixed", about="fixer")
     outbox.push("docs-sidebar: needs your call on the width", about="docs-sidebar")
     tts = FakeTTS()
@@ -2052,7 +2052,7 @@ def test_it_is_told_what_was_said_in_its_name_that_it_did_not_write():
             heard.append(utterance)
             return "a reply"
 
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("fixer: the drive link is fixed")
     convo = Conversation(FakeSTT(["", "what did you just say to me"]), NotingBrain(), FakeTTS(),
                          outbox=outbox)
@@ -2074,7 +2074,7 @@ def test_news_the_brain_composed_is_not_read_back_to_it_as_someone_elses():
             heard.append(utterance)
             return "a reply"
 
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("The drive work's done - it just needs your eyes.", about="fixer", composed=True)
     convo = Conversation(FakeSTT(["", "what needs my eyes exactly"]), NotingBrain(), FakeTTS(),
                          outbox=outbox)
@@ -2359,7 +2359,7 @@ def test_fresh_news_about_an_agent_already_listed_does_not_repeat_the_same_sente
     # it comes out word for word identical, and re-reading it delivers nothing while sounding
     # broken - "why did it just give me the same message twice in a row?" (22:22:59 and 22:23:07).
     # The list stands, his numbers still hold, and picking one is what delivers its newest news.
-    outbox = Outbox()
+    outbox = Ledger()
     tts = FakeTTS()
     convo = Conversation(FakeSTT(["", "", "", "one"]), FakeBrain(), tts, outbox=outbox)
     outbox.push("fixer is still going", about="fixer")
@@ -2398,7 +2398,7 @@ def test_a_pasted_report_never_reaches_the_voice_or_the_record():
                     "Say the word when you've looked.")
 
     convo = Conversation(FakeSTT(["how's the autoplay fix", "goodbye entity"]), PastingBrain(),
-                         tts, outbox=Outbox())
+                         tts, outbox=Ledger())
     convo.turn()
     convo.turn()
 
@@ -2415,7 +2415,7 @@ def test_news_about_other_work_holds_while_his_eyes_are_on_one_thing():
     # "Now would be a good time to ask about the other two updates," which he should never have
     # had to say. While a review is open, other news holds; the moment it closes, the list is
     # offered on its own.
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("names: the naming layer is ready for your eyes", about="names")
     outbox.push("autoplay: the auto-play fix is ready for your eyes", about="autoplay")
     reviewing = {"spinner"}
@@ -2436,7 +2436,7 @@ def test_a_walkthrough_carries_no_menu_on_its_back():
     # His "Yes." at 19:56 was answered with the spinner walkthrough AND "Two updates waiting...
     # Which first?" welded to it - a menu read out at the exact moment his eyes went onto one
     # thing. Delivering a walkthrough OPENS a review, so the list waits for his verdict.
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("spinner: ready for your eyes - open localhost:5599", about="spinner")
     outbox.push("names: the naming layer is ready too", about="names")
     tts = FakeTTS()
@@ -2455,7 +2455,7 @@ def test_a_pick_spends_the_offer_so_the_leftover_never_rides_unrelated_words():
     # ship it still stands.", about a different agent entirely - came back with the leftover
     # spinner walkthrough welded on ("it shouldn't be providing information about more than one
     # different task in a single message").
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("names: the naming layer is ready", about="names")
     outbox.push("spinner: the spinner is ready", about="spinner")
     tts = FakeTTS()
@@ -2476,7 +2476,7 @@ def test_a_held_update_about_other_work_does_not_ride_his_reply_mid_review():
     # One thing at a time holds for the offered-rides-the-turn path too: with his eyes on one
     # piece of work, a leftover update about another waits for the gate, never welds itself to
     # whatever he says next.
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("spinner: the spinner is ready", about="spinner")
     tts = FakeTTS()
     reviewing = {"names"}
@@ -2498,7 +2498,7 @@ def test_a_greeting_can_no_longer_say_the_same_thing_as_the_news_behind_it():
     # one message ("it repeats ... twice in a row like an insane person"). A similarity check used
     # to drop the greeting when it happened. Nothing to check now: the greeting and the news are
     # never in one utterance at all, so a repeat cannot be built.
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("Agent naming is waiting for your verdict - names now get the project prefix.",
                 about="namer")
     tts = FakeTTS()
@@ -2556,7 +2556,7 @@ def test_a_silence_alarm_never_destroys_a_report_from_the_same_agent():
     # "been silent for 20 minutes" arrived twenty minutes after that agent's merge report and,
     # being the newest news about it, superseded it - the one thing he was waiting for was
     # destroyed by a timer's guess about an agent that had already finished.
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("fixer: landed and wrapped up", about="fixer", kind="landed")
     outbox.push("fixer: been silent for 20 minutes", about="fixer", kind="quiet")
     tts = FakeTTS()
@@ -2571,7 +2571,7 @@ def test_a_silence_alarm_never_destroys_a_report_from_the_same_agent():
 def test_a_landing_report_is_never_held_behind_a_review():
     # One thing at a time holds other threads' chatter - never a thread's LAST WORD. Held, a
     # merge report is the black hole this project has already sat through once.
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("fixer: it merged and is wrapped up", about="fixer", kind="landed")
     tts = FakeTTS()
     convo = Conversation(FakeSTT(["goodbye entity"]), FakeBrain(), tts, outbox=outbox,
@@ -2586,7 +2586,7 @@ def test_a_review_nobody_ever_ruled_on_stops_holding_the_fleet():
     # The gate silences every other thread, so it may never outlive its premise: a verdict that
     # never got RECORDED left a review open forever, and behind it he had a merge report he was
     # asking for. Past a couple of his turns with no verdict, his attention has plainly moved.
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("names: the naming layer is ready for your eyes", about="names")
     tts = FakeTTS()
     convo = Conversation(FakeSTT(["ship it", "what about the names", "and now", "goodbye entity"]),

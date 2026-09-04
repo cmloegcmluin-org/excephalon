@@ -1,6 +1,6 @@
 import pytest
 
-from excephalon.delivery import Delivery, DeliveryError
+from excephalon.threads import Delivery, DeliveryError
 
 
 def test_new_work_is_being_built():

@@ -3,7 +3,7 @@ import threading
 import time
 
 from excephalon.foreman import FOREMAN_MODEL, Foreman
-from excephalon.outbox import Outbox
+from excephalon.threads import Ledger
 
 
 class FakeDesk:
@@ -34,7 +34,7 @@ class FakeSession:
 
 def _foreman(reply, desk=None, outbox=None):
     desk = desk or FakeDesk()
-    outbox = outbox if outbox is not None else Outbox()
+    outbox = outbox if outbox is not None else Ledger()
     session = FakeSession(reply)
     made = []
 
@@ -171,7 +171,7 @@ def test_a_dead_foreman_session_is_news_not_a_black_hole():
         def ask(self, prompt, on_message=None, on_text=None):
             raise RuntimeError("session wedged")
 
-    outbox = Outbox()
+    outbox = Ledger()
     foreman = Foreman(FakeDesk(), outbox, session_factory=lambda options: BrokenSession())
 
     foreman.consider("fixer", "anything")
@@ -187,7 +187,7 @@ def test_the_foreman_stays_silent_about_work_already_delivered():
     # reasoned "with no log I can't confirm which", and its shrug reached the user as a
     # heads-up. Delivered work needs no investigation and no news - the landed narration
     # already said it - so the foreman answers a question about it with nothing at all.
-    outbox = Outbox()
+    outbox = Ledger()
 
     class WrappedDesk:
         def ended(self, agent):

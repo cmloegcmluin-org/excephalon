@@ -1,5 +1,5 @@
 from excephalon.inbox_watcher import InboxWatcher
-from excephalon.outbox import Outbox
+from excephalon.threads import Ledger
 
 
 class Heard:
@@ -37,7 +37,7 @@ class SpyMonitor:
 
 def test_a_new_complete_line_is_pushed_to_the_outbox(tmp_path):
     heard = Heard()
-    watcher = InboxWatcher(tmp_path, Outbox(), events=heard)
+    watcher = InboxWatcher(tmp_path, Ledger(), events=heard)
     (tmp_path / "auth-agent.txt").write_text("I need your call: JWT or sessions?\n", encoding="utf-8")
 
     watcher.poll_once()
@@ -51,7 +51,7 @@ def test_a_new_complete_line_is_pushed_to_the_outbox(tmp_path):
 def test_content_written_before_watching_is_not_replayed(tmp_path):
     (tmp_path / "old.txt").write_text("stale question from before startup\n", encoding="utf-8")
     heard = Heard()
-    watcher = InboxWatcher(tmp_path, Outbox(), events=heard)  # seeds offsets past existing content
+    watcher = InboxWatcher(tmp_path, Ledger(), events=heard)  # seeds offsets past existing content
 
     watcher.poll_once()
 
@@ -60,7 +60,7 @@ def test_content_written_before_watching_is_not_replayed(tmp_path):
 
 def test_a_partial_line_waits_until_its_newline_arrives(tmp_path):
     heard = Heard()
-    watcher = InboxWatcher(tmp_path, Outbox(), events=heard)
+    watcher = InboxWatcher(tmp_path, Ledger(), events=heard)
     f = tmp_path / "agent.txt"
     f.write_text("still typing this th", encoding="utf-8")  # no newline yet
 
@@ -75,7 +75,7 @@ def test_a_partial_line_waits_until_its_newline_arrives(tmp_path):
 
 def test_lines_across_several_files_all_surface(tmp_path):
     heard = Heard()
-    watcher = InboxWatcher(tmp_path, Outbox(), events=heard)
+    watcher = InboxWatcher(tmp_path, Ledger(), events=heard)
     (tmp_path / "a.txt").write_text("agent A is ready for review\n", encoding="utf-8")
     (tmp_path / "b.txt").write_text("agent B hit a failing test\n", encoding="utf-8")
 
@@ -88,7 +88,7 @@ def test_a_cleared_inbox_file_resyncs_from_the_top(tmp_path):
     # Inboxes are append-only in normal use, but if one is cleared and reused, a shrink below where
     # we'd read tells us to resync so the next line isn't lost.
     heard = Heard()
-    watcher = InboxWatcher(tmp_path, Outbox(), events=heard)
+    watcher = InboxWatcher(tmp_path, Ledger(), events=heard)
     f = tmp_path / "agent.txt"
     f.write_text("first question\n", encoding="utf-8")
     watcher.poll_once()
@@ -104,7 +104,7 @@ def test_a_cleared_inbox_file_resyncs_from_the_top(tmp_path):
 
 def test_blank_lines_are_ignored(tmp_path):
     heard = Heard()
-    watcher = InboxWatcher(tmp_path, Outbox(), events=heard)
+    watcher = InboxWatcher(tmp_path, Ledger(), events=heard)
     (tmp_path / "agent.txt").write_text("\n  \nreal message\n\n", encoding="utf-8")
 
     watcher.poll_once()
@@ -117,7 +117,7 @@ def test_each_poll_ticks_the_monitor(tmp_path):
     # check rides on. WHICH agents exist, and when each last spoke, comes from the desk - a
     # filename in here is not an agent, and reading it as one invented two of them.
     monitor = SpyMonitor()
-    watcher = InboxWatcher(tmp_path, Outbox(), monitor=monitor)
+    watcher = InboxWatcher(tmp_path, Ledger(), monitor=monitor)
     (tmp_path / "not-an-agent.txt").write_text("a note Excephalon wrote to itself\n", encoding="utf-8")
 
     watcher.poll_once()
@@ -132,7 +132,7 @@ def test_a_multi_line_report_arrives_as_one_event_not_line_by_line(tmp_path):
     # heads-up, and they had to hit STOP for each one in turn. It is one event now, and what the
     # user hears is composed from his own name for the work - never from these lines.
     heard = Heard()
-    watcher = InboxWatcher(tmp_path, Outbox(), events=heard)
+    watcher = InboxWatcher(tmp_path, Ledger(), events=heard)
     (tmp_path / "fixer.txt").write_text(
         "IN PROGRESS - backfill. Found a leaking test in your real state folder.\n"
         "Root cause: build_app calls load_dotenv.\nFixed and committed as 91459e5.\n",
@@ -146,10 +146,10 @@ def test_a_multi_line_report_arrives_as_one_event_not_line_by_line(tmp_path):
 def test_with_an_events_sink_a_written_line_reports_there_instead(tmp_path):
     # The narrator words agent news in the brain's own voice; the watcher's job shrinks to saying
     # what was written and by whom.
-    from excephalon.outbox import Outbox
+    from excephalon.threads import Ledger
 
     events = []
-    outbox = Outbox()
+    outbox = Ledger()
     watcher = InboxWatcher(tmp_path, outbox, events=lambda *e: events.append(e))
     (tmp_path / "fixer.txt").write_text("Need your OAuth step before I can continue.\n",
                                         encoding="utf-8")

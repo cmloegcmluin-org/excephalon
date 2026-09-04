@@ -174,9 +174,9 @@ a known weakness rather than a solution.
   mechanism fired are not evidence anything received it. The chat bubbles took four attempts for
   exactly this reason — the wrap was measured and correct while the tint still painted edge to edge,
   and only screenshotting the pane and reading the pixels back showed it.
-- **Latched flags.** `Outbox.arrived` is cleared only by draining. Any path that decides not to
-  deliver must still drain, or the window's mic yields empty turns forever and submissions are
-  never read. That froze a whole session.
+- **Latched flags.** `Ledger.arrived` is cleared only by looking (`seen`). Any path that decides
+  not to deliver must still look, or the window's mic yields empty turns forever and submissions
+  are never read. That froze a whole session.
 - **A helper that kills its host.** The mic pump writes every frame to the crash-proof recording
   before doing anything else, and that call was unguarded: 37 hours in, the WAV crossed the format's
   4 GiB ceiling, `wave` raised while patching the header, and the pump thread died — Excephalon went
@@ -296,42 +296,45 @@ delivery of agent news at a lull; it puts the desk's fleet briefing in front of 
 turn and streams the reply into the voice as it is written - through two gates: a line opening
 with ">" is a pasted document, never speech, dropped before it can sound and off the record's
 copy (the brain once read an agent's whole markdown report at him - "ten times bigger than I
-ever want you to send a message to me"), and the stray goodbye. One thing at a time is the
-loop's own rule, not the persona's: while any work is in review (`desk.in_review` - presented,
-walkthrough spoken, verdict pending), other agents' news holds and no menu is read; a
-walkthrough OPENS a review, so no roll call rides its back; and the held list is offered the
-moment the verdict closes the review, which is the moment he once had to name by hand ("Now
-would be a good time to ask about the other two updates"). The gate silences everything, so it
-may never outlive its premise: a thread's CONCLUSION is never held by it (a merge report is his
-last word, and holding one is the black hole), and it releases after `REVIEW_HOLDS_TURNS` of his
-turns with no verdict — a verdict that never got RECORDED once held the whole fleet's news
-behind a review nobody could close. A turn of HIS that the brain answers with no words at all is
-asked once more, told what happened (`SILENT_TURN_NOTICE`), and failing that answered in the
-app's own error line: he said "ship it", heard dead air, and waited half an hour for a landing
-report nobody had recorded. His SILENCE is bounded here too (`DEFAULT_ANSWER_WITHIN`), whatever
-the brain is doing underneath: the brain bounds each of its own asks at 180s but one turn can
-spend several — lock, shed, reconnect, ask again — and a turn of his ran twelve minutes with no
-word at all ("it seems to be stuck again. I said ship it then it never said anything"). Bounded
-on PROGRESS, not on the turn or on silence: each piece that reaches the air resets his wait, so
-a reply still arriving is never cut off — measured on silence alone the bound never fired for
-the turn that mattered, because the brain had written one clause before it hung and "it has said
-something" stayed true while he sat twenty minutes. Progress is the turn MOVING, never the turn
-speaking: every message the model sends — a tool call, a tool's result, a word — resets this
-bound and the brain's own 180s one alike (`on_activity`, carried from `SdkSession`'s
-`on_message`). Measured on words alone, a turn doing exactly what he asked was indistinguishable
-from a turn that had died, because reading his calendar is minutes of tool calls with no words
-in them: "Can we go through a demo of your ability to manage my day based on a calendar that
-you've prepared" was answered ninety seconds later with the broken-head line, mid-errand. And the cancel it fires goes on a thread of
-its own, never waited on: the interrupt reaches the CLI by scheduling a coroutine on the
-session's own loop, which a session hung on a dead read never runs — called inline, it defeated
-the very deadline that called it. The brain-failure path it raises into already keeps the held
-update owed. His words are read as a PICK only
-while a roll call or an offer actually stands - with no list read out, a short sentence that
-happens to contain "one" is his own words, not a choice off a menu he never heard - and a pick
-SPENDS the offer: left standing, the leftover item rode his next, unrelated words ("The ship it
-still stands." came back with the spinner walkthrough welded on). The offered-update-rides-the-
-reply path obeys the review gate too: mid-review, a held update about other work waits, welded
-to nothing. `voice.py` is how a streamed reply
+ever want you to send a message to me"), and the stray goodbye. The loop HOLDS nothing of its
+own: every delivery pass it reads what the store says he is owed (`threads.Ledger`), decides the
+ONE utterance that goes out, and settles only what the mouth's receipt says began sounding. One
+thing at a time is the loop's own rule, not the persona's: while any work is in review
+(`desk.in_review` - presented, walkthrough spoken, verdict pending) the store's `focus` holds
+every other agent's news and no menu is read; a walkthrough OPENS a review, so no roll call rides
+its back; and the held list is offered the moment the verdict closes the review, which is the
+moment he once had to name by hand ("Now would be a good time to ask about the other two
+updates"). The hold silences everything, so it may never outlive its premise: a thread's
+CONCLUSION is never held by it (a merge report is his last word, and holding one is the black
+hole), and it releases after `threads.FOCUS_HOLDS_TURNS` of his turns with no verdict — a verdict
+that never got RECORDED once held the whole fleet's news behind a review nobody could close. A
+turn of HIS that the brain answers with no words at all is asked once more, told what happened
+(`SILENT_TURN_NOTICE`), and failing that answered in the app's own error line: he said "ship it",
+heard dead air, and waited half an hour for a landing report nobody had recorded. His SILENCE is
+bounded here too (`DEFAULT_ANSWER_WITHIN`), whatever the brain is doing underneath: the brain
+bounds each of its own asks at 180s but one turn can spend several — lock, shed, reconnect, ask
+again — and a turn of his ran twelve minutes with no word at all ("it seems to be stuck again. I
+said ship it then it never said anything"). Bounded on PROGRESS, not on the turn or on silence:
+each piece that reaches the air resets his wait, so a reply still arriving is never cut off —
+measured on silence alone the bound never fired for the turn that mattered, because the brain had
+written one clause before it hung and "it has said something" stayed true while he sat twenty
+minutes. Progress is the turn MOVING, never the turn speaking: every message the model sends — a
+tool call, a tool's result, a word — resets this bound and the brain's own 180s one alike
+(`on_activity`, carried from `SdkSession`'s `on_message`). Measured on words alone, a turn doing
+exactly what he asked was indistinguishable from a turn that had died, because reading his
+calendar is minutes of tool calls with no words in them: "Can we go through a demo of your
+ability to manage my day based on a calendar that you've prepared" was answered ninety seconds
+later with the broken-head line, mid-errand. And the cancel it fires goes on a thread of its own,
+never waited on: the interrupt reaches the CLI by scheduling a coroutine on the session's own
+loop, which a session hung on a dead read never runs — called inline, it defeated the very
+deadline that called it. The brain-failure path it raises into leaves whatever was owed exactly
+where it stood. His words are read as a PICK only while a roll call or an offer actually stands
+(the store's `recital` and `offer`) - with no list read out, a short sentence that happens to
+contain "one" is his own words, not a choice off a menu he never heard - and a pick SPENDS the
+offer: left standing, the leftover item rode his next, unrelated words ("The ship it still
+stands." came back with the spinner walkthrough welded on). An update offered into a brain turn
+obeys the focus too: mid-review, a held update about other work waits, carried by nothing.
+`voice.py` is how a streamed reply
 becomes audible — sentences cut the moment they end, synthesized and played while the next forms,
 one stop draining everything — and an engine hands its line over as PIECES rather than one
 finished clip, so a voice that generates over a network is not held back until its last byte;
@@ -591,7 +594,7 @@ pestered about"). It records the fleet in
 `runtime/agents.json` and revives it on startup — an agent whose log is already in the archive is
 NOT brought back (the record is written on the way down, so one wrapped up from outside the app
 would otherwise rise from the dead and have its old news re-raised: "this is the third time it's
-pestered me"), and that boot sweep spares what a thread ENDED as (`outbox.CONCLUSIONS`, kept by
+pestered me"), and that boot sweep spares what a thread ENDED as (`threads.CONCLUSIONS`, kept by
 `drop(keep_conclusions=True)`): the scroll-position fix merged, its report was offered at a lull
 he never answered, the session closed with it still owed, and the next launch threw it away — so
 he was never told the feature had shipped and heard it later as a clause inside a greeting, each surviving agent resumed by CLI session id, one caught
@@ -616,7 +619,7 @@ you to look at". The digest opens with the ladder every thread climbs — his ow
 in work → in review → in revision → landing → DELIVERED (`delivery.LADDER`) — and claims itself
 the one truth about stage, which the per-turn briefing and the homecoming note both bind the
 brain to; and it claims a work in review
-only once nothing about that agent is still waiting to be spoken (`Outbox.owed_about`,
+only once nothing about that agent is still waiting to be spoken (`Ledger.owed_about`,
 the spool's view of the whole debt): `mark_ready` fires when the walkthrough is COMPOSED, that
 walkthrough then sat in hand for over an hour, and the brain briefed across the gap told him "I
 presented it earlier... no new update since then" about steps he had never heard ("That's false.
@@ -665,7 +668,7 @@ machine, and he was then twice told the feature had landed and was live. `retire
 a tab was once closed over a finished feature and he met it as a fait accompli ("are you saying
 you delivered a feature without me verifying it first?"), so a verdict is the only state a
 wrap-up is legal from, exactly as it is for the push - and it REFUSES a desked agent whose news
-is still waiting to be spoken (`Outbox.owed_about`): the wrap-up drops the agent's queued news
+is still waiting to be spoken (`Ledger.owed_about`): the wrap-up drops the agent's queued news
 on the way out, which is right for news he has moved past ("that feature is already done") and
 was catastrophic for a merged report he had never heard - the submission-feedback agent's
 "Merged." died in exactly that drop, and the landed feature read as lost ("clearly my feature
@@ -674,121 +677,114 @@ rules (rebase before presenting, present for the user's EYES, the engineering la
 pointer to the machine-wide engineering law file when one exists (`law_path`, home-relative in
 `__main__` so nothing personal enters the source); agents load their repo's checked-in CLAUDE.md
 (`setting_sources=["project"]`) and never the user's personal config, whose conversation rules
-and reply-format hook break a coding agent. `delivery.py` is the review loop as code — building →
-presented-with-steps → landing, a verdict impossible on work never presented, approval dispatching
-the landing and rejection the feedback mechanically, so the loop's order is a rule rather than a
-persona habit. Every stage always has a briefing phrase (`describe`), because being-built used to
-earn no words and a stage the briefing never stated was one the brain invented; rejections are
-counted so "in revision" reads apart from first drafting, which is a distinction he named himself
-— and since the walkthrough itself can wait unspoken, `desk.verdict` refuses any
-APPROVAL while it does: an ambiguous "yes" was once recorded as approval of steps that had never
-been spoken, and the work merged without his eyes ever on it ("I never even accepted it; it was
-never presented to me to be validated"). A rejection stands either way — he often judges from his
-own looking — and drops the now-stale walkthrough. An approval may CARRY a change — "just ship it
-with that small tweak" is a sign-off, not notes to re-present over — recorded approved with the
-change riding the one landing order (`APPROVED_WITH_CHANGE`): routed as words alone instead, no
-verdict reached the record, the landing gate refused the push he had ordered, and he was asked to
-approve again ("I had told it in no uncertain terms that I didn't need to approve the work
-further"). Re-approving work already landing is agreement, a quiet yes - raised as an error
-instead, "The ship it still stands." was answered with what "the system needs", machinery in his
-ears; `steps.py` decides
-what a streamed message becomes there — the agent's words as messages, and its commands, diffs and
-output as the machinery under them, capped at both ends with what was dropped counted in place.
-**A gate that judged whether stored news had been overtaken lived here for two days and was
-REMOVED**, by the evidence: it prevented nothing and twice destroyed what he was asking for —
-the update he had just answered "Yes." to (it read its own "I've got an update on X when
-you're ready" as having delivered it) and the demo link he had asked for twice. The staleness
-it was built for is stopped at the sources instead — an errand may not ask him a question,
-and telling an agent, ruling on its work or retiring it drops its held news — and news never
-spoken stays the graver failure. Do not rebuild a model's veto over what he is owed.
-`threads.py` is the ONE store of what he is owed. News used to wait in three places — the
-outbox's queue, the spool behind it, and the conversation's own hand, which drained the queue
-and held items for a lull — and every cross-place failure in this record lived in the split:
-a drop that cleaned the queue while the copy in hand was still offered, a supersede that
-emptied memory while the spool kept yesterday's sentence for the next boot to read out, a
-"who is owed?" answered from the queue while the walkthrough sat in hand for an hour, three
-reports dying in a wedged process's hand. Now there is `Ledger`: a fact is owed from `owe` until
-`settle` (spoken, on the mouth's receipt) or `drop`; the loop READS `owed` every pass, speaks,
-and settles — nothing is ever drained into anyone's keeping, and `drain` survives only as a
-test's way of saying "he heard it all". The rules the hand used to apply are applied where the
-fact is written: one fact per thread, the newest taking that thread's FIRST place (so the
-numbers he was read stay true), an alarm never displacing a report, threadless news never
-collapsed. Looking (`seen`) clears the arrived signal the window's mic yields a delivery turn
-on; speaking does not, because a pass that decides not to speak yet must still stop the mic
-spinning. `outbox.Outbox` is now that class under its old name, so every producer keeps
-pushing to what it always pushed to; the file on disk is the same `runtime/outbox.json`, so
-nothing owed is lost across the upgrade. The store also holds where his ATTENTION is and what he
-has been ASKED - the two things the loop used to keep as a spread of latched flags, each set and
-cleared in a different place, two of which starved each other in one night: `focus` answers
-whose work is genuinely in front of his eyes, bounded by his own turns (`FOCUS_HOLDS_TURNS`,
-`his_turn`), because a verdict that never got recorded once held a merge report behind a review
-nobody could close; `offer`/`offered`/`spend_offer` is the standing offer and how much was behind
-it, spent by his answer; `recital`/`recited` is the menu as last read out, so it is re-read only
-when it would come out different and forgotten only when nothing is owed. `pick` is which listed
-piece of work he just named - by a word of ITS TITLE or by number, name beating number, a
-shared word picking neither, a denial never a pick - and `speaker.roll_call` is the app's own
-numbered menu, labelled by his words for each piece of work; the module those two lived in is
-gone. What follows is that menu's law, which is unchanged: several agents finishing at once are read out numbered and
-held, and the list is read again ONLY when it would come out in different words — compared
-against the news behind it instead, fresh news for an agent already listed re-read a
-word-for-word identical sentence eight seconds later ("why did it just give me the same message
-twice in a row?"), while a roll call says only names. It says which one a reply just named — but a short reply carrying a DENIAL ("no",
-"not") is never a pick, because picking is affirmative and the sentence that got read as one was
-him correcting the transcriber ("I said errands, not Aaron's"), answered with that agent's held
-news, which was a question he had already answered. What the list holds is agents only: news the
-narrator marks unlisted (`UNLISTED_KINDS` — the errand hand, the memory inbox) is the app's own
-machinery, spoken as something to SAY and never a name he is asked to choose between. Read out
-numbered beside a real agent, "errands" cost him five turns trying to close a task that never
-existed ("I don't even know what errands would be"), and the errand hand is told it may never ask
-him a question either: its report is spoken and its session then ends, so it would never hear the
-answer — asked again later, it reads as not having listened. A bare go-ahead answering the update offer is
-the APP's to answer, never the brain's: the first update is spoken word for word and whatever is
-still held is NAMED after it (`_hand_over`, the one delivery path) - answering a go-ahead with the
-numbered list and "Which first?" is answering the answer to a question with the question again
-("I already said yes to the Highdeas-submission-feedback one. Why would you ask me this? You sound
-insane."); the list decides ORDER, not whether. Anything OWED into a brain turn - the update he was offered, and any the brain fetches
-mid-think with deliver_update (for the full-sentence ask that never reads as a pick - see
+and reply-format hook break a coding agent. `threads.py` is the ONE home of a work thread's state: where the work STANDS, what he is OWED
+about it, and where his attention is; `delivery.py` and `outbox.py` were folded into it, so a
+thread's stage, its debt and his focus on it can never again disagree from three files. Where it
+stands is `Delivery`, the review loop as code — building → presented-with-steps → landing, a
+verdict impossible on work never presented, approval dispatching the landing and rejection the
+feedback mechanically, so the loop's order is a rule rather than a persona habit. Every stage
+always has a briefing phrase (`describe`), because being-built used to earn no words and a stage
+the briefing never stated was one the brain invented; rejections are counted so "in revision"
+reads apart from first drafting, which is a distinction he named himself — and since the
+walkthrough itself can wait unspoken, `desk.verdict` refuses any APPROVAL while it does: an
+ambiguous "yes" was once recorded as approval of steps that had never been spoken, and the work
+merged without his eyes ever on it ("I never even accepted it; it was never presented to me to be
+validated"). A rejection stands either way — he often judges from his own looking — and drops the
+now-stale walkthrough. An approval may CARRY a change — "just ship it with that small tweak" is a
+sign-off, not notes to re-present over — recorded approved with the change riding the one landing
+order (`APPROVED_WITH_CHANGE`): routed as words alone instead, no verdict reached the record, the
+landing gate refused the push he had ordered, and he was asked to approve again ("I had told it in
+no uncertain terms that I didn't need to approve the work further"). Re-approving work already
+landing is agreement, a quiet yes - raised as an error instead, "The ship it still stands." was
+answered with what "the system needs", machinery in his ears. `steps.py` decides what a streamed
+message becomes there — the agent's words as messages, and its commands, diffs and output as the
+machinery under them, capped at both ends with what was dropped counted in place. **A gate that
+judged whether stored news had been overtaken lived in the loop for two days and was REMOVED**,
+by the evidence: it prevented nothing and twice destroyed what he was asking for — the update he
+had just answered "Yes." to (it read its own "I've got an update on X when you're ready" as
+having delivered it) and the demo link he had asked for twice. The staleness it was built for is
+stopped at the sources instead — an errand may not ask him a question, and telling an agent,
+ruling on its work or retiring it drops its held news — and news never spoken stays the graver
+failure. Do not rebuild a model's veto over what he is owed.
+What he is owed is `Ledger`, the ONE store. News used to wait in three places — the outbox's
+queue, the spool behind it, and the conversation's own hand, which drained the queue and held
+items for a lull — and every cross-place failure in this record lived in the split: a drop that
+cleaned the queue while the copy in hand was still offered ("surely there's no update for smart
+grouping. You just sent off the latest message to it."), a supersede that emptied memory while
+the spool kept yesterday's sentence for the next boot to read out ("out of nowhere", with nothing
+in it he did not already know), a "who is owed?" answered from the queue while the walkthrough
+sat in hand for an hour ("That's false. You never presented it to me."), three reports dying in a
+wedged process's hand. Now a fact is owed from `owe` until `settle` (spoken, on the mouth's
+receipt) or `drop`; the loop READS `owed` every pass, speaks, and settles — nothing is ever
+drained into anyone's keeping, and `drain` survives only as a test's way of saying "he heard it
+all". The rules the hand used to apply are applied where the fact is written, once: one fact per
+thread; the newest taking that thread's FIRST place, so an agent holds its number for as long as
+it stays on the list (a refresh that moved an agent to the end had the same three names read back
+re-numbered seconds apart: "Why did you give me two occurrences of three updates waiting, but
+order them differently? Now I don't know what to tell you."); an alarm never displacing a report
+(each fact carries its event's `kind`, and "been silent for 20 minutes" arrived twenty minutes
+after its agent's merge report and, being newest, destroyed it — an alarm about a thread already
+ENDED is never raised at all); threadless news never collapsed; and what a thread ENDED as
+(`CONCLUSIONS`) spared by the boot sweep's `drop(keep_conclusions=True)`. Held news dies when HE
+moves past it: telling an agent something (`tell_agent`, through `desk.drop_news`) drops whatever
+that agent was still waiting to say, because an update composed before his latest instructions
+was offered back to him as fresh; and a drop is a drop, because there is one place. Looking
+(`seen`) clears the arrived signal the window's mic yields a delivery turn on; speaking does not,
+because a pass that decides not to speak yet must still stop the mic spinning. Every piece of
+news is written to the durable record as it arrives (`console.evidence`), since news that is
+never spoken otherwise leaves no trace at all once it is settled - which is what made one
+diagnosis blind. The file on disk is still `runtime/outbox.json`, so nothing owed was lost across
+the upgrade, and a fact restored at boot is app-authored to whatever brain wakes up, because the
+one that wrote it is gone. The store also holds where his ATTENTION is and what he has been ASKED
+- the two things the loop used to keep as a spread of latched flags, each set and cleared in a
+different place, two of which starved each other in one night: `focus` answers whose work is
+genuinely in front of his eyes, bounded by his own turns (`FOCUS_HOLDS_TURNS`, `his_turn`);
+`offer`/`offered`/`spend_offer` is the standing offer and how much was behind it, spent by his
+answer; `recital`/`recited` is the menu as last read out, so it is re-read only when it would
+come out different and forgotten only when nothing is owed. `pick` is which listed piece of work
+he just named - by a word of ITS TITLE or by number, name beating number, a shared word picking
+neither, a denial never a pick - and `speaker.roll_call` is the app's own numbered menu,
+labelled by his words for each piece of work.
+The menu's law: several agents finishing at once are read out numbered and held, and the list is
+read again ONLY when it would come out in different words — compared against the news behind it
+instead, fresh news for an agent already listed re-read a word-for-word identical sentence eight
+seconds later ("why did it just give me the same message twice in a row?"), while a roll call
+says only names. A short reply carrying a DENIAL ("no", "not") is never a pick, because picking
+is affirmative and the sentence that got read as one was him correcting the transcriber ("I said
+errands, not Aaron's"), answered with that agent's held news, which was a question he had already
+answered. What the list holds is agents only: news the narrator marks unlisted (`UNLISTED_KINDS`
+— the errand hand, the memory inbox) is the app's own machinery, spoken as something to SAY and
+never a name he is asked to choose between. Read out numbered beside a real agent, "errands" cost
+him five turns trying to close a task that never existed ("I don't even know what errands would
+be"), and the errand hand is told it may never ask him a question either: its report is spoken
+and its session then ends, so it would never hear the answer — asked again later, it reads as not
+having listened. A bare go-ahead answering the update offer is the APP's to answer, never the
+brain's: the first update is spoken and whatever is still held is NAMED in the same utterance
+(`_hand_over`, the one delivery path) - answering a go-ahead with the numbered list and "Which
+first?" is answering the answer to a question with the question again ("I already said yes to the
+Highdeas-submission-feedback one. Why would you ask me this? You sound insane."); the list decides
+ORDER, not whether. Anything OWED into a brain turn - the update he was offered, and any the brain
+fetches mid-think with deliver_update (for the full-sentence ask that never reads as a pick - see
 MOST_WORDS) - is carried by the REPLY ITSELF, or it is not: the brain is handed the FACT
 (`speaker.brief`: the work in his words, its stage, the agent's report to read, every door) and
 is its only author in that same reply, and afterwards the loop CHECKS that the reply carried it
 (`speaker.unfit`: the work named, every door verbatim, nothing unlanded called shipped). What
 the reply carried is settled; what it dropped stays owed, back where it stood, and is spoken
-whole at the next opening - loss becomes repeat, never silence, and never a splice. For a
-while it was WELDED onto the reply by code instead, word for word, because a fast brain asked
-to weave it in lost the content - and the weld made two authors of one utterance, which is
-where the doubled sentences and the welded topics came from. The record of why the weld was
-tried, since every other arrangement had failed him in the transcript:
-asked to weave the update into its reply, the brain twice lost the content ("a 'Yes' answered
-with 'Go check it out then'... that's not an update") while the app marked it delivered; asked to
-retell it, he heard "two versions of the same message in quick succession" thirteen seconds
-apart; and served on a LATER loop pass (deliver_update's old shape), the reply announced an
-update that never followed ("Hm, what do you mean? You didn't get me anything."). And nothing is
-SPENT unless its utterance began sounding (the mouth's `voice.Receipt`, above): a barge-in already
-down when the words were about to start used to clear the spool over zero audio, and a merged
-report died in that black hole. An agent HOLDS
-its number for as long as it stays on the list: fresh news takes that agent's earliest place,
-never its own arrival place (`_newest_per_agent`), because a refresh that moved an agent to the
-end had the same three names read back re-numbered seconds apart ("Why did you give me two
-occurrences of three updates waiting, but order them differently? Now I don't know what to tell
-you."). Every piece of
-news is written to the durable record as it arrives (`console.evidence`), since news that is never
-spoken otherwise leaves no trace at all once its spool entry is gone - which is what made the
-last diagnosis blind. When an agent's newer news replaces its older,
-the old one is dropped from the SPOOL as well as from the queue (`Outbox.superseded`) - collapsing
-the queue in memory alone left yesterday's sentence in the file, and the next process read it out
-as news: he was told work was "ready for your eyes" thirteen seconds after giving his notes on
-that very work, "out of nowhere", with nothing in it he did not already know. Not every piece of
-news is worth the same, so each carries its event's `kind`: a silence ALARM never displaces a
-report and is dropped where the agent has real news (one arrived twenty minutes after its
-agent's merge report and, being newest, destroyed it), and an alarm about an agent whose thread
-has already ENDED is never raised at all. Held news dies the
-same way when HE moves past it: telling an agent something (`tell_agent`, through
-`desk.drop_news`) drops whatever that agent was still waiting to say, because an update composed
-before his latest instructions was offered back to him as fresh ("surely there's no update for
-smart grouping. You just sent off the latest message to it."). And a drop has to reach all THREE
-places news waits - the queue, the spool, and the conversation's drained-in-hand list - so the
-outbox notes every drop and the conversation collects the notes (`take_dropped`) and prunes its
-own hand: a drop that cleaned the queue alone left the stale copy in hand, still being offered. `speaker.py` is the ONE AUTHOR of every piece of news he hears, and `narrator.py` is where an
+whole at the next opening - loss becomes repeat, never silence, and never a splice. The persona
+tells the brain exactly this, because for a while it said the opposite - that the app would
+append the held words, so never retell them - while the tool's answer asked it to deliver them.
+For a while it WAS welded onto the reply by code, word for word, because a fast brain asked to
+weave it in lost the content - and the weld made two authors of one utterance, which is where
+the doubled sentences and the welded topics came from. The record of why the weld was tried,
+since every other arrangement had failed him in the transcript: asked to weave the update into
+its reply, the brain twice lost the content ("a 'Yes' answered with 'Go check it out then'...
+that's not an update") while the app marked it delivered; asked to retell it, he heard "two
+versions of the same message in quick succession" thirteen seconds apart; and served on a LATER
+loop pass (deliver_update's old shape), the reply announced an update that never followed ("Hm,
+what do you mean? You didn't get me anything."). And nothing is SPENT unless its utterance began
+sounding (the mouth's `voice.Receipt`, above): a barge-in already down when the words were about
+to start used to clear the spool over zero audio, and a merged report died in that black hole.
+`speaker.py` is the ONE AUTHOR of every piece of news he hears, and `narrator.py` is where an
 agent event becomes a FACT for it. News used to be worded when it ARRIVED - one brain call per
 event, off in the background, its sentence stored as prose and spoken minutes later with the
 app's own roll call welded onto its back: two authors in one utterance, a sentence written with
@@ -800,26 +796,21 @@ errand, a memory nudge are news without asking), because offering him "an update
 nothing is its own failure ("Well then I don't think you should Have Offered it as an option. If
 there's nothing actionable for it"). The triage's answer is a decision word, never spoken, and
 taken back. The fact carries the agent's report as INPUT (`News.report`), the work in his words,
-and the stage; the words on it are the app's own plain sentence, which is what survives a
-restart. At the lull, `Speaker.word` composes the whole utterance ONCE - the fact(s) and, written
-into the same composition, the names of what else waits - and checks the draft against the
-FACTS, never the prose: every door the report handed over (`anchors`: launchers, addresses,
-paths, by the same rule the window draws links) must survive verbatim ("What launch link? You
-didn't give me one."), and unlanded work is never called shipped (`claims_deployed`). A failing
-draft is retracted and asked again once with the fault named; a second failure gives way to the
-app's own whole sentence, with the doors listed on it. Never a splice: whoever wrote the
-utterance wrote all of it (`Worded.composed` says which, so the memory and the ledger follow).
-The wait is bounded (`WORD_DEADLINE`) and is a foreground ask, since he is about to hear it. The
-old narration: the desk, the inbox watcher and the quiet monitor emit typed events into the
-narrator, and the brain used to word each one as its own sentence - carrying the same conduct a reply carries (a narration is a
-line he HEARS, and the standing conduct reached only replies, which is how "the desk" got to him),
-plus where the work actually STANDS as a fact, since "the feature should be there in Highdeas
-waiting" was said about work still being built; a composed line that calls unlanded work deployed
-or shipped is dropped for the plain notice, which claims nothing (composed news skips the unwritten-lines ledger - the brain
-remembers what it wrote), and the plain capped notice is the fallback when the brain cannot answer
-- or answers too late: each narration's wait is bounded, because one hung narration once held the
-brain's lock with the merge report and the quiet warning queued behind it until the app closed and
-all of it died unspoken.
+and the stage; the words on it are the app's own plain sentence (`relay.notice`, which says only
+which piece of work and what happened to it), which is what survives a restart. At the lull,
+`Speaker.word` composes the whole utterance ONCE - the fact(s) and, written into the same
+composition, the names of what else waits - and checks the draft against the FACTS, never the
+prose: every door the report handed over (`anchors`: launchers, addresses, paths, by the same
+rule the window draws links) must survive verbatim ("What launch link? You didn't give me
+one."), the work must be named in his words, and unlanded work is never called shipped
+(`claims_deployed`). A failing draft is retracted and asked again once with the fault named; a
+second failure gives way to the app's own whole sentence, with the doors listed on it. Never a
+splice: whoever wrote the utterance wrote all of it (`Worded.composed` says which, so the memory
+and the ledger follow). The wait is bounded (`WORD_DEADLINE`) and is a foreground ask, since he
+is about to hear it. A triage is the opposite: a background ask that his own turn cuts loose
+(`background=True`) and that is bounded on its own (`NARRATE_DEADLINE`), because one hung
+narration once held the brain's lock with the merge report and the quiet warning queued behind
+it until the app closed and all of it died unspoken.
 `brain_sdk.py` holds the persona and the session: `tools=[]`, replies streamed delta by delta — a
 talker that pulls levers, never an investigator; the agents it starts are where the heaviest work
 happens. It ran on the FAST tier for months, chosen for first words in about a second, and that
@@ -953,7 +944,7 @@ it could not place with nothing at all. Only what two readings running agree on 
 never shrinks. Replayed at speaking speed through the real pump and the real Parakeet, real
 sentences reached the screen 2 to 5 seconds before the draft box used to fill.
 
-Driving the fleet is done. Which agent a piece of news is about now travels with it (`Outbox.News`)
+Driving the fleet is done. Which agent a piece of news is about now travels with it (`threads.News`)
 rather than being read back out of the sentence, several ready at once are read out numbered, and
 whichever is named is the one spoken. Numbering was chosen over a new brain directive, because a
 marker is a thing that has reached the user verbatim before.

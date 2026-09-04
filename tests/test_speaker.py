@@ -1,4 +1,4 @@
-from excephalon.outbox import News
+from excephalon.threads import News
 from excephalon.speaker import Speaker, Worded, anchors, claims_deployed
 
 LAUNCHER = "[▶ Launch the demo](http://127.0.0.1:41777/launch?t=abc&p=C%3A%5Cdemo.vbs)"

@@ -8,7 +8,7 @@ an agent worked, the user was talking to a wall.
 The desk fixes both. Each agent is a persistent session held HERE, in the process, so the handle
 can't be lost to a context reset - a follow-up goes to the same agent, which remembers. And every
 message is sent on a worker thread: starting an agent, or sending it one, returns at once, and
-whatever the agent says back is pushed to the Outbox for the conversation to deliver at its next
+whatever the agent says back is pushed to the Ledger for the conversation to deliver at its next
 natural moment. The conversation never waits on an agent again.
 
 The roster is written to a file as agents come and go, so the brain - which can read files but
@@ -24,14 +24,13 @@ import threading
 import time
 from pathlib import Path
 
-from excephalon.delivery import LADDER, Delivery, DeliveryError
 from excephalon.memory import PROJECT_PREFIX
 from excephalon.models import DEFAULT_EFFORT, DEFAULT_MODEL, describe
 from excephalon.naming import unique_name
-from excephalon.outbox import News
 from excephalon.relay import notice
 from excephalon.steps import SAID, render
 from excephalon.tailing import archive_dir, safe_name
+from excephalon.threads import LADDER, Delivery, DeliveryError, News
 from excephalon.transcript import AGENT_DID, AGENT_SAID, ENTITY_SAID, Transcript
 
 
@@ -325,7 +324,7 @@ class AgentDesk:
     def start(self, name, cwd, task, enhancement=None, project=None, item_id=None):
         """Put a fresh agent on `task` in `cwd`. Returns the name the agent was actually given -
         `name` unless it collided with a running agent or an open tab and had to be bumped. The
-        reply arrives in the Outbox when it lands, so this still returns without waiting on work.
+        reply arrives in the Ledger when it lands, so this still returns without waiting on work.
 
         `enhancement`, when given, is the list item this agent is completing - ticked off its card
         when the agent is retired - and `project` names the Projects-tab card that item lives on

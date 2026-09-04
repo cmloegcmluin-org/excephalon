@@ -1,4 +1,4 @@
-from excephalon.outbox import News
+from excephalon.threads import News
 from excephalon.speaker import roll_call
 from excephalon.threads import pick as chosen
 
