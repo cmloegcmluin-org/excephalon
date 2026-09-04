@@ -3,7 +3,7 @@ import os.path
 from datetime import datetime
 from pathlib import Path
 
-from excephalon.outbox import News
+from excephalon.threads import News
 from excephalon.actions import _resolve, fleet_actions, take_care_spec
 from excephalon.schedule import Schedule
 
@@ -88,14 +88,14 @@ class FakeDesk:
         return True
 
     def present(self, name, steps):
-        from excephalon.delivery import DeliveryError
+        from excephalon.threads import DeliveryError
 
         if name not in self._known:
             raise DeliveryError(f"no agent called {name} is at the desk")
         self.presented.append((name, steps))
 
     def verdict(self, name, approved, feedback=""):
-        from excephalon.delivery import DeliveryError
+        from excephalon.threads import DeliveryError
 
         if name not in self._known:
             raise DeliveryError("no verdict can be recorded - nothing has been presented")

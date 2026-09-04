@@ -1,5 +1,5 @@
 from excephalon.inbox_watcher import QuietMonitor
-from excephalon.outbox import Outbox
+from excephalon.threads import Ledger
 
 
 class FakeClock:
@@ -11,7 +11,7 @@ class FakeClock:
 
 
 def test_warns_when_an_agent_is_silent_past_the_threshold():
-    outbox = Outbox()
+    outbox = Ledger()
     clock = FakeClock(0.0)
     monitor = QuietMonitor(outbox, quiet_after=1200, clock=clock)
     monitor.checked_in("drive-link")  # last heard from at t=0
@@ -25,7 +25,7 @@ def test_warns_when_an_agent_is_silent_past_the_threshold():
 
 
 def test_stays_silent_before_the_threshold():
-    outbox = Outbox()
+    outbox = Ledger()
     clock = FakeClock(0.0)
     monitor = QuietMonitor(outbox, quiet_after=1200, clock=clock)
     monitor.checked_in("a")
@@ -37,7 +37,7 @@ def test_stays_silent_before_the_threshold():
 
 
 def test_an_agent_never_heard_from_is_not_monitored():
-    outbox = Outbox()
+    outbox = Ledger()
     clock = FakeClock(0.0)
     monitor = QuietMonitor(outbox, quiet_after=1200, clock=clock)
 
@@ -48,7 +48,7 @@ def test_an_agent_never_heard_from_is_not_monitored():
 
 
 def test_warns_only_once_per_silence_episode():
-    outbox = Outbox()
+    outbox = Ledger()
     clock = FakeClock(0.0)
     monitor = QuietMonitor(outbox, quiet_after=1200, clock=clock)
     monitor.checked_in("a")
@@ -63,7 +63,7 @@ def test_warns_only_once_per_silence_episode():
 
 
 def test_a_check_in_rearms_the_warning():
-    outbox = Outbox()
+    outbox = Ledger()
     clock = FakeClock(0.0)
     monitor = QuietMonitor(outbox, quiet_after=1200, clock=clock)
     monitor.checked_in("a")
@@ -83,7 +83,7 @@ def test_a_check_in_rearms_the_warning():
 def test_an_agent_that_has_finished_is_not_reported_silent():
     # Silence only means something while there is work in flight. A finished agent isn't stalled,
     # and saying it has "gone quiet" reads as news about a problem that does not exist.
-    outbox = Outbox()
+    outbox = Ledger()
     clock = FakeClock(0.0)
     monitor = QuietMonitor(outbox, quiet_after=1200, clock=clock)
     monitor.checked_in("a")
@@ -96,7 +96,7 @@ def test_an_agent_that_has_finished_is_not_reported_silent():
 
 
 def test_each_agent_is_tracked_independently():
-    outbox = Outbox()
+    outbox = Ledger()
     clock = FakeClock(0.0)
     monitor = QuietMonitor(outbox, quiet_after=1200, clock=clock)
     monitor.checked_in("a")
@@ -110,7 +110,7 @@ def test_each_agent_is_tracked_independently():
 
 
 def test_elapsed_time_is_reported_not_just_the_threshold():
-    outbox = Outbox()
+    outbox = Ledger()
     clock = FakeClock(0.0)
     monitor = QuietMonitor(outbox, quiet_after=1200, clock=clock)
     monitor.checked_in("slow")
@@ -122,10 +122,10 @@ def test_elapsed_time_is_reported_not_just_the_threshold():
 
 
 def test_with_an_events_sink_silence_reports_there_instead():
-    from excephalon.outbox import Outbox
+    from excephalon.threads import Ledger
 
     events = []
-    outbox = Outbox()
+    outbox = Ledger()
     clock = FakeClock()
     monitor = QuietMonitor(outbox, quiet_after=60, clock=clock,
                            events=lambda *e: events.append(e))

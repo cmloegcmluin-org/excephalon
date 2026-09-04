@@ -117,9 +117,9 @@ def test_several_due_reminders_all_reach_the_outbox_uncollapsed(tmp_path):
     # every proactive line, shaped so the conversation speaks it as itself. about=None keeps two
     # waiting at once from collapsing into one (conversation._newest_per_agent), and listed=False
     # keeps them off the numbered pick-one-of-your-agents roll call.
-    from excephalon.outbox import Outbox
+    from excephalon.threads import Ledger
 
-    outbox = Outbox(spool=tmp_path / "outbox.json")
+    outbox = Ledger(spool=tmp_path / "outbox.json")
     sched = Schedule(tmp_path / "s.json",
                      deliver=lambda m: outbox.push(m, listed=False, kind="reminder"),
                      clock=lambda: 500.0)

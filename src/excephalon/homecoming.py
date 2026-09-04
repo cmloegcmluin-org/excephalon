@@ -17,7 +17,7 @@ import json
 import re
 from pathlib import Path
 
-from excephalon.delivery import IN_REVIEW
+from excephalon.threads import IN_REVIEW
 from excephalon.phrases import canonical
 
 STOCK_GREETING = "I'm ready. What can I do for you?"

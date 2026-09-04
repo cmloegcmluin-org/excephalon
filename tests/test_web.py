@@ -1440,7 +1440,7 @@ def test_a_task_started_from_its_robot_stays_green_when_projects_reloads(tmp_pat
     import time
     from types import SimpleNamespace
     from excephalon.agent_desk import AgentDesk
-    from excephalon.outbox import Outbox
+    from excephalon.threads import Ledger
 
     def factory(name, cwd, decide, **choice):
         return SimpleNamespace(name=name, cwd=cwd, session_id="s-" + name, messages=[],
@@ -1448,7 +1448,7 @@ def test_a_task_started_from_its_robot_stays_green_when_projects_reloads(tmp_pat
 
     logs = tmp_path / "agent-logs"
     state = tmp_path / "agents.json"
-    desk = AgentDesk(Outbox(), agent_factory=factory, log_dir=logs, state_path=state)
+    desk = AgentDesk(Ledger(), agent_factory=factory, log_dir=logs, state_path=state)
     desk.start("captions", str(tmp_path / "wt"), "live captions in the window",
                enhancement="live captions in the window")
 

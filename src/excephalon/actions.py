@@ -21,7 +21,7 @@ from pathlib import Path
 
 from claude_agent_sdk import create_sdk_mcp_server, tool
 
-from excephalon.delivery import DeliveryError
+from excephalon.threads import DeliveryError
 from excephalon.naming import distill_name
 from excephalon.schedule import resolve_when
 from excephalon.memory import (PROJECT_PREFIX, append_enhancement, append_learned,

@@ -1,7 +1,7 @@
 import threading
 
 from excephalon.narrator import Narrator
-from excephalon.outbox import Outbox
+from excephalon.threads import Ledger
 
 
 class FakeBrain:
@@ -44,7 +44,7 @@ def test_an_agents_event_becomes_a_fact_not_a_sentence():
     # of the moment it would be said in, and the app welding a roll call onto it later. Nothing
     # is worded here now: the fact carries the agent's report as INPUT for the one author, and the
     # only words on it are the app's own plain sentence, which is what survives a restart.
-    brain, outbox = FakeBrain(), Outbox()
+    brain, outbox = FakeBrain(), Ledger()
     Narrator(brain, outbox, work_of=lambda agent: "the drive link fix",
              stage_of=lambda agent: "ready").tell(
         "finished", "fixer", "All six tasks are done. Full suite green, pushed.")
@@ -64,7 +64,7 @@ def test_an_errand_and_a_memory_nudge_are_never_items_on_his_list():
     # working on one thing. I don't even know what errands would be." The errand hand and the
     # memory inbox are the app's own machinery; their news is something to say, never a name he
     # is asked to choose between beside a real agent.
-    outbox = Outbox()
+    outbox = Ledger()
     narrator = Narrator(FakeBrain(), outbox)
 
     narrator.tell("errand", "errands", "he signed up for italki")
@@ -79,7 +79,7 @@ def test_an_errand_and_a_memory_nudge_are_never_items_on_his_list():
 
 
 def test_an_agents_own_news_stays_an_item_he_can_choose():
-    outbox = Outbox()
+    outbox = Ledger()
     Narrator(FakeBrain(), outbox).tell("finished", "fixer", "done")
 
     assert _wait_for(outbox)
@@ -91,7 +91,7 @@ def test_a_finished_turn_is_judged_by_the_brain_before_it_is_news():
     # A finished turn is often not news - the agent pausing, or stuck on something technical -
     # and offering him "an update" that is nothing is its own failure: "Well then I don't think
     # you should Have Offered it as an option. If there's nothing actionable for it."
-    brain, outbox = FakeBrain(), Outbox()
+    brain, outbox = FakeBrain(), Ledger()
     Narrator(brain, outbox).tell("finished", "fixer", "Done. 621 passing, not merged.")
 
     assert _wait_for(outbox)
@@ -105,7 +105,7 @@ def test_a_finished_turn_is_judged_by_the_brain_before_it_is_news():
 def test_the_triage_s_own_words_are_never_spoken_and_are_taken_back():
     # Whatever the brain answers here is a decision word. It is taken off the brain's own record,
     # or the model goes on believing it said something he never heard.
-    brain, outbox = FakeBrain("news"), Outbox()
+    brain, outbox = FakeBrain("news"), Ledger()
     Narrator(brain, outbox).tell("finished", "fixer", "ready to look at")
 
     assert _wait_for(outbox)
@@ -116,7 +116,7 @@ def test_the_triage_s_own_words_are_never_spoken_and_are_taken_back():
 def test_a_handled_answer_is_swallowed_and_the_user_hears_nothing():
     # When the brain kicked the agent onward itself, there is no news: a fact about it would
     # interrupt him with a word about nothing.
-    brain, outbox = FakeBrain("Handled."), Outbox()
+    brain, outbox = FakeBrain("Handled."), Ledger()
     Narrator(brain, outbox).tell("finished", "fixer", "Continuing shortly.")
 
     _settled(brain)
@@ -125,7 +125,7 @@ def test_a_handled_answer_is_swallowed_and_the_user_hears_nothing():
 
 
 def test_handled_with_punctuation_is_still_swallowed_whole():
-    brain, outbox = FakeBrain("Handled!"), Outbox()
+    brain, outbox = FakeBrain("Handled!"), Ledger()
     Narrator(brain, outbox).tell("finished", "fixer", "continuing")
 
     _settled(brain)
@@ -135,7 +135,7 @@ def test_handled_with_punctuation_is_still_swallowed_whole():
 def test_handled_in_front_of_real_words_is_still_news():
     # "Handled - <news>" once reached him verbatim and he asked what the word referred to. Alone
     # it means silence; leading real words it is only routing, and the event is still his news.
-    brain, outbox = FakeBrain("Handled - it is waiting on the merge queue."), Outbox()
+    brain, outbox = FakeBrain("Handled - it is waiting on the merge queue."), Ledger()
     Narrator(brain, outbox, work_of=lambda agent: "the self-edit work").tell(
         "finished", "entity-self-edit", "waiting on the queue")
 
@@ -146,7 +146,7 @@ def test_handled_in_front_of_real_words_is_still_news():
 
 
 def test_a_quiet_agent_is_judged_with_the_foreman_offered_as_the_prod():
-    brain, outbox = FakeBrain("handled"), Outbox()
+    brain, outbox = FakeBrain("handled"), Ledger()
     Narrator(brain, outbox).tell("quiet", "fixer", "been silent for 20 minutes")
 
     _settled(brain)
@@ -158,7 +158,7 @@ def test_a_quiet_agent_is_judged_with_the_foreman_offered_as_the_prod():
 def test_a_landing_agents_finished_turn_is_a_conclusion_never_triaged():
     # The loop's last leg: nothing to judge, and the brain is not even asked - the fact goes
     # straight in, kind "landing", so it is never held back and never dropped.
-    brain, outbox = FakeBrain(), Outbox()
+    brain, outbox = FakeBrain(), Ledger()
     Narrator(brain, outbox, stage_of=lambda name: "landing").tell(
         "finished", "fixer", "Merged. PR #12 is on main.")
 
@@ -170,7 +170,7 @@ def test_a_landing_agents_finished_turn_is_a_conclusion_never_triaged():
 
 
 def test_a_death_is_recorded_as_what_it_is_without_asking_anyone():
-    brain, outbox = FakeBrain(), Outbox()
+    brain, outbox = FakeBrain(), Ledger()
     Narrator(brain, outbox, work_of=lambda agent: "the drive link fix").tell(
         "died", "fixer", "RuntimeError: session lost")
 
@@ -189,7 +189,7 @@ def test_a_brain_failure_still_records_the_fact():
                     deadline=None):
             raise RuntimeError("session wedged")
 
-    outbox = Outbox()
+    outbox = Ledger()
     Narrator(BrokenBrain(), outbox, work_of=lambda agent: "the drive link fix").tell(
         "finished", "fixer", "All done. Extra detail here.")
 
@@ -209,7 +209,7 @@ def test_a_triage_is_bounded_and_yields_to_his_own_turn():
             seen.update(background=background, deadline=deadline)
             return "news"
 
-    outbox = Outbox()
+    outbox = Ledger()
     Narrator(Brain(), outbox, deadline=7.0).tell("finished", "fixer", "done")
 
     assert _wait_for(outbox)
@@ -227,7 +227,7 @@ def test_tell_returns_at_once_and_judges_off_thread():
             finished.wait(2.0)
             return "news"
 
-    outbox = Outbox()
+    outbox = Ledger()
     Narrator(SlowBrain(), outbox).tell("finished", "fixer", "report")
 
     assert started.wait(2.0)  # the triage is underway...
@@ -240,7 +240,7 @@ def test_the_fact_carries_his_own_name_for_the_work_and_never_the_agents():
     # "it says 'still waiting: ... scheduled-messages'. I think this is the same as the
     # 'timed-reminder feature', but it's weird and confusing that in the previous message it chose
     # a different name for the feature than its agent log's name." One thread, one name, his.
-    outbox = Outbox()
+    outbox = Ledger()
     Narrator(FakeBrain(), outbox, work_of=lambda agent: "a timed-reminder feature").tell(
         "wrote", "excephalon-138-scheduled-messages", "Red.")
 
@@ -252,7 +252,7 @@ def test_the_fact_carries_his_own_name_for_the_work_and_never_the_agents():
 
 
 def test_an_errands_outcome_is_a_fact_like_any_other():
-    outbox = Outbox()
+    outbox = Ledger()
     Narrator(FakeBrain(), outbox).tell("errand", "errands", "moved the file")
 
     assert _wait_for(outbox)

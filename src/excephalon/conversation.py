@@ -237,8 +237,8 @@ class _PastedReportGate:
     quoted into the mouth. The brain once relayed an agent's whole markdown report inside a
     reply - launcher link, numbered steps, sign-off - and he stopped it mid-word: "Whoa whoa
     whoa... That's like ten times bigger than I ever want you to send a message to me." The
-    held news the app welds on is composed by the narrator and carries no quote marks, so
-    nothing legitimate is lost. Line-buffered, because the quote marker is a line's first
+    held news a reply carries is written by that same brain as speech, with no quote marks,
+    so nothing legitimate is lost. Line-buffered, because the quote marker is a line's first
     character and a delta can end anywhere."""
 
     def __init__(self, forward):
@@ -525,7 +525,7 @@ class Conversation:
 
     def _speak_reply(self, text, *, known=False):
         """Show the reply, then say it - the same words on screen as in their ear. Answers with
-        the Receipt, so a delivery welded to it is only spent when it actually sounded."""
+        the Receipt, so anything the reply carried is only spent when it actually sounded."""
         self._console.reply(text)
         return self._say(text, record=False, known=known)
 
@@ -690,9 +690,9 @@ class Conversation:
         place = next((at for at, held in enumerate(owed)
                       if getattr(held, "about", None) in self._requested), None)
         if place is not None:
-            # The brain handed this update over rather than retelling it: the app speaks the held
-            # copy word for word the moment the reply ends - one teller, the exact words, instead
-            # of two versions of the same news 13 seconds apart.
+            # The brain asked for this one delivered (deliver_update) and its reply did not carry
+            # it: it goes out now, whole, through the one delivery path - loss becomes repeat,
+            # never two versions of the same news 13 seconds apart.
             self._requested.discard(getattr(owed[place], "about", None))
             self._speak_held(place)  # he asked for this one, by name, just now
             return
@@ -732,8 +732,8 @@ class Conversation:
             # older one left the tally at two and was never spoken: the presented work he was
             # waiting on sat silent for the rest of that session, and he closed the app still owed
             # it ("I never heard back again"). The re-read comes out with every agent still at the
-            # number he first heard for it (see `_newest_per_agent`), so answering an older read-out
-            # by number still names the agent he means.
+            # number he first heard for it (the store keeps a thread at its first place), so
+            # answering an older read-out by number still names the agent he means.
             if self._recital() != self._roll():
                 self._announce()
             return
@@ -870,7 +870,7 @@ class Conversation:
 
         A Turn if they were naming one, None if they were not - in which case this was an ordinary
         thing to say and the list simply stands. Only a terse answer counts as naming one (see
-        `waiting.chosen`), so a sentence that happens to carry an agent's name is still their turn:
+        `threads.pick`), so a sentence that happens to carry an agent's name is still their turn:
         answering it with a notice instead would lose the question.
         """
         owed = self._owed()

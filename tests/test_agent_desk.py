@@ -3,7 +3,7 @@ import time
 from types import SimpleNamespace
 
 from excephalon.agent_desk import AgentDesk
-from excephalon.outbox import Outbox
+from excephalon.threads import Ledger
 
 
 def said(text):
@@ -54,7 +54,7 @@ def _no_git(*args, **kwargs):
 
 def _desk(outbox=None, made=None, hold=None, roster=None, monitor=None, log_dir=None, run=None,
           state=None, law=None, complete=None):
-    outbox = Outbox() if outbox is None else outbox  # an empty one is falsy, not absent
+    outbox = Ledger() if outbox is None else outbox  # an empty one is falsy, not absent
     made = made if made is not None else []
 
     def factory(name, cwd, decide, **choice):
@@ -136,7 +136,7 @@ def test_an_agent_that_dies_stops_its_silence_clock_too():
     # A dead agent is announced as dead; leaving its clock running would then also announce it as
     # quiet twenty minutes later, which is the same non-news twice.
     monitor = SpyMonitor()
-    desk = AgentDesk(Outbox(), agent_factory=lambda *a, **k: _DyingAgent(), monitor=monitor, run=_no_git)
+    desk = AgentDesk(Ledger(), agent_factory=lambda *a, **k: _DyingAgent(), monitor=monitor, run=_no_git)
     desk.start("doomed", "/tmp/wt", "try")
 
     assert _wait_for(lambda: monitor.finished == ["doomed"])
@@ -160,7 +160,7 @@ def test_agents_start_on_the_model_he_chose_defaulting_to_opus_on_high():
         started.append((model, effort))
         return FakeAgent(name, cwd, decide)
 
-    desk = AgentDesk(Outbox(), agent_factory=factory, run=_no_git)
+    desk = AgentDesk(Ledger(), agent_factory=factory, run=_no_git)
 
     desk.start("first", "/tmp/wt", "go")
     assert desk.choose("claude-fable-5", "max") == "Fable on max"  # and it says what it will be
@@ -174,7 +174,7 @@ def test_changing_the_model_leaves_an_agent_already_working_where_it_is():
     # A session's model is fixed when it opens, so a change can only govern the next agent. Saying
     # otherwise would be the kind of claim they check and find false.
     started = []
-    desk = AgentDesk(Outbox(), agent_factory=lambda name, cwd, decide, *, model, effort:
+    desk = AgentDesk(Ledger(), agent_factory=lambda name, cwd, decide, *, model, effort:
                      started.append((name, model)) or FakeAgent(name, cwd, decide), run=_no_git)
 
     desk.start("already-running", "/tmp/wt", "go")
@@ -300,7 +300,7 @@ def test_a_follow_up_to_an_agent_that_was_never_started_says_so():
 
 
 def test_an_agent_that_blows_up_is_reported_not_swallowed():
-    outbox = Outbox()
+    outbox = Ledger()
 
     class Exploding:
         def work(self, message, on_message=None):
@@ -355,7 +355,7 @@ def test_every_exchange_is_written_to_a_timestamped_per_agent_log(tmp_path):
     # "still no timestamps in the logs": the tailable record of what Excephalon and an agent said
     # to each other, stamped, written by the desk itself as it happens - not left to the brain to
     # hand-author in whatever format it invents that day.
-    outbox = Outbox()
+    outbox = Ledger()
     made = []
 
     def factory(name, cwd, decide, **choice):
@@ -416,7 +416,7 @@ def test_closing_the_desk_shuts_its_agents_down():
 def test_an_agents_steps_reach_its_log_as_it_works(tmp_path):
     # They watched an empty log for fourteen minutes while the agent was alive and working, and
     # Excephalon declared it dead one minute before it answered. Being able to SEE it work is the fix.
-    outbox = Outbox()
+    outbox = Ledger()
     steps = ["Reading the router.", "Writing a failing test.", "Confirmed red."]
 
     class NarratingAgent:
@@ -444,7 +444,7 @@ def test_what_an_agent_ran_and_what_came_back_reach_its_log(tmp_path):
     # "no tool calls, diffs, or command/test output": the log held only the sentences the agent
     # narrated, so ten minutes of real work read back as ten minutes of silence. Asked for the
     # real exchange repeatedly, because it is what says whether these agents are being driven well.
-    outbox = Outbox()
+    outbox = Ledger()
 
     class Working:
         def work(self, message, on_message=None):
@@ -496,7 +496,7 @@ def test_with_an_events_sink_the_desk_reports_there_instead_of_the_outbox():
     # The narrator words the news in the brain's own voice; the desk's job shrinks to saying WHAT
     # happened - kind, agent, report - and staying out of the wording business entirely.
     events = []
-    outbox = Outbox()
+    outbox = Ledger()
     desk = AgentDesk(outbox, agent_factory=lambda name, cwd, decide, **choice:
                      FakeAgent(name, cwd, decide), events=lambda *e: events.append(e), run=_no_git)
 
@@ -512,7 +512,7 @@ def test_with_an_events_sink_the_desk_reports_there_instead_of_the_outbox():
 
 def test_a_death_reaches_the_events_sink_as_what_it_is():
     events = []
-    desk = AgentDesk(Outbox(), agent_factory=lambda *a, **k: _DyingAgent(),
+    desk = AgentDesk(Ledger(), agent_factory=lambda *a, **k: _DyingAgent(),
                      events=lambda *e: events.append(e), run=_no_git)
 
     desk.start("doomed", "/tmp/wt", "try")
@@ -615,7 +615,7 @@ def test_a_failed_agent_never_ticks_its_enhancement_done(tmp_path):
     # Retiring a DIED agent still wraps up its leftovers, but its ask is NOT answered - ticking it
     # off would record a failure as a completion, the checklist's worst possible lie.
     ticked = []
-    outbox = Outbox()
+    outbox = Ledger()
     desk = AgentDesk(outbox, agent_factory=lambda *a, **k: _DyingAgent(),
                      log_dir=tmp_path / "agent-logs",
                      complete_enhancement=lambda item: ticked.append(item) or True, run=_no_git)
@@ -647,7 +647,7 @@ def test_the_enhancement_tag_survives_a_restart_and_still_ticks(tmp_path):
     first.close()
 
     ticked = []
-    revived_outbox = Outbox()
+    revived_outbox = Ledger()
     revived = AgentDesk(revived_outbox,
                         agent_factory=lambda name, cwd, decide, **k: FakeAgent(name, cwd, decide),
                         state_path=state, log_dir=logs, run=_no_git,
@@ -842,12 +842,12 @@ def test_a_merge_report_he_never_heard_survives_the_launch_that_finds_its_agent_
     # he was owed. He was never told the feature shipped; he heard it days later as a clause
     # inside a greeting. A thread's ENDING is never stale.
     spool = tmp_path / "spool.json"
-    outbox = Outbox(spool=spool)
+    outbox = Ledger(spool=spool)
     outbox.push("still checking the tab switch", about="scroller", kind="finished")
     outbox.push("It merged - the tabs keep their scroll now.", about="scroller", kind="landing")
     outbox.seen()  # looked at, never spoken - and then the process ended
 
-    desk, _, _ = _desk(outbox=Outbox(spool=spool), log_dir=tmp_path / "agent-logs")
+    desk, _, _ = _desk(outbox=Ledger(spool=spool), log_dir=tmp_path / "agent-logs")
     desk.revive()  # a fresh launch: "scroller" has no tab, so its news is judged finished with
 
     kept = [str(news) for news in desk._outbox.drain()]
@@ -862,7 +862,7 @@ def test_no_approval_can_be_recorded_while_the_walkthrough_is_still_unspoken(tmp
     # he has not been shown cannot exist, so approval is refused until the walkthrough is spoken.
     import pytest
 
-    from excephalon.delivery import DeliveryError
+    from excephalon.threads import DeliveryError
 
     logs = tmp_path / "agent-logs"
     desk, outbox, _ = _desk(log_dir=logs)
@@ -937,7 +937,7 @@ def test_wrapping_an_agent_up_takes_its_undelivered_news_with_it(tmp_path):
 
 
 def test_the_roster_says_when_each_agent_was_last_heard_from(tmp_path):
-    outbox = Outbox()
+    outbox = Ledger()
     roster = tmp_path / "active-agents.txt"
 
     class NarratingAgent:
@@ -1058,7 +1058,7 @@ def test_revive_reopens_yesterdays_agents_on_their_old_sessions(tmp_path):
         revived.append((name, model, effort, resume))
         return FakeAgent(name, cwd, decide)
 
-    desk = AgentDesk(Outbox(), agent_factory=factory, state_path=state, run=_no_git)
+    desk = AgentDesk(Ledger(), agent_factory=factory, state_path=state, run=_no_git)
 
     names = desk.revive()
 
@@ -1168,7 +1168,7 @@ def test_a_revived_agents_recorded_session_survives_the_next_persist(tmp_path):
         def close(self):
             pass
 
-    desk = AgentDesk(Outbox(), agent_factory=lambda name, cwd, decide, **k: MuteAgent(),
+    desk = AgentDesk(Ledger(), agent_factory=lambda name, cwd, decide, **k: MuteAgent(),
                      state_path=state, run=_no_git)
     desk.revive()  # revive persists the fleet immediately
 
@@ -1225,7 +1225,7 @@ def test_revive_recovers_a_lost_session_id_from_the_store(tmp_path, monkeypatch)
         resumed.append(resume)
         return MuteAgent()
 
-    desk = AgentDesk(Outbox(), agent_factory=factory, state_path=state, run=_no_git)
+    desk = AgentDesk(Ledger(), agent_factory=factory, state_path=state, run=_no_git)
 
     assert desk.revive() == ["stray"]
     assert resumed == ["sess-found"]
@@ -1279,7 +1279,7 @@ def test_an_agent_whose_log_is_archived_is_not_brought_back(tmp_path):
          "state": "idle", "delivery": "landing"},
     ]), encoding="utf-8")
     (logs / "live.log").write_text("[10:00:00] ENTITY> carry on" + chr(10), encoding="utf-8")
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("the settled work is ready for your eyes", about="settled")
     desk, _, _ = _desk(outbox=outbox, state=state, log_dir=logs)
 
@@ -1300,7 +1300,7 @@ def test_startup_forgets_held_news_about_agents_with_no_tab(tmp_path):
     logs = tmp_path / "agent-logs"
     logs.mkdir()
     (logs / "still-going.log").write_text("[10:00:00] ENTITY> carry on" + chr(10), encoding="utf-8")
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("the finished one is ready for your eyes", about="all-done")
     outbox.push("the live one needs a decision", about="still-going")
     desk, _, _ = _desk(outbox=outbox, state=tmp_path / "agents.json", log_dir=logs)
@@ -1426,7 +1426,7 @@ def test_work_cannot_be_presented_while_the_agent_is_still_working():
     # not exist yet.
     import pytest
 
-    from excephalon.delivery import DeliveryError
+    from excephalon.threads import DeliveryError
 
     hold = threading.Event()
     desk, _, made = _desk(hold=hold)
@@ -1442,7 +1442,7 @@ def test_work_cannot_be_presented_while_the_agent_is_still_working():
 def test_presenting_an_agent_the_desk_does_not_have_refuses():
     import pytest
 
-    from excephalon.delivery import DeliveryError
+    from excephalon.threads import DeliveryError
 
     desk, _, _ = _desk()
 
@@ -1481,7 +1481,7 @@ def test_a_rejected_verdict_carries_the_feedback_back():
 def test_a_verdict_with_no_presentation_is_refused_by_the_desk():
     import pytest
 
-    from excephalon.delivery import DeliveryError
+    from excephalon.threads import DeliveryError
 
     desk, outbox, _ = _desk()
     _finished(desk, outbox)
@@ -1821,7 +1821,7 @@ def test_a_wrap_up_writes_how_the_thread_ended_and_the_briefing_says_it(tmp_path
 
 def test_a_died_agent_is_recorded_as_died_never_delivered(tmp_path):
     logs = tmp_path / "agent-logs"
-    outbox = Outbox()
+    outbox = Ledger()
     desk = AgentDesk(outbox, agent_factory=lambda *a, **k: _DyingAgent(), log_dir=logs, run=_no_git)
     desk._wrapped_path = tmp_path / "wrapped.json"
     desk._now = lambda: 1000.0
@@ -1863,7 +1863,7 @@ def test_a_crash_is_restarted_silently_and_never_reaches_him():
         made.append(DiesOnce(resume))
         return made[-1]
 
-    desk = AgentDesk(Outbox(), agent_factory=factory, events=lambda *e: events.append(e), run=_no_git)
+    desk = AgentDesk(Ledger(), agent_factory=factory, events=lambda *e: events.append(e), run=_no_git)
     desk.start("fixer", "/tmp/wt", "a task")
 
     assert _wait_for(lambda: any(e[0] == "finished" for e in events))
@@ -1879,7 +1879,7 @@ def test_a_task_that_keeps_killing_its_agents_finally_reaches_him():
     # and silently feeding it new sessions forever would hide work that is genuinely stuck. The
     # digest holds the crash count as a quiet fact for "what's taking so long?".
     events = []
-    desk = AgentDesk(Outbox(), agent_factory=lambda *a, **k: _DyingAgent(),
+    desk = AgentDesk(Ledger(), agent_factory=lambda *a, **k: _DyingAgent(),
                      events=lambda *e: events.append(e), run=_no_git)
     desk.start("doomed", "/tmp/wt", "try")
 
@@ -1952,7 +1952,7 @@ def test_approved_work_that_reached_main_is_wrapped_up_by_the_desk_itself(tmp_pa
         made.append(FakeAgent(name, cwd, decide))
         return made[-1]
 
-    desk = AgentDesk(Outbox(), agent_factory=factory, log_dir=logs,
+    desk = AgentDesk(Ledger(), agent_factory=factory, log_dir=logs,
                      run=lambda *a, **k: SimpleNamespace(returncode=0),
                      events=lambda *e: events.append(e),
                      complete_enhancement=lambda item, **where: ticked.append(item) or True)
@@ -2044,7 +2044,7 @@ def test_a_tick_that_misses_rides_the_landing_message_rather_than_being_eaten_by
         made.append(FakeAgent(name, cwd, decide))
         return made[-1]
 
-    desk = AgentDesk(Outbox(), agent_factory=factory, log_dir=logs, run=_no_git,
+    desk = AgentDesk(Ledger(), agent_factory=factory, log_dir=logs, run=_no_git,
                      events=lambda *e: events.append(e),
                      complete_enhancement=lambda item, **where: False)
     desk._merged = lambda entry: True

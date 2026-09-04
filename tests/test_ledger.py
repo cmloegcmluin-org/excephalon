@@ -1,4 +1,4 @@
-from excephalon.outbox import Outbox
+from excephalon.threads import Ledger
 
 
 def test_superseded_news_leaves_the_spool_so_a_restart_does_not_revive_it(tmp_path):
@@ -7,7 +7,7 @@ def test_superseded_news_leaves_the_spool_so_a_restart_does_not_revive_it(tmp_pa
     # newer one arrived, stayed in the spool - and the next process read it out as fresh news,
     # thirteen seconds after he had given his notes on that very work.
     spool = tmp_path / "outbox.json"
-    outbox = Outbox(spool=spool)
+    outbox = Ledger(spool=spool)
     outbox.push("The split is ready for your eyes.", about="projects-tab")
     outbox.push("All twelve are cards now - which names need shortening?", about="projects-tab")
 
@@ -15,15 +15,15 @@ def test_superseded_news_leaves_the_spool_so_a_restart_does_not_revive_it(tmp_pa
     # one's place the moment it is written, in memory and on disk alike.
     [newest] = outbox.owed()
     assert str(newest) == "All twelve are cards now - which names need shortening?"
-    assert [str(held) for held in Outbox(spool=spool).owed()] == [str(newest)]
+    assert [str(held) for held in Ledger(spool=spool).owed()] == [str(newest)]
 
     outbox.spoken(newest)  # and the newest actually reached him
 
-    assert Outbox(spool=spool).drain() == []
+    assert Ledger(spool=spool).drain() == []
 
 
 def test_pushed_messages_drain_in_order_then_the_outbox_is_empty():
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("agent 1 needs you")
     outbox.push("agent 2 is ready for review")
 
@@ -32,7 +32,7 @@ def test_pushed_messages_drain_in_order_then_the_outbox_is_empty():
 
 
 def test_arrived_is_set_on_push_and_cleared_on_drain():
-    outbox = Outbox()
+    outbox = Ledger()
     assert not outbox.arrived.is_set()  # nothing waiting yet
 
     outbox.push("something to say")
@@ -46,7 +46,7 @@ def test_news_carries_which_agent_it_is_about_while_still_being_the_message():
     # Which agent a queued message is about has to survive the queue. Worked back out of the text
     # it would be reading the label to find the thing - and two of the four kinds of news the
     # Excephalon queues do not carry the name in any fixed place at all.
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("fixer: the drive link is fixed", about="fixer")
 
     [news] = outbox.drain()
@@ -56,7 +56,7 @@ def test_news_carries_which_agent_it_is_about_while_still_being_the_message():
 
 
 def test_empty_outbox_is_falsy_and_a_pushed_one_is_truthy():
-    outbox = Outbox()
+    outbox = Ledger()
     assert not outbox
 
     outbox.push("word from an agent")
@@ -70,13 +70,13 @@ def test_undelivered_news_survives_the_process_and_delivered_news_does_not(tmp_p
     # DRAINING is not delivery, because drained news waits in hand for a lull, sometimes for
     # minutes, and dies with the process there just the same.
     spool = tmp_path / "outbox.json"
-    first = Outbox(spool=spool)
+    first = Ledger(spool=spool)
     first.push("the merge landed", about="lander", composed=True)
     first.push("the fix is ready to look at", about="fixer")
     first.seen()  # looked at - which used to mean "in hand" - not yet spoken
     first.spoken("the merge landed")  # this one actually reached the user
 
-    revived = Outbox(spool=spool)
+    revived = Ledger(spool=spool)
 
     [held] = revived.drain()
     assert held == "the fix is ready to look at"  # still owed, back in the queue
@@ -85,7 +85,7 @@ def test_undelivered_news_survives_the_process_and_delivered_news_does_not(tmp_p
 
 
 def test_a_spoolless_outbox_still_answers_spoken(tmp_path):
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("word")
     outbox.spoken("word")  # nothing durable to clear; must simply not raise
 
@@ -94,18 +94,18 @@ def test_news_about_a_finished_agent_can_be_dropped_from_the_queue_and_the_spool
     # Its work is closed; an update about it lands as a surprise. And with the spool holding it,
     # it would come back after a restart to surprise him twice.
     spool = tmp_path / "outbox.json"
-    outbox = Outbox(spool=spool)
+    outbox = Ledger(spool=spool)
     outbox.push("the copy fixes are ready to look at", about="copy-fixes")
     outbox.push("the other one needs a decision", about="other")
 
     outbox.drop("copy-fixes")
 
     assert [str(news) for news in outbox.owed()] == ["the other one needs a decision"]
-    assert [str(news) for news in Outbox(spool=spool).owed()] == ["the other one needs a decision"]
+    assert [str(news) for news in Ledger(spool=spool).owed()] == ["the other one needs a decision"]
 
 
 def test_dropping_the_last_item_clears_the_waiting_signal(tmp_path):
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("only this", about="one")
 
     outbox.drop("one")
@@ -120,7 +120,7 @@ def test_a_drop_reaches_news_already_drained_into_someone_elses_hand():
     # instructions, and the "update" was still offered to him ("surely there's no update for
     # smart grouping. You just sent off the latest message to it."). The holder collects who was
     # dropped and prunes its own hand.
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("grouping: done", about="grouping")
     outbox.seen()  # the conversation has looked at it - which used to mean "taken into hand"
 
@@ -137,7 +137,7 @@ def test_owed_about_sees_news_in_hand_not_only_news_in_the_queue(tmp_path):
     # news?") read only the queue. The spool is the record of everything still owed, in queue OR
     # in hand, so the question is answered from there.
     spool = tmp_path / "outbox.json"
-    outbox = Outbox(spool=spool)
+    outbox = Ledger(spool=spool)
     outbox.push("linking: ready for your eyes", about="linking")
     outbox.push("fixer: merged", about="fixer")
     outbox.seen()  # both looked at - which used to mean "both in hand"
@@ -147,7 +147,7 @@ def test_owed_about_sees_news_in_hand_not_only_news_in_the_queue(tmp_path):
 
 
 def test_a_spoolless_outbox_answers_owed_about_from_its_queue():
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("fixer: merged", about="fixer")
 
     assert outbox.owed_about() == {"fixer"}
@@ -158,7 +158,7 @@ def test_news_can_arrive_unlisted_so_it_never_becomes_a_name_to_pick():
     # errand hand exists so a small chore is NOT a visible agent - and its result was read out
     # numbered, beside a real agent, under the internal word for the machinery. Some news is just
     # something to say; only an agent's news is an item on a list.
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.push("You're on italki as of this week.", about="errands", listed=False)
     outbox.push("fixer: the drive link is fixed", about="fixer")
 
@@ -170,10 +170,10 @@ def test_news_can_arrive_unlisted_so_it_never_becomes_a_name_to_pick():
 
 def test_unlisted_survives_the_spool_like_everything_else_about_a_piece_of_news(tmp_path):
     spool = tmp_path / "outbox.json"
-    first = Outbox(spool=spool)
+    first = Ledger(spool=spool)
     first.push("You're on italki as of this week.", about="errands", listed=False)
 
-    [held] = Outbox(spool=spool).drain()
+    [held] = Ledger(spool=spool).drain()
 
     assert held.listed is False  # a restart must not turn it back into a name to pick
 
@@ -182,7 +182,7 @@ def test_a_requested_hand_over_is_collected_once_by_the_holder():
     # The brain's way of DELIVERING a held update instead of retelling it: the request rides the
     # outbox to wherever the news is held, and the holder speaks that item word for word. Two
     # versions of the same update, 13 seconds apart, is what retelling produced.
-    outbox = Outbox()
+    outbox = Ledger()
     outbox.request("fixer")
 
     assert outbox.take_requested() == {"fixer"}
@@ -196,10 +196,10 @@ def test_news_that_survived_a_restart_is_app_authored_to_the_new_brain(tmp_path)
     # in our conversation - I didn't say the feature was already in Highdeas", about a line it had
     # spoken verbatim eighteen minutes earlier.
     spool = tmp_path / "outbox.json"
-    first = Outbox(spool=spool)
+    first = Ledger(spool=spool)
     first.push("The feature should be there in Highdeas waiting.", about="toggle", composed=True)
 
-    [restored] = Outbox(spool=spool).drain()
+    [restored] = Ledger(spool=spool).drain()
 
     assert restored.composed is False
     assert restored.about == "toggle"  # still known to be about that agent

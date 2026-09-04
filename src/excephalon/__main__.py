@@ -51,7 +51,7 @@ from excephalon.memory import (
     translation_pairs,
     user_name,
 )
-from excephalon.outbox import Outbox
+from excephalon.threads import Ledger
 from excephalon.polish import mend
 from excephalon.relay import notice
 from excephalon.schedule import Schedule
@@ -508,7 +508,7 @@ def _session(*, announce, feed, gui, text_mode, muted, timings, stop, barge_in, 
     AGENT_INBOX.mkdir(parents=True, exist_ok=True)
     # Spooled, so news that has not reached the user yet survives a restart: three agents'
     # reports once lived only in a wedged process's memory, and died with it.
-    outbox = Outbox(spool=RUNTIME_DIR / "outbox.json")
+    outbox = Ledger(spool=RUNTIME_DIR / "outbox.json")
 
     # One-off messages he asked to hear at a later clock time ("remind me at 5:15 to start dinner
     # prep"). The pending list is a file, so a message set before a restart is still there after

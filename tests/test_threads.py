@@ -162,14 +162,6 @@ def test_drain_takes_everything_as_heard_for_tests_that_mean_exactly_that():
     assert ledger.owed() == [] and not ledger and not ledger.arrived.is_set()
 
 
-def test_the_outbox_name_still_opens_the_same_store():
-    from excephalon.outbox import CONCLUSIONS, Outbox
-
-    assert Outbox is Ledger
-    assert "landed" in CONCLUSIONS
-    assert News("x", kind="landed").concluding is True
-
-
 def test_his_attention_on_one_thread_is_a_bounded_hold_not_a_latch():
     # One thing at a time: while a walkthrough is in front of his eyes, other news waits. But a
     # verdict that never got RECORDED once held a merge report behind a review nobody could close,
