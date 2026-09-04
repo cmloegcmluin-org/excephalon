@@ -168,3 +168,58 @@ def test_the_outbox_name_still_opens_the_same_store():
     assert Outbox is Ledger
     assert "landed" in CONCLUSIONS
     assert News("x", kind="landed").concluding is True
+
+
+def test_his_attention_on_one_thread_is_a_bounded_hold_not_a_latch():
+    # One thing at a time: while a walkthrough is in front of his eyes, other news waits. But a
+    # verdict that never got RECORDED once held a merge report behind a review nobody could close,
+    # so the hold is bounded by his own turns and a changed set is a fresh hold.
+    from excephalon.threads import FOCUS_HOLDS_TURNS
+
+    ledger = Ledger()
+    assert ledger.focus(["spinner"]) == {"spinner"}
+    for _ in range(FOCUS_HOLDS_TURNS):
+        ledger.his_turn()
+    assert ledger.focus(["spinner"]) == set()  # he is no longer looking, whatever the record says
+
+    assert ledger.focus(["scroller"]) == {"scroller"}  # a different review: a fresh hold
+    assert ledger.focus([]) == set()
+
+
+def test_an_offer_stands_until_he_answers_and_knows_when_more_has_arrived():
+    # "I never said I was ready for the update." An offer he has not answered holds everything;
+    # the only thing that may change is the count ("I now have two updates for the
+    # scheduled-message item").
+    ledger = Ledger()
+    assert ledger.offer == 0
+
+    ledger.offered(1)
+    assert ledger.offer == 1  # it stands, and this much was behind it
+
+    ledger.spend_offer()
+    assert ledger.offer == 0
+
+
+def test_the_menu_as_read_out_survives_a_spent_offer_and_dies_with_the_last_fact():
+    # "why did it just give me the same message twice in a row?" - the list is re-read only when
+    # it would come out different, so what was last read out is remembered across his answers -
+    # and forgotten only once nothing is owed at all.
+    ledger = Ledger()
+    fact = ledger.owe("fixer: ready", about="fixer")
+    ledger.recited("Still waiting: fixer.")
+    ledger.offered(1)
+
+    ledger.spend_offer()
+    assert ledger.recital == "Still waiting: fixer."
+
+    ledger.settle(fact)
+    assert ledger.recital == "" and ledger.offer == 0
+
+
+def test_a_turn_of_his_spends_last_turns_request_too():
+    ledger = Ledger()
+    ledger.request("fixer")
+
+    ledger.his_turn()
+
+    assert ledger.take_requested() == set()  # an ask covers the moment it was made

@@ -33,12 +33,63 @@ one that wrote it is gone.
 """
 
 import json
+import re
 import threading
 
 # The kinds that END a work thread from where he sits: it merged, it came back from the landing
 # saying what stopped it, or it died. These are the answers to "did my thing ship?", and they are
 # the one class of news that may never be held back and may never be dropped unspoken.
 CONCLUSIONS = frozenset(("landed", "landing", "died"))
+
+# How many of HIS turns his attention on one piece of work may hold every other thread's news.
+# One thing at a time is his standing instruction: while a walkthrough is in front of his eyes,
+# other agents' news waits and no menu is read. But the hold silences everything, so it may never
+# outlive its premise - a verdict that never got RECORDED (the brain answered his "ship it" with
+# nothing at all) once held a merge report he was waiting for behind a review nobody could close.
+# Two turns is generous for "he is looking at it right now" and short enough that a missed record
+# can never bury the fleet.
+FOCUS_HOLDS_TURNS = 2
+
+# Picking one off a read-out list is terse - "two", "the drive one". Anything longer is him
+# talking, and an agent's name can easily fall inside an ordinary sentence ("what does the sidebar
+# look like now"). Reading a notice at him instead of answering that would lose the turn.
+MOST_WORDS = 6
+NUMBERS = ("one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten")
+_WORD = re.compile(r"[a-z0-9]+")
+# Picking is affirmative. A short sentence that DENIES something is doing another job - correcting
+# a mishearing, most often: "I said errands, not Aaron's" was read as picking that agent and
+# answered with its held news, which was a question he had already answered.
+_DENIALS = frozenset(("no", "not", "nope", "isnt", "wasnt", "didnt", "dont", "never"))
+
+
+def title_of(item):
+    """What a piece of owed news is CALLED out loud: his own words for the work, never the
+    agent's internal name - read out beside his own words for the same work, that name made one
+    thread read as two."""
+    return getattr(item, "work", "") or getattr(item, "about", None) or str(item)
+
+
+def pick(heard, listed):
+    """Which of the listed pieces of work he just named - by a word of its title, or by its
+    number - or None if he was not naming one. A name beats a number word in the same sentence
+    ("the drive one" carries "one"); a word two share picks neither, since asking again beats
+    answering about the wrong one; a number past the end names nothing."""
+    spoken = _WORD.findall(str(heard).lower().replace("'", ""))
+    if len(spoken) > MOST_WORDS or not spoken:
+        return None
+    said = set(spoken)
+    if said & _DENIALS:
+        return None
+    named = [place for place, item in enumerate(listed)
+             if said & set(_WORD.findall(title_of(item).lower()))]
+    if len(named) == 1:
+        return named[0]
+    if named:
+        return None
+    for place, word in enumerate(NUMBERS, start=1):
+        if word in said or str(place) in said:
+            return place - 1 if place <= len(listed) else None
+    return None
 
 
 class News(str):
@@ -117,10 +168,60 @@ class Ledger:
         # speaking - a pass that decides not to speak yet clears it and, if it deferred for his
         # talking, puts it back up.
         self.arrived = threading.Event()
+        # Where his attention is, and what he has been asked - the two things the loop used to
+        # keep as a spread of flags (_reviewing, _review_turns, _update_offered, _offered_count,
+        # _announced), each latched and cleared in a different place, and two of which starved
+        # each other in one night. Conversational, not durable: a restart re-offers through the
+        # greeting, which is composed knowing what waits.
+        self._focused = set()   # the threads his eyes are on right now
+        self._focus_age = 0     # how many of his turns that focus has held
+        self._offer = 0         # how much was waiting when he was last offered it; 0 = no offer
+        self._recital = ""      # the menu as last read out, so it is re-read only when different
         for row in self._spooled():
             self._facts.append(News._from_row(row))
         if self._facts:
             self.arrived.set()
+
+    # ---- his attention and what he has been asked ----------------------------------------------
+
+    def focus(self, candidates):
+        """The threads his eyes are genuinely on right now - `candidates` says whose work is in
+        review, and the answer is that set for as long as the hold may last, then nothing. A
+        changed set is a fresh hold."""
+        candidates = set(candidates or ())
+        if candidates != self._focused:
+            self._focused, self._focus_age = candidates, 0
+        return set(self._focused) if self._focus_age < FOCUS_HOLDS_TURNS else set()
+
+    def his_turn(self):
+        """A turn of his has passed: whatever holds his attention has held it one turn longer, and
+        any request the brain made last turn is spent."""
+        self._focus_age += 1
+        with self._lock:
+            self._requested = set()
+
+    @property
+    def offer(self):
+        """How much was waiting when he was last offered it - 0 when no offer stands."""
+        return self._offer
+
+    def offered(self, count):
+        """He has just been offered what waits: the offer stands until he answers it."""
+        self._offer = max(1, int(count))
+
+    def spend_offer(self):
+        """His answer to the offer - a pick, a go-ahead, words of his own - spends it. The menu as
+        last read out is NOT forgotten here: it is what keeps the same list from being recited at
+        him every pass, and it changes only when the list would come out different."""
+        self._offer = 0
+
+    @property
+    def recital(self):
+        """The menu as it was last read out to him, or "" when none stands."""
+        return self._recital
+
+    def recited(self, text):
+        self._recital = str(text or "")
 
     # ---- writing -------------------------------------------------------------------------------
 
@@ -196,12 +297,13 @@ class Ledger:
 
     def settle(self, news):
         """This fact reached him (or newer news about its thread replaced it): it is no longer
-        owed, in memory and on disk alike."""
+        owed, in memory and on disk alike. Once nothing is owed, no offer or menu stands either."""
         with self._lock:
             self._facts = [held for held in self._facts if not self._same(held, news)]
             self._write()
             if not self._facts:
                 self.arrived.clear()
+                self._offer, self._recital = 0, ""
 
     spoken = settle
     superseded = settle

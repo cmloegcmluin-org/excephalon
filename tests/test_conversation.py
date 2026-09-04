@@ -2461,7 +2461,7 @@ def test_a_pick_spends_the_offer_so_the_leftover_never_rides_unrelated_words():
     tts = FakeTTS()
     convo = Conversation(FakeSTT(["one", "the ship it still stands", "goodbye entity"]),
                          FakeBrain(), tts, outbox=outbox)
-    convo._update_offered = True  # the offer that read both names out is standing
+    convo._outbox.offered(2)  # the offer that read both names out is standing
 
     convo.turn()  # "one" picks the names update
     convo.turn()  # unrelated words: the spinner must NOT ride this reply
@@ -2482,7 +2482,7 @@ def test_a_held_update_about_other_work_does_not_ride_his_reply_mid_review():
     reviewing = {"names"}
     convo = Conversation(FakeSTT(["the ship it still stands", "goodbye entity"]), FakeBrain(),
                          tts, outbox=outbox, in_review=lambda: reviewing)
-    convo._update_offered = True
+    convo._outbox.offered(2)
 
     convo.turn()
 

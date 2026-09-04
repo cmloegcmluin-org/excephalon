@@ -717,7 +717,18 @@ collapsed. Looking (`seen`) clears the arrived signal the window's mic yields a 
 on; speaking does not, because a pass that decides not to speak yet must still stop the mic
 spinning. `outbox.Outbox` is now that class under its old name, so every producer keeps
 pushing to what it always pushed to; the file on disk is the same `runtime/outbox.json`, so
-nothing owed is lost across the upgrade. `waiting.py` is what happens when several agents finish at once: they are read out numbered and
+nothing owed is lost across the upgrade. The store also holds where his ATTENTION is and what he
+has been ASKED - the two things the loop used to keep as a spread of latched flags, each set and
+cleared in a different place, two of which starved each other in one night: `focus` answers
+whose work is genuinely in front of his eyes, bounded by his own turns (`FOCUS_HOLDS_TURNS`,
+`his_turn`), because a verdict that never got recorded once held a merge report behind a review
+nobody could close; `offer`/`offered`/`spend_offer` is the standing offer and how much was behind
+it, spent by his answer; `recital`/`recited` is the menu as last read out, so it is re-read only
+when it would come out different and forgotten only when nothing is owed. `pick` is which listed
+piece of work he just named - by a word of ITS TITLE or by number, name beating number, a
+shared word picking neither, a denial never a pick - and `speaker.roll_call` is the app's own
+numbered menu, labelled by his words for each piece of work; the module those two lived in is
+gone. What follows is that menu's law, which is unchanged: several agents finishing at once are read out numbered and
 held, and the list is read again ONLY when it would come out in different words — compared
 against the news behind it instead, fresh news for an agent already listed re-read a
 word-for-word identical sentence eight seconds later ("why did it just give me the same message

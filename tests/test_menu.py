@@ -1,5 +1,6 @@
 from excephalon.outbox import News
-from excephalon.waiting import chosen, roll_call
+from excephalon.speaker import roll_call
+from excephalon.threads import pick as chosen
 
 
 def _three():
