@@ -76,6 +76,8 @@ time you log in, and has a **Voice Log** entry in the Start Menu for starting it
   A gap in the sound — the machine asleep, the mic unplugged — starts a new file.
 - 16 kHz mono at 32 kbps: speech stays clear, two days take about 700 MB, and a file cut off by a
   crash or a shutdown still plays to where it stopped.
+- The hour being recorded can be played at any time, up to the last second or so. While a player
+  has it open, the recording carries on in a new file.
 - Anything older than two days is deleted. Only files it named itself: anything else you put in
   the folder is left alone.
 - It listens through the same microphone Excephalon does (`mic.txt`, `mic-gain.txt` below), and
