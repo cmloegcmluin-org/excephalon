@@ -206,3 +206,19 @@ def test_the_taskbar_pin_is_repointed_too():
     assert re.search(r"foreach\s*\(\$shortcut\s+in\s+@\(\$menu,\s*\$pin\)\)", text)
     # ...but only updated. A .lnk written into that folder pins nothing.
     assert re.search(r"-not\s+\(Test-Path\s+\$pin\)", text)
+
+
+def test_the_voice_log_s_door_says_it_is_the_voice_log_that_could_not_start(launch, tmp_path):
+    told = []
+
+    def missing_a_package():
+        raise ModuleNotFoundError("No module named 'pystray'")
+
+    code = launch.open_door(missing_a_package, title="Voice Log couldn't start",
+                            log=tmp_path / "voice-log-failure.log",
+                            tell=lambda title, body: told.append((title, body)))
+
+    assert code == 1
+    [(title, body)] = told
+    assert title == "Voice Log couldn't start" and "No module named 'pystray'" in body
+    assert "pystray" in (tmp_path / "voice-log-failure.log").read_text(encoding="utf-8")

@@ -90,8 +90,9 @@ def failure_message(exc, log=None):
     return "\n\n".join(said)
 
 
-def name_this_process():
-    """Leave the shortcut an interpreter that says "Excephalon" next time.
+def name_this_process(app="Excephalon", role="Excephalon",
+                      icon=REPO / "assets" / "excephalon.ico"):
+    """Leave the shortcut an interpreter that says the app's own name next time.
 
     Windows takes what it shows about a process from the file it was started
     from - the Details tab's name, the Processes tab's description, the icon
@@ -110,10 +111,20 @@ def name_this_process():
     try:
         from app_support.process_identity import ProcessNamer
 
-        ProcessNamer("Excephalon", icon=REPO / "assets" / "excephalon.ico").prepare_launcher(
-            "Excephalon")
+        ProcessNamer(app, icon=icon).name_this_process(role)
     except Exception:
         pass
+
+
+def open_door(enter, *, title, log=FAILURE_LOG, tell=show):
+    try:
+        enter()
+    except SystemExit as leaving:
+        return leaving.code or 0
+    except BaseException as exc:  # noqa: BLE001 - anything at all, or it dies in silence
+        tell(title, failure_message(exc, write_failure(traceback.format_exc(), log)))
+        return 1
+    return 0
 
 
 def run(argv=(), *, enter=None, log=FAILURE_LOG, tell=show):
@@ -122,18 +133,16 @@ def run(argv=(), *, enter=None, log=FAILURE_LOG, tell=show):
     if enter is None:
         sys.path.insert(0, str(REPO / "src"))  # a checkout with no editable install still runs
         name_this_process()
-    try:
-        if enter is None:
-            from excephalon.__main__ import main as enter
+
+    def excephalon():
+        app = enter
+        if app is None:
+            from excephalon.__main__ import main as app
         # This file IS the windowed launcher - a double-click means the window, whether or not
         # anything thought to pass the flag. Extra arguments still ride along (--mute, --text).
-        enter(["--gui", *argv])
-    except SystemExit as leaving:
-        return leaving.code or 0
-    except BaseException as exc:  # noqa: BLE001 - anything at all, or it dies in silence
-        tell(TITLE, failure_message(exc, write_failure(traceback.format_exc(), log)))
-        return 1
-    return 0
+        app(["--gui", *argv])
+
+    return open_door(excephalon, title=TITLE, log=log, tell=tell)
 
 
 if __name__ == "__main__":
