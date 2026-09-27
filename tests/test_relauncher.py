@@ -4,10 +4,7 @@ that is not there, `ctypes.windll` that does not exist, and creation flags that 
 rather than a nicety. A restart that cannot come back is the failure this whole helper exists to
 prevent, so it is worth a test on the desk it runs on."""
 
-import os
 from pathlib import Path
-
-import pytest
 
 from excephalon import machine, relauncher
 
@@ -61,8 +58,8 @@ def test_an_app_that_never_dies_still_gets_a_successor(tmp_path):
     assert len(started) == 1
 
 
-@pytest.mark.skipif(machine.WINDOWS, reason="the reparenting signal is POSIX's")
-def test_a_dead_parent_is_noticed_by_being_reparented_rather_than_by_a_signal():
+def test_a_dead_parent_is_noticed_by_being_reparented_rather_than_by_a_signal(monkeypatch):
+    monkeypatch.setattr(machine, "WINDOWS", False)
     # A zombie answers the null signal exactly as a live process does, so a helper asking that way
     # would sit out its whole timeout after the window had already gone. Its parent dying reparents
     # it at once, which is the signal that is actually true.
@@ -74,14 +71,22 @@ def test_a_dead_parent_is_noticed_by_being_reparented_rather_than_by_a_signal():
     assert watch() is False
 
 
-@pytest.mark.skipif(machine.WINDOWS, reason="POSIX's own answer for a process that is not ours")
-def test_a_process_that_is_not_this_helper_s_parent_is_asked_directly():
-    assert relauncher.watcher_for(os.getpid(), parent=lambda: 1)() is True
-    # A pid nothing could hold: 0 is the whole process group, and no ordinary pid is negative.
-    assert relauncher.watcher_for(2 ** 31 - 1, parent=lambda: 1)() is False
+def test_a_process_that_is_not_this_helper_s_parent_is_asked_directly(monkeypatch):
+    monkeypatch.setattr(machine, "WINDOWS", False)
+    running, somebody_elses = 4321, 5555
+
+    def null_signal(pid, signal):
+        assert signal == 0
+        if pid == somebody_elses:
+            raise PermissionError
+        if pid != running:
+            raise ProcessLookupError
+
+    assert relauncher.watcher_for(running, parent=lambda: 1, kill=null_signal)() is True
+    assert relauncher.watcher_for(somebody_elses, parent=lambda: 1, kill=null_signal)() is True
+    assert relauncher.watcher_for(9999, parent=lambda: 1, kill=null_signal)() is False
 
 
-@pytest.mark.skipif(machine.WINDOWS, reason="the bundle is the Mac's launcher")
 def test_a_mac_relaunch_goes_through_the_app_bundle_when_there_is_one(tmp_path):
     # The relaunch used to exec the venv python directly, and the app came back as "Python" with
     # the interpreter's own icon - a stranger in the Dock, beside the real pinned tile. The
@@ -95,7 +100,6 @@ def test_a_mac_relaunch_goes_through_the_app_bundle_when_there_is_one(tmp_path):
     assert started == [["open", "-n", "/Applications/Excephalon.app"]]
 
 
-@pytest.mark.skipif(machine.WINDOWS, reason="the bundle is the Mac's launcher")
 def test_a_mac_without_the_bundle_still_comes_back(tmp_path):
     started = []
 
