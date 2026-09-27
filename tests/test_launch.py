@@ -9,6 +9,8 @@ a launcher that names a FILE rather than a module, and a failure that puts its o
 
 import importlib.util
 import re
+import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -159,6 +161,7 @@ LAUNCHERS = (
     "Excephalon.bat",
     "tools/install-start-menu.ps1",
     "tools/install-app-bundle.sh",
+    "tools/install-voice-log.py",
     "src/excephalon/relauncher.py",
 )
 
@@ -222,3 +225,72 @@ def test_the_voice_log_s_door_says_it_is_the_voice_log_that_could_not_start(laun
     [(title, body)] = told
     assert title == "Voice Log couldn't start" and "No module named 'pystray'" in body
     assert "pystray" in (tmp_path / "voice-log-failure.log").read_text(encoding="utf-8")
+
+
+def test_the_voice_log_door_starts_the_voice_log_on_its_own_checkout_s_runtime_folder(monkeypatch):
+    from excephalon import voice_log_tray
+
+    started = []
+    monkeypatch.setattr(voice_log_tray, "main", started.append)
+    spec = importlib.util.spec_from_file_location("voice_log_door", REPO / "voice_log.pyw")
+    door = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(door)
+
+    door.enter()
+
+    assert started == [REPO / "runtime"]
+
+
+def _voice_log_installer():
+    spec = importlib.util.spec_from_file_location("install_voice_log",
+                                                  REPO / "tools" / "install-voice-log.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_voice_log_starts_when_he_logs_in_and_can_be_started_from_the_start_menu(tmp_path):
+    installer = _voice_log_installer()
+    pythonw = tmp_path / ".venv" / "Scripts" / "pythonw.exe"
+
+    startup, menu = installer.shortcuts(REPO, appdata=tmp_path / "Roaming", interpreter=pythonw)
+
+    programs = tmp_path / "Roaming" / "Microsoft" / "Windows" / "Start Menu" / "Programs"
+    assert startup.path == programs / "Startup" / "Voice Log.lnk"
+    assert menu.path == programs / "Voice Log.lnk"
+    for shortcut in (startup, menu):
+        assert shortcut.target == pythonw
+        assert shortcut.arguments == f'"{REPO / "voice_log.pyw"}"'
+        assert shortcut.working_directory == REPO
+        assert shortcut.icon == REPO / "assets" / "voice-log.ico"
+
+
+def test_the_voice_log_s_shortcuts_start_it_through_an_interpreter_named_for_it(monkeypatch, tmp_path):
+    asked = []
+
+    class ProcessNamer:
+        def __init__(self, app_name, icon=None):
+            asked.append((app_name, icon))
+
+        def named_exe(self, python_exe, role):
+            asked.append((python_exe, role))
+            return str(Path(python_exe).with_name(f"VoiceLog-{role}.exe"))
+
+    process_identity = types.ModuleType("app_support.process_identity")
+    process_identity.ProcessNamer = ProcessNamer
+    monkeypatch.setitem(sys.modules, "app_support", types.ModuleType("app_support"))
+    monkeypatch.setitem(sys.modules, "app_support.process_identity", process_identity)
+
+    named = _voice_log_installer().named_interpreter(tmp_path)
+
+    scripts = tmp_path / ".venv" / "Scripts"
+    assert named == scripts / "VoiceLog-VoiceLog.exe"
+    assert asked == [("Voice Log", tmp_path / "assets" / "voice-log.ico"),
+                     (scripts / "pythonw.exe", "VoiceLog")]
+
+
+def test_without_the_naming_helper_the_shortcuts_use_the_plain_windowless_python(monkeypatch, tmp_path):
+    monkeypatch.setitem(sys.modules, "app_support.process_identity", None)
+
+    assert _voice_log_installer().named_interpreter(tmp_path) == (
+        tmp_path / ".venv" / "Scripts" / "pythonw.exe")

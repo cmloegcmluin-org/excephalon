@@ -8,11 +8,13 @@ The sphere carries the icon's visual size, so it is drawn large: an earlier cut 
 sphere to 60% of the canvas and the icon sat beside full-bleed taskbar neighbors looking
 half their size. Spike tips now graze the canvas edge and the cage fills most of it.
 
-Two outputs, one source of truth:
+Three outputs:
 - ``assets/excephalon.ico`` - what the window, the launcher shortcut and the taskbar use.
   Sizes 16-64 are packed as classic BMP entries (some shell paths render PNG-compressed
   small sizes poorly); only the 256 is PNG, per Windows convention.
 - ``assets/excephalon.png`` - the 256px emblem for the README.
+- ``assets/voice-log.ico`` - the Voice Log's shortcuts, packed the same way from the same
+  microphone its tray icon draws (``excephalon.voice_log_icon``).
 
 Each size is rendered at 16x supersampling and box-averaged down, so no Pillow is needed;
 regenerate with::
@@ -21,6 +23,7 @@ regenerate with::
 """
 
 import struct
+import sys
 import zlib
 from pathlib import Path
 
@@ -125,16 +128,23 @@ def pack_ico(frames_by_size, out):
     Path(out).write_bytes(directory + entries + blobs)
 
 
+def write_icon(draw, out):
+    frames = {size: png_bytes(draw(size)) if size == 256 else bmp_bytes(draw(size))
+              for size in SIZES}
+    pack_ico(frames, out)
+    return frames
+
+
 def main():
     root = Path(__file__).resolve().parents[1]
-    frames = {}
-    for size in SIZES:
-        emblem = render(size)
-        frames[size] = png_bytes(emblem) if size == 256 else bmp_bytes(emblem)
-        if size == 256:
-            (root / "assets/excephalon.png").write_bytes(frames[size])
-    pack_ico(frames, root / "assets/excephalon.ico")
-    print("wrote assets/excephalon.ico and assets/excephalon.png, sizes", SIZES)
+    frames = write_icon(render, root / "assets/excephalon.ico")
+    (root / "assets/excephalon.png").write_bytes(frames[256])
+    sys.path.insert(0, str(root / "src"))
+    from excephalon.voice_log_icon import draw_icon
+
+    write_icon(lambda size: draw_icon(size, recording=True), root / "assets/voice-log.ico")
+    print("wrote assets/excephalon.ico, assets/excephalon.png and assets/voice-log.ico, sizes",
+          SIZES)
 
 
 if __name__ == "__main__":
