@@ -215,3 +215,12 @@ def pick_input_device(override=None):
     hostapi = sd.query_devices(default_input)["hostapi"] if default_input is not None else None
     return choose_input_device(sd.query_devices(), probe_input_device, override=override,
                                hostapi=hostapi)
+
+
+def open_live_microphone(mic_txt, mic_gain_txt):
+    # PortAudio lists the devices once, as it starts, so only a restart sees a mic plugged in since.
+    sd._terminate()
+    sd._initialize()
+    device, name = pick_input_device(named_microphone(mic_txt))
+    microphone = LiveMicrophone(device, gain=microphone_gain(mic_gain_txt))
+    return microphone, name or "the default microphone"

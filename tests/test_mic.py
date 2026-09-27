@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 import sounddevice as sd
 
+from excephalon import mic
 from excephalon.mic import (BackgroundMicrophone, LiveMicrophone, MicrophoneStopped, choose_input_device,
                            microphone_gain, named_microphone, pick_input_device)
 
@@ -277,3 +278,32 @@ def test_the_named_mic_is_found_among_the_inputs_the_default_mic_s_system_offers
     monkeypatch.setattr(sd.default, "device", [2, 0])
 
     assert pick_input_device(override="Brio 101") == (3, "Microphone (Brio 101)")
+
+
+def test_the_microphones_are_listed_afresh_before_one_is_picked_and_opened(monkeypatch, tmp_path):
+    happened = []
+    monkeypatch.setattr(sd, "_terminate", lambda: happened.append("forget the old list"))
+    monkeypatch.setattr(sd, "_initialize", lambda: happened.append("list them again"))
+    monkeypatch.setattr(mic, "pick_input_device",
+                        lambda override: happened.append(f"pick {override}") or (3, "Microphone (Brio 101)"))
+    monkeypatch.setattr(mic, "LiveMicrophone",
+                        lambda device, gain: happened.append(f"open {device} turned up x{gain:g}") or "live")
+    (tmp_path / "mic.txt").write_text("Brio 101", encoding="utf-8")
+    (tmp_path / "mic-gain.txt").write_text("2", encoding="utf-8")
+
+    opened = mic.open_live_microphone(tmp_path / "mic.txt", tmp_path / "mic-gain.txt")
+
+    assert opened == ("live", "Microphone (Brio 101)")
+    assert happened == ["forget the old list", "list them again", "pick Brio 101",
+                        "open 3 turned up x2"]
+
+
+def test_with_no_mic_to_pick_the_system_default_is_opened_and_called_that(monkeypatch, tmp_path):
+    monkeypatch.setattr(sd, "_terminate", lambda: None)
+    monkeypatch.setattr(sd, "_initialize", lambda: None)
+    monkeypatch.setattr(mic, "pick_input_device", lambda override: (None, None))
+    monkeypatch.setattr(mic, "LiveMicrophone", lambda device, gain: ("live", device))
+
+    opened = mic.open_live_microphone(tmp_path / "mic.txt", tmp_path / "mic-gain.txt")
+
+    assert opened == (("live", None), "the default microphone")
