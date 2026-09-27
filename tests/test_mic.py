@@ -1,6 +1,11 @@
 import threading
 
-from excephalon.mic import BackgroundMicrophone, choose_input_device
+import numpy as np
+import pytest
+import sounddevice as sd
+
+from excephalon.mic import (BackgroundMicrophone, LiveMicrophone, MicrophoneStopped, choose_input_device,
+                           microphone_gain, named_microphone, pick_input_device)
 
 
 def _dev(name, in_ch=2, sr=44100):
@@ -177,3 +182,98 @@ def test_a_continuity_iphone_is_never_chosen_and_never_even_probed():
 
     index, name = choose_input_device(devices, probe, override="iphone")
     assert index == 0  # asked for BY NAME, it is still reachable
+
+
+class HeldStream:
+    def __init__(self, **settings):
+        self.settings = settings
+        self.running = False
+
+    def start(self):
+        self.running = True
+
+    def stop(self):
+        self.running = False
+
+    def close(self):
+        self.closed = True
+
+    def hears(self, *samples):
+        block = np.asarray(samples, dtype=np.float32).reshape(-1, 1)
+        self.settings["callback"](block, len(samples), None, None)
+
+
+def _held_microphone(**options):
+    streams = []
+
+    def open_stream(**settings):
+        streams.append(HeldStream(**settings))
+        return streams[-1]
+
+    return LiveMicrophone(open_stream=open_stream, **options), streams
+
+
+def test_each_block_arrives_with_the_moment_it_was_heard():
+    moments = iter([1_790_000_000.25])
+    microphone, [stream] = _held_microphone(clock=lambda: next(moments))
+
+    stream.hears(0.1, -0.2)
+    at, block = next(microphone.blocks(stall_after=1.0))
+
+    assert at == 1_790_000_000.25
+    assert block.tolist() == pytest.approx([0.1, -0.2])
+
+
+def test_a_microphone_that_stops_sending_sound_says_so():
+    microphone, [stream] = _held_microphone()
+
+    stream.hears(0.1)
+    blocks = microphone.blocks(stall_after=0.05)
+    next(blocks)
+
+    with pytest.raises(MicrophoneStopped):
+        next(blocks)
+
+
+def test_a_quiet_microphone_is_turned_up_without_clipping_past_full_scale():
+    microphone, [stream] = _held_microphone(gain=3.0)
+
+    stream.hears(0.1, -0.5)
+    _, block = next(microphone.blocks(stall_after=1.0))
+
+    assert block.tolist() == pytest.approx([0.3, -1.0])
+
+
+def test_closing_lets_go_of_the_microphone():
+    microphone, [stream] = _held_microphone()
+
+    microphone.close()
+
+    assert not stream.running and stream.closed
+
+
+def test_the_mic_named_in_mic_txt_is_read_without_its_line_ending(tmp_path):
+    (tmp_path / "mic.txt").write_text("Brio 101\n", encoding="utf-8")
+
+    assert named_microphone(tmp_path / "mic.txt") == "Brio 101"
+    assert named_microphone(tmp_path / "missing.txt") is None
+
+
+def test_the_boost_in_mic_gain_txt_is_read_and_anything_unreadable_means_none(tmp_path):
+    (tmp_path / "mic-gain.txt").write_text("5\n", encoding="utf-8")
+    (tmp_path / "garbled.txt").write_text("louder please", encoding="utf-8")
+
+    assert microphone_gain(tmp_path / "mic-gain.txt") == 5.0
+    assert microphone_gain(tmp_path / "garbled.txt") == 1.0
+    assert microphone_gain(tmp_path / "missing.txt") == 1.0
+
+
+def test_the_named_mic_is_found_among_the_inputs_the_default_mic_s_system_offers(monkeypatch):
+    devices = [dict(_dev("Speakers", in_ch=0), hostapi=0),
+               dict(_dev("Microphone (Brio 101)"), hostapi=1),
+               dict(_dev("Headset Microphone"), hostapi=0),
+               dict(_dev("Microphone (Brio 101)"), hostapi=0)]
+    monkeypatch.setattr(sd, "query_devices", lambda index=None: devices if index is None else devices[index])
+    monkeypatch.setattr(sd.default, "device", [2, 0])
+
+    assert pick_input_device(override="Brio 101") == (3, "Microphone (Brio 101)")

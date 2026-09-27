@@ -169,16 +169,6 @@ def _projects_note():
     )
 
 
-def _mic_gain():
-    """How much to amplify the mic. A quiet input - an onboard mic can peak around 0.009, under
-    the 0.01 speech threshold - needs a boost or nothing registers as speech; loud mics leave
-    this at 1."""
-    try:
-        return float(MIC_GAIN.read_text(encoding="utf-8").strip()) if MIC_GAIN.exists() else 1.0
-    except ValueError:
-        return 1.0
-
-
 def _project_roots():
     """Everywhere the user's projects live: the workspace, plus each root listed in
     vocab-roots.txt - one file feeding both the transcription vocabulary and the brain's map,
@@ -244,9 +234,8 @@ def _open_ears(announce):
 
     Not "hearing", which is `excephalon.hearing`: that module is the live line, and one name for both
     would have the next reader looking for a screen in the microphone code."""
-    import sounddevice as sd
-
-    from excephalon.mic import BackgroundMicrophone, Microphone, choose_input_device, probe_input_device
+    from excephalon.mic import (BackgroundMicrophone, Microphone, microphone_gain, named_microphone,
+                                pick_input_device)
     from excephalon.recorder import AudioRecorder
     from excephalon.transcribe import CorrectingTranscriber, ParakeetTranscriber
 
@@ -264,13 +253,8 @@ def _open_ears(announce):
     # hands back silence. Pick the input that's actually hearing the room (or an override the user
     # drops in mic.txt), staying on the default's host API so the stream can actually be opened,
     # and say which mic won.
-    override = MIC_OVERRIDE.read_text(encoding="utf-8").strip() if MIC_OVERRIDE.exists() else None
-    default_input = sd.default.device[0]
-    hostapi = sd.query_devices(default_input)["hostapi"] if default_input is not None else None
-    device, device_name = choose_input_device(
-        sd.query_devices(), probe_input_device, override=override, hostapi=hostapi
-    )
-    gain = _mic_gain()
+    device, device_name = pick_input_device(named_microphone(MIC_OVERRIDE))
+    gain = microphone_gain(MIC_GAIN)
     announce(f"(listening on mic: {device_name or 'system default'}{f', gain x{gain:g}' if gain != 1.0 else ''})")
     # Capture on a background thread: keep draining the mic even while Parakeet is transcribing, so
     # nothing they say mid-transcription is lost to a PortAudio overflow.

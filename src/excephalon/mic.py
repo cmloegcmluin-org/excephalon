@@ -14,6 +14,7 @@ silently drop whatever was said mid-transcription.
 import math
 import queue
 import threading
+import time
 
 import numpy as np
 import sounddevice as sd
@@ -21,6 +22,12 @@ import sounddevice as sd
 SAMPLE_RATE = 16000
 FRAME = 480  # 30 ms at 16 kHz
 MAX_BUFFERED_FRAMES = 2000  # ~60 s; a cap on backlog that piles up between turns (drop the oldest)
+
+
+def _turned_up(frame, gain):
+    if gain == 1.0:
+        return frame
+    return np.clip(frame * gain, -1.0, 1.0).astype("float32")
 
 
 class Microphone:
@@ -34,10 +41,7 @@ class Microphone:
 
     def read(self):
         data, _ = self._stream.read(self._blocksize)
-        frame = data[:, 0].copy()
-        if self._gain != 1.0:
-            frame = np.clip(frame * self._gain, -1.0, 1.0).astype("float32")
-        return frame
+        return _turned_up(data[:, 0].copy(), self._gain)
 
     def frames(self):
         while True:
@@ -106,6 +110,35 @@ class BackgroundMicrophone:
         self._thread.join(timeout=1.0)
 
 
+class MicrophoneStopped(Exception):
+    pass
+
+
+class LiveMicrophone:
+    def __init__(self, device=None, *, gain=1.0, samplerate=SAMPLE_RATE,
+                 blocksize=SAMPLE_RATE // 10, open_stream=sd.InputStream, clock=time.time):
+        self._gain = gain
+        self._clock = clock
+        self._heard = queue.Queue()
+        self._stream = open_stream(device=device, samplerate=samplerate, channels=1,
+                                   dtype="float32", blocksize=blocksize, callback=self._arrived)
+        self._stream.start()
+
+    def _arrived(self, block, frames, when, status):
+        self._heard.put((self._clock(), _turned_up(block[:, 0].copy(), self._gain)))
+
+    def blocks(self, stall_after):
+        while True:
+            try:
+                yield self._heard.get(timeout=stall_after)
+            except queue.Empty:
+                raise MicrophoneStopped(f"no sound for {stall_after:g} seconds") from None
+
+    def close(self):
+        self._stream.stop()
+        self._stream.close()
+
+
 def choose_input_device(devices, probe, *, override=None, hostapi=None):
     """Pick an input device index from a `sd.query_devices()` list.
 
@@ -164,3 +197,21 @@ def probe_input_device(index, *, seconds=0.4):
     sd.wait()
     clean = np.clip(np.nan_to_num(recording[:, 0]), -1.0, 1.0)
     return float(np.sqrt(np.mean(clean**2)))
+
+
+def named_microphone(mic_txt):
+    return mic_txt.read_text(encoding="utf-8").strip() if mic_txt.exists() else None
+
+
+def microphone_gain(mic_gain_txt):
+    try:
+        return float(mic_gain_txt.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return 1.0
+
+
+def pick_input_device(override=None):
+    default_input = sd.default.device[0]
+    hostapi = sd.query_devices(default_input)["hostapi"] if default_input is not None else None
+    return choose_input_device(sd.query_devices(), probe_input_device, override=override,
+                               hostapi=hostapi)
