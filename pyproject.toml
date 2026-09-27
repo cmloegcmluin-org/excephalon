@@ -14,6 +14,7 @@ dependencies = [
     "sounddevice>=0.4",          # microphone capture and the neural voice's playback
     "sherpa-onnx>=1.13",         # speaker embeddings: learning his voice, scoring what the mic hears
     "numpy>=1.26",               # audio frames + energy VAD
+    "soundfile>=0.13",           # the Voice Log's MP3s: 0.13 is the first that can ask for constant bitrate
     "flask>=3",                  # the window is a local web app
     "pywebview>=5",              # ...shown in its own native window rather than a browser tab
 ]
