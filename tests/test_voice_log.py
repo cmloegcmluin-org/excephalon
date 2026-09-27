@@ -167,22 +167,26 @@ def test_the_folder_is_made_the_first_time_it_is_needed(tmp_path):
     assert _recordings(tmp_path / "runtime" / "voice-log") == ["2026-09-26 17-00-00.mp3"]
 
 
-def test_after_a_failed_save_the_next_sound_goes_to_a_fresh_file(tmp_path, monkeypatch):
+def test_while_a_player_holds_the_recording_the_next_sound_goes_to_a_fresh_file(tmp_path, monkeypatch):
     log = VoiceLog(tmp_path)
     log.write(_tone(1.0), at=_at(2026, 9, 26, 17, 0, 1))
-    saves = soundfile.SoundFile.write
+    opens = Path.open
 
-    def disk_full(recording, block):
-        monkeypatch.setattr(soundfile.SoundFile, "write", saves)
-        raise OSError("No space left on device")
+    def held_by_a_player(path, mode="r", *args, **kwargs):
+        if mode == "r+b" and path.name == "2026-09-26 17-00-00.mp3":
+            raise PermissionError(13, "The process cannot access the file because it is being "
+                                      "used by another process", str(path))
+        return opens(path, mode, *args, **kwargs)
 
-    monkeypatch.setattr(soundfile.SoundFile, "write", disk_full)
-    with pytest.raises(OSError):
+    monkeypatch.setattr(Path, "open", held_by_a_player)
+    with pytest.raises(PermissionError):
         log.write(_tone(1.0), at=_at(2026, 9, 26, 17, 0, 2))
     log.write(_tone(1.0), at=_at(2026, 9, 26, 17, 0, 3))
     log.close()
 
     assert _recordings(tmp_path) == ["2026-09-26 17-00-00.mp3", "2026-09-26 17-00-02.mp3"]
+    heard, rate = soundfile.read(tmp_path / "2026-09-26 17-00-00.mp3")
+    assert len(heard) / rate > 0.5
 
 
 class SavedBlocks:
@@ -424,3 +428,49 @@ def test_a_microphone_that_cannot_even_be_closed_does_not_stop_the_recording():
     recorder.start()
     assert _wait_for(lambda: log.blocks[:2] == ["before", "after"])
     recorder.stop(because="the test is over")
+
+
+def _open_the_way_windows_media_player_does(path):
+    if sys.platform != "win32":
+        return path.open("rb")
+    import msvcrt
+    from ctypes import WinDLL, get_last_error, wintypes
+
+    kernel32 = WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateFileW.restype = wintypes.HANDLE
+    kernel32.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+                                     wintypes.LPVOID, wintypes.DWORD, wintypes.DWORD,
+                                     wintypes.HANDLE]
+    generic_read, share_read_but_refuse_writers, open_existing = 0x80000000, 0x1, 3
+    handle = kernel32.CreateFileW(str(path), generic_read, share_read_but_refuse_writers, None,
+                                  open_existing, 0, None)
+    if handle in (None, wintypes.HANDLE(-1).value):
+        raise PermissionError(f"Windows refused to open {path.name}: error {get_last_error()}")
+    return os.fdopen(msvcrt.open_osfhandle(handle, os.O_RDONLY), "rb")
+
+
+def test_the_recording_being_made_can_be_played_at_any_moment(tmp_path):
+    log = VoiceLog(tmp_path)
+    log.write(_tone(3.0), at=_at(2026, 9, 26, 17, 0, 3))
+    [recording] = tmp_path.iterdir()
+
+    with _open_the_way_windows_media_player_does(recording) as player:
+        heard, rate = soundfile.read(player)
+    log.close()
+
+    assert len(heard) / rate > 2.0
+
+
+class HeldAtTheEnd(SavedBlocks):
+    def close(self):
+        raise PermissionError(13, "being used by another process", "2026-09-26 17-00-00.mp3")
+
+
+def test_a_last_save_that_fails_still_lets_the_recording_stop(caplog):
+    caplog.set_level(logging.INFO, logger="excephalon.voice_log")
+    recorder = Recorder(HeldAtTheEnd(), _one_after_another())
+
+    recorder.stop(because="Quit from the tray")
+
+    assert "Could not finish the last recording" in caplog.text
+    assert "Stopped recording: Quit from the tray" in caplog.text

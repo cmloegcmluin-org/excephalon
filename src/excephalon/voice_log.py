@@ -16,6 +16,7 @@ NAME_FORMAT = "%Y-%m-%d %H-%M-%S"
 THIRTY_TWO_KBPS = 0.85
 LONGEST_UNBROKEN_GAP = 2.0
 STILL_RECORDING_WITHIN = 3.0
+SAVED_EVERY = 1.0
 KEPT_FOR = timedelta(days=2)
 A_RECORDING = re.compile(r"\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}( \(\d+\))?\.mp3")
 
@@ -24,12 +25,45 @@ def _hour_of(moment):
     return datetime.fromtimestamp(moment).replace(minute=0, second=0, microsecond=0)
 
 
+class _OpenOnlyToSave:
+    def __init__(self, path):
+        self._path = path
+        self._position = 0
+        self._length = 0
+        self._unsaved = []
+        path.write_bytes(b"")
+
+    def write(self, data):
+        self._unsaved.append((self._position, bytes(data)))
+        self._position += len(data)
+        self._length = max(self._length, self._position)
+        return len(data)
+
+    def seek(self, offset, whence=0):
+        self._position = (0, self._position, self._length)[whence] + offset
+        return self._position
+
+    def tell(self):
+        return self._position
+
+    def save(self):
+        if not self._unsaved:
+            return
+        with self._path.open("r+b") as disk:
+            for position, data in self._unsaved:
+                disk.seek(position)
+                disk.write(data)
+        self._unsaved.clear()
+
+
 class VoiceLog:
     def __init__(self, folder):
         self._folder = Path(folder)
         self._recording = None
+        self._on_disk = None
         self._hour = None
         self._heard_until = None
+        self._saved_until = None
 
     def write(self, block, at):
         start = at - len(block) / SAMPLE_RATE
@@ -38,6 +72,9 @@ class VoiceLog:
             self._begin(start)
         try:
             self._recording.write(block)
+            if at - self._saved_until >= SAVED_EVERY:
+                self._on_disk.save()
+                self._saved_until = at
         except Exception:
             self._abandon()
             raise
@@ -45,14 +82,15 @@ class VoiceLog:
 
     def close(self):
         if self._recording is not None:
-            self._recording.close()
-            self._recording = None
+            recording, self._recording = self._recording, None
+            recording.close()
+            self._on_disk.save()
 
     def _abandon(self):
         try:
             self.close()
         except Exception:
-            self._recording = None
+            pass
 
     def _carries_on_from(self, start):
         return (self._recording is not None
@@ -62,11 +100,12 @@ class VoiceLog:
     def _begin(self, start):
         self._folder.mkdir(parents=True, exist_ok=True)
         self._forget_older_than(start - KEPT_FOR.total_seconds())
+        self._on_disk = _OpenOnlyToSave(self._unused_name(datetime.fromtimestamp(start)))
         self._recording = soundfile.SoundFile(
-            self._unused_name(datetime.fromtimestamp(start)), "w", samplerate=SAMPLE_RATE,
-            channels=1, format="MP3", subtype="MPEG_LAYER_III",
-            bitrate_mode="CONSTANT", compression_level=THIRTY_TWO_KBPS)
+            self._on_disk, "w", samplerate=SAMPLE_RATE, channels=1, format="MP3",
+            subtype="MPEG_LAYER_III", bitrate_mode="CONSTANT", compression_level=THIRTY_TWO_KBPS)
         self._hour = _hour_of(start)
+        self._saved_until = start
 
     def _unused_name(self, began):
         path = self._folder / f"{began:{NAME_FORMAT}}.mp3"
@@ -108,7 +147,10 @@ class Recorder:
     def stop(self, because):
         self._stopping.set()
         with self._saving:
-            self._log.close()
+            try:
+                self._log.close()
+            except Exception as unsaved:
+                logger.warning("Could not finish the last recording: %s", unsaved)
         logger.info("Stopped recording: %s", because)
 
     def status(self):
