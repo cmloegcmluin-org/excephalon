@@ -59,9 +59,9 @@ def _alive_via_kernel32(pid):
         kernel32.CloseHandle(handle)
 
 
-def _signalable(pid):
+def _signalable(pid, kill):
     try:
-        os.kill(pid, 0)
+        kill(pid, 0)
     except ProcessLookupError:
         return False
     except PermissionError:
@@ -69,7 +69,7 @@ def _signalable(pid):
     return True
 
 
-def watcher_for(pid, *, parent=os.getppid):
+def watcher_for(pid, *, parent=os.getppid, kill=os.kill):
     """How to ask whether the old app is still up, on this desk.
 
     On POSIX that app is this helper's own parent, and a dead parent reparents its children away
@@ -80,7 +80,7 @@ def watcher_for(pid, *, parent=os.getppid):
         return lambda: _alive_via_kernel32(pid)
     if parent() == pid:
         return lambda: parent() == pid
-    return lambda: _signalable(pid)
+    return lambda: _signalable(pid, kill)
 
 
 MAC_BUNDLE = Path("/Applications/Excephalon.app")
