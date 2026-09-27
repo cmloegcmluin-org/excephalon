@@ -899,8 +899,10 @@ its own files once their last sound is two days old; `Recorder` is the loop that
 through a mic that stops, breaks or is missing, and `status()` is what the icon shows.
 `mic.LiveMicrophone` hands over blocks from the stream's callback with the moment they were heard,
 and `open_live_microphone` restarts PortAudio before picking, since PortAudio lists devices once.
-Three measured facts shape it: the MP3s are CONSTANT 32 kbps because a variable-bitrate file its
-process never got to close (a crash, a kill) decodes to about half its length; pystray
+Four measured facts shape it: the MP3s are CONSTANT 32 kbps because a variable-bitrate file its
+process never got to close (a crash, a kill) decodes to about half its length; the file is open
+only for the instant each second's save takes, because Windows' own players refuse to open a file
+anyone holds for writing, which kept the hour being recorded unplayable until it ended; pystray
 answers messages it has no handler for with 0, which to `WM_QUERYENDSESSION` means "hold the
 shutdown", so the tray answers it itself; and a second launch takes over from the first (a named
 mutex and event) rather than exiting, so starting it again always leaves the one just started
