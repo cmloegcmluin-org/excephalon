@@ -80,10 +80,16 @@ def _approved(desk, name, steps="look at it"):
     desk.present(name, steps)
     desk._outbox.drain()  # its report reached him - approval is only legal on work he was shown
     desk.verdict(name, True)
-    agent = desk._desked[name].agent
-    _wait_for(lambda: len(agent.messages) >= 2 and desk._desked[name].state == "idle")
+    _carried_through(desk)
     desk._outbox.drain()  # the landing report reached him; nothing about the agent is still owed
     _git_confirmed(desk, name)
+
+
+def _carried_through(desk, timeout=2.0):
+    carried = 0
+    while carried < len(desk._threads):
+        desk._threads[carried].join(timeout)
+        carried += 1
 
 
 def _git_confirmed(desk, name):
@@ -620,7 +626,8 @@ def test_a_failed_agent_never_ticks_its_enhancement_done(tmp_path):
                      log_dir=tmp_path / "agent-logs",
                      complete_enhancement=lambda item: ticked.append(item) or True, run=_no_git)
     desk.start("doomed", "/tmp/wt", "attempt it", enhancement="Better voice")
-    assert _wait_for(lambda: bool(desk._desked) and desk._desked["doomed"].state == "failed")
+    _carried_through(desk)
+    assert desk._desked["doomed"].state == "failed"
 
     outbox.drain()  # the death notice reached him - a wrap-up never buries unspoken news
     assert desk.retire("doomed") is True
@@ -655,7 +662,8 @@ def test_the_enhancement_tag_survives_a_restart_and_still_ticks(tmp_path):
     revived.revive()
 
     # The revived agent carries the approved verdict across the restart, so its wrap-up is legal.
-    assert _wait_for(lambda: revived._desked["voice"].state == "idle")
+    _carried_through(revived)
+    assert revived._desked["voice"].state == "idle"
     revived_outbox.drain()  # its picked-back-up report reached him
     assert revived.retire("voice") is True
     assert ticked == ["Better voice"]  # and the revived agent still ticks it
@@ -696,8 +704,8 @@ def test_an_agent_cannot_be_wrapped_up_over_work_he_has_not_ruled_on(tmp_path):
 
     builder = desk._desked["builder"].agent
     desk.verdict("builder", True)
-    assert _wait_for(lambda: len(builder.messages) >= 2
-                     and desk._desked["builder"].state == "idle")
+    _carried_through(desk)
+    assert len(builder.messages) >= 2 and desk._desked["builder"].state == "idle"
 
     outbox.drain()  # the landing report reached him
     assert desk.retire("builder") is False  # sent to land it is not the same as having landed it
@@ -821,8 +829,8 @@ def test_a_wrap_up_two_seconds_after_the_landing_order_is_refused(tmp_path):
     desk.present("shipper", "submit the Groceries row and check the capture")
     desk.verdict("shipper", True)  # his "ship it" - the order goes out on a thread of its own
     agent = desk._desked["shipper"].agent
-    assert _wait_for(lambda: len(agent.messages) >= 2
-                     and desk._desked["shipper"].state == "idle")
+    _carried_through(desk)
+    assert len(agent.messages) >= 2 and desk._desked["shipper"].state == "idle"
     outbox.drain()
 
     assert desk.retire("shipper") is False      # git has not said it merged, so it has not
@@ -908,8 +916,8 @@ def test_an_agent_cannot_be_wrapped_up_while_its_news_has_not_reached_him(tmp_pa
     desk.present("lander", "watch the spinner hold through the whole send")
     desk.verdict("lander", True)
     agent = desk._desked["lander"].agent
-    assert _wait_for(lambda: len(agent.messages) >= 2
-                     and desk._desked["lander"].state == "idle")
+    _carried_through(desk)
+    assert len(agent.messages) >= 2 and desk._desked["lander"].state == "idle"
 
     _git_confirmed(desk, "lander")              # the merge is a fact; only the telling is left
     assert desk.retire("lander") is False       # its merge report is still waiting to be spoken
@@ -1826,7 +1834,8 @@ def test_a_died_agent_is_recorded_as_died_never_delivered(tmp_path):
     desk._wrapped_path = tmp_path / "wrapped.json"
     desk._now = lambda: 1000.0
     desk.start("doomed", "/tmp/wt", "a task")
-    assert _wait_for(lambda: desk._desked["doomed"].state == "failed")
+    _carried_through(desk)
+    assert desk._desked["doomed"].state == "failed"
     outbox.drain()
 
     assert desk.retire("doomed") is True
