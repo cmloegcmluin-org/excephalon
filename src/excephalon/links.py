@@ -319,7 +319,7 @@ def _stand_in(target):
     return name if _SAYABLE_NAME.fullmatch(name) else SPOKEN_FILE
 
 
-def _on_this_machine(where):
+def open_on_this_machine(where):
     """This desk's own "open this": a folder in its file manager, a file in whatever owns that
     kind. Windows has a call for it and no command; macOS has a command and no call, and asking
     for `os.startfile` there is an AttributeError at the moment of the click."""
@@ -329,7 +329,7 @@ def _on_this_machine(where):
         subprocess.run(["open", where], check=False)
 
 
-def open_link(target, *, browser=webbrowser.open, shell=_on_this_machine):
+def open_link(target, *, browser=webbrowser.open, shell=open_on_this_machine):
     """Open what was clicked - an address in the browser, anything else on this machine.
 
     A path Excephalon has named but not written yet opens the nearest folder above it that IS there.

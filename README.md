@@ -64,6 +64,29 @@ what you say is judged against the words it is speaking: its own voice arriving 
 mic is dropped, your words are kept in the draft — talking over it doesn't mean being unheard —
 and a barked stop word cuts the audio, while a sentence from the TV never can.
 
+## The Voice Log
+
+A second, much smaller app beside Excephalon: an icon next to the clock that records the
+microphone all the time, so an idea said out loud and never captured anywhere else is still on
+disk. Install it once — `.venv/Scripts/python tools/install-voice-log.py` — and it starts every
+time you log in, and has a **Voice Log** entry in the Start Menu for starting it by hand.
+
+- One MP3 per clock hour in `runtime/voice-log/`, named for the moment its sound began
+  (`2026-09-26 17-00-00.mp3`), so the name plus the player's clock is the time something was said.
+  A gap in the sound — the machine asleep, the mic unplugged — starts a new file.
+- 16 kHz mono at 32 kbps: speech stays clear, two days take about 700 MB, and a file cut off by a
+  crash or a shutdown still plays to where it stopped.
+- Anything older than two days is deleted. Only files it named itself: anything else you put in
+  the folder is left alone.
+- It listens through the same microphone Excephalon does (`mic.txt`, `mic-gain.txt` below), and
+  opens it again whenever it stops sending sound.
+- The icon wears a red light while it is recording, and a slash when it is not; hover over it, or
+  right-click it, to see which mic it is using or why it is not recording. Clicking it opens the
+  recordings; **Quit** is in the right-click menu. Starting it again while it runs replaces the
+  running copy.
+- What it did — which mic, when it let go of one, why it stopped — is in `runtime/logs/voice-log.log`;
+  a launch that fails says why in a box and in `runtime/logs/voice-log-launch-failure.log`.
+
 ## What you put in `runtime/`
 
 | File | What it is |
@@ -73,7 +96,7 @@ and a barked stop word cuts the audio, while a sentence from the TV never can.
 | `lexicon.md` | Your working vocabulary — coined names, domain terms, the people you work with. |
 | `lexicon-path.txt` | Optional: one line naming the lexicon file, if you keep it somewhere shared. |
 | `services.json` | Optional: your own services (Asana, Gmail, Google Calendar) as standard MCP `{"mcpServers": ...}` config. See below. |
-| `mic.txt` | Optional: a device-name substring to force a specific microphone. |
+| `mic.txt` | Optional: a device-name substring to force a specific microphone. The Voice Log listens through the same one. |
 | `mic-gain.txt` | Optional: a number to boost a quiet mic (e.g. `5`). |
 | `vocab-roots.txt` | Optional: extra directories, one per line, whose folder names seed the vocabulary. |
 

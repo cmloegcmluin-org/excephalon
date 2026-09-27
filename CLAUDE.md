@@ -96,6 +96,11 @@ Every session leaves artifacts. Use them before forming any theory:
 | What an agent said, as it said it | `runtime/agent-logs/<name>.log` (retired ones move to `runtime/agent-logs-archive/`) | whether an agent is working or dead |
 | Who is running right now | `runtime/active-agents.txt` | the roster, with last-heard times |
 | What Excephalon knows about its user | `runtime/profile.md`, `runtime/learned.md` | standing context; both gitignored |
+| What the Voice Log did | `runtime/logs/voice-log.log` | which mic it listened through, when it let go of one, why it stopped |
+
+The Voice Log's recordings (`runtime/voice-log/`) are not evidence and no agent opens them: they
+are everything his microphone heard, all day, and his alone. Diagnose it from its log, and from
+the files' names, sizes and lengths.
 
 Asking the user to copy their scrollback is a defect in this project — the transcript exists
 precisely so nobody ever has to. Reading the transcript is also how you check your own work:
@@ -217,7 +222,7 @@ The user's name, context, vocabulary and hardware are read at runtime from the g
 `runtime/` directory — never written into the source, so this repo can be public. `DEFAULT_PERSONA`
 carries a `{user}` placeholder that `memory.compose_persona` fills from the title line of
 `runtime/profile.md`; a checkout without one is addressed as "the user" and still reads as
-sentences. Comments explain a decision by the behaviour it protects, not by whose behaviour it was.
+sentences. Comments explain a decision by the behavior it protects, not by whose behavior it was.
 Test fixtures use invented facts. When you add a comment here, write the failure, not the person.
 
 ## Shape of the code
@@ -883,6 +888,23 @@ to read as thrown away.
 given — read its docstring before touching it; every claim in there was measured and several
 obvious designs are wrong. The webview owns the main thread; the conversation, the dictation pump
 and the keyboard hook run on workers, and the page's own poll is what drains the feed.
+
+The Voice Log is a second, separate app in the same package: an icon beside the clock that records
+the microphone from login on, so an idea said out loud and never captured in Highdeas is still on
+disk for two days. `voice_log.pyw` is its door (Excephalon's `launch.pyw` does the failure
+reporting for it, `open_door`), started at login and from the Start Menu by the two shortcuts
+`tools/install-voice-log.py` writes. `voice_log.py` is the recording: `VoiceLog` writes one MP3 per
+clock hour named for its first sound, starts a new file on any gap past two seconds, and deletes
+its own files once their last sound is two days old; `Recorder` is the loop that keeps it fed
+through a mic that stops, breaks or is missing, and `status()` is what the icon shows.
+`mic.LiveMicrophone` hands over blocks from the stream's callback with the moment they were heard,
+and `open_live_microphone` restarts PortAudio before picking, since PortAudio lists devices once.
+Three measured facts shape it: the MP3s are CONSTANT 32 kbps because a variable-bitrate file its
+process never got to close (a crash, a kill) decodes to about half its length; pystray
+answers messages it has no handler for with 0, which to `WM_QUERYENDSESSION` means "hold the
+shutdown", so the tray answers it itself; and a second launch takes over from the first (a named
+mutex and event) rather than exiting, so starting it again always leaves the one just started
+running.
 
 ## Open work
 
